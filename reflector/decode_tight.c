@@ -1,5 +1,6 @@
 /* VNC Reflector
- * Copyright (C) 2001-2002 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2000,2001 Constantin Kaplinsky.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.4 2002/09/04 02:53:37 const Exp $
+ * $Id: decode_tight.c,v 1.5 2002/09/09 07:35:31 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 

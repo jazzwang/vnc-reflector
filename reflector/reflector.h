@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: reflector.h,v 1.27 2002/09/09 07:27:45 const Exp $
+ * $Id: reflector.h,v 1.28 2002/09/09 07:35:31 const Exp $
  * Global include file
  */
 

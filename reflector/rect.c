@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rect.c,v 1.8 2001/12/02 08:30:07 const Exp $
+ * $Id: rect.c,v 1.9 2002/09/09 07:35:31 const Exp $
  * Operations with rectangle structures.
  */
 
