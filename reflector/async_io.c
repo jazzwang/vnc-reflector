@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.8 2001/08/04 21:58:57 const Exp $
+ * $Id: async_io.c,v 1.9 2001/08/08 09:48:57 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -248,7 +248,7 @@ void aio_mainloop(void)
         next_slot = slot->next;
         if (FD_ISSET(slot->fd, &fdset_w))
           aio_process_output(slot);
-        if (FD_ISSET(slot->fd, &fdset_r))
+        if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f)
           aio_process_input(slot);
         if (slot->close_f)
           aio_destroy_slot(slot, 0);
