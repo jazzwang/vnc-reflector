@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.43 2002/09/21 12:43:01 const Exp $
+ * $Id: host_io.c,v 1.44 2002/09/21 13:08:10 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -147,6 +147,9 @@ static void host_really_activate(AIO_SLOT *slot)
   fbs_open_file(hs->fb_width, hs->fb_height);
 
   cur_slot = slot;
+
+  /* Reset zlib streams in the Tight decoder */
+  reset_tight_streams();
 
   /* Request initial screen contents */
   log_write(LL_DETAIL, "Requesting full framebuffer update");

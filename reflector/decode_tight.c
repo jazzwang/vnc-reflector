@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.7 2002/09/21 12:43:01 const Exp $
+ * $Id: decode_tight.c,v 1.8 2002/09/21 13:08:10 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -57,6 +57,25 @@ static void tight_draw_truecolor_data(CARD8 *src);
 static void tight_draw_indexed_data(CARD8 *src);
 static void tight_draw_gradient_data(CARD8 *src);
 
+void reset_tight_streams(void)
+{
+  int stream_id;
+
+  for (stream_id = 0; stream_id < 4; stream_id++) {
+    if (s_zstream_active[stream_id]) {
+      if (inflateEnd(&s_zstream[stream_id]) != Z_OK) {
+        if (s_zstream[stream_id].msg != NULL) {
+          log_write(LL_WARN, "inflateEnd() failed: %s",
+                    s_zstream[stream_id].msg);
+        } else {
+          log_write(LL_WARN, "inflateEnd() failed");
+        }
+      }
+      s_zstream_active[stream_id] = 0;
+    }
+  }
+}
+
 void setread_decode_tight(FB_RECT *r)
 {
   s_rect = *r;
@@ -76,7 +95,7 @@ static void rf_host_tight_compctl(void)
   /* Flush zlib streams if we are told by the server to do so */
   for (stream_id = 0; stream_id < 4; stream_id++) {
     if ((comp_ctl & (1 < stream_id)) && s_zstream_active[stream_id]) {
-      if (inflateEnd (&s_zstream[stream_id]) != Z_OK) {
+      if (inflateEnd(&s_zstream[stream_id]) != Z_OK) {
         if (s_zstream[stream_id].msg != NULL) {
           log_write(LL_WARN, "inflateEnd() failed: %s",
                     s_zstream[stream_id].msg);
