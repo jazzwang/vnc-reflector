@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: active.c,v 1.1 2002/07/10 15:46:38 const Exp $
+ * $Id: active.c,v 1.2 2002/07/25 16:59:48 const Exp $
  * Active file marker implementation
  */
 
@@ -27,21 +27,20 @@ static char *active_file = NULL;
 int set_active_file(char *file_path)
 {
   if (file_path == NULL)
-    return 1;
+    return 0;
 
   active_file = malloc(strlen(file_path) + 1);
-  
   if (active_file == NULL)
-    return 1;
+    return 0;
 
   strcpy(active_file, file_path);
 
-  return 0;
+  return 1;
 }
 
 int write_active_file(void)
 {
-  FILE *active_fp = NULL;
+  FILE *active_fp;
 
   if (active_file == NULL)
     return 1;
@@ -49,7 +48,7 @@ int write_active_file(void)
   active_fp = fopen(active_file, "w");
   if (active_fp == NULL) {
     log_write(LL_WARN, "Error creating active file marker: %s", active_file);
-    return 1;
+    return 0;
   }
 
   fprintf(active_fp, "quirk\n");
@@ -63,13 +62,13 @@ int write_active_file(void)
 int remove_active_file(void)
 {
   if (active_file != NULL) {
-    if (unlink(active_file) == 0) {
-      log_write(LL_DEBUG, "Removed active file marker", active_file);
-    } else {
+    if (unlink(active_file) != 0) {
       log_write(LL_WARN, "Error removing active file marker: %s", active_file);
       return 0;
     }
+    log_write(LL_DEBUG, "Removed active file marker", active_file);
   }
+
   return 1;
 }
 

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.36 2002/07/10 15:46:38 const Exp $
+ * $Id: host_io.c,v 1.37 2002/07/25 16:59:48 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -27,6 +27,7 @@
 #include "async_io.h"
 #include "logging.h"
 #include "active.h"
+#include "actions.h"
 #include "rect.h"
 #include "translate.h"
 #include "client_io.h"
@@ -164,6 +165,7 @@ static void host_really_activate(AIO_SLOT *slot)
   s_host_slot = slot;
 
   write_active_file();
+  perform_action("host_activate");
 
   /* Allocate the framebuffer or extend its dimensions if necessary */
   if (!alloc_framebuffer(hs->fb_width, hs->fb_height)) {

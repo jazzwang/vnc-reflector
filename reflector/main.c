@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.40 2002/07/10 15:46:38 const Exp $
+ * $Id: main.c,v 1.41 2002/07/25 16:59:48 const Exp $
  * Main module
  */
 
@@ -29,6 +29,7 @@
 #include "async_io.h"
 #include "logging.h"
 #include "active.h"
+#include "actions.h"
 #include "reflector.h"
 #include "host_connect.h"
 #include "control.h"
@@ -47,6 +48,7 @@ static int   opt_cl_listen_port;
 static char *opt_log_filename;
 static char *opt_passwd_filename;
 static char *opt_active_filename;
+static char *opt_actions_filename;
 static int   opt_foreground;
 static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
@@ -135,6 +137,7 @@ int main(int argc, char **argv)
     host_set_fbs_prefix(opt_fbs_prefix, opt_join_sessions);
 
     set_active_file(opt_active_filename);
+    set_actions_file(opt_actions_filename);
 
     aio_init();
     if (opt_bind_ip != NULL) {
@@ -205,7 +208,7 @@ static void parse_args(int argc, char **argv)
   opt_join_sessions = 0;
   opt_bind_ip = NULL;
 
-  while (!err && (c = getopt(argc, argv, "hqjv:f:p:a:g:l:i:s:b:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hqjv:f:p:a:c:g:l:i:s:b:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -246,6 +249,12 @@ static void parse_args(int argc, char **argv)
         err = 1;
       else
         opt_active_filename = optarg;
+      break;
+    case 'c':
+      if (opt_actions_filename != NULL)
+        err = 1;
+      else
+        opt_actions_filename = optarg;
       break;
     case 'l':
       if (opt_cl_listen_port != -1)
@@ -309,7 +318,8 @@ static void parse_args(int argc, char **argv)
 static void report_usage(char *program_name)
 {
   fprintf(stderr,
-          "VNC Reflector %s.  Copyright (C) 2001,2002 HorizonLive.com, Inc.\n\n",
+          "VNC Reflector %s.  Copyright (C) 2001,2002 HorizonLive.com, Inc."
+          "\n\n",
           VERSION);
 
   fprintf(stderr, "Usage: %s [OPTIONS...] HOST_INFO_FILE\n\n",
@@ -323,6 +333,8 @@ static void report_usage(char *program_name)
           " [default: passwd]\n"
           "  -a ACTIVE_FILE  - create file during times when a host is"
           " connected\n"
+          "  -c ACTIONS_FILE - on events, execute commands specified in"
+          " a file\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
           "  -b IP_ADDRESS   - bind listening sockets to a specific IP"

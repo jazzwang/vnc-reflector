@@ -1,5 +1,5 @@
 ===========================================================================
-                            VNC Reflector 1.1.8
+                            VNC Reflector 1.1.9
                   Copyright (C) 2001 HorizonLive.com, Inc.
 ===========================================================================
 
@@ -55,6 +55,8 @@ Options:
 
   -i PID_FILE     - write pid file, appending listening port to the filename
   -p PASSWD_FILE  - read a plaintext client password file [default: passwd]
+  -a ACTIVE_FILE  - create file during times when a host is connected
+  -c ACTIONS_FILE - on events, execute commands specified in a file
   -l LISTEN_PORT  - port to listen for client connections [default: 5999]
   -b IP_ADDRESS   - bind listening sockets to a specific IP [default: any]
   -s FBS_PREFIX   - save host sessions in rfbproxy-compatible files
@@ -100,10 +102,26 @@ Format of the PASSWD_FILE
 PASSWD_FILE keeps passwords for client connections.
 
 It may contain two lines with one password on each line. First line is for
-full-control client password, second line is for read-only client password. 
+full-control client password, second line is for read-only client password.
 Empty lines denote no authentication. If the file contains one line, then
 there is no read-only password, and all clients would have been granted
 full-control access.
+
+
+Format of the ACTIONS_FILE
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ACTIONS_FILE used with the -c option specifies commands that should be
+executed upon certain events. Each line starts with a keyword denoting a
+particular event type, then follows colon character (":"), and after an
+optional sequence of spaces follows the command to execute. An example:
+
+=== cut ===
+host_activate: echo "new host" >> /tmp/connections.txt
+=== cut ===
+
+Currently, the only supported event type is `host_activate', which is raised
+on each new host connection.
 
 
 Control signals
