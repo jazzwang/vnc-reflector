@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.46 2003/01/06 07:07:19 const Exp $
+ * $Id: client_io.c,v 1.47 2003/01/09 06:25:29 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -363,7 +363,6 @@ static void rf_client_encodings_data(void)
                 cur_slot->name);
       cl->enable_lastrect = 1;
     } else if (enc == RFB_ENCODING_NEWFBSIZE) {
-      /* FIXMENOW: Handle NewFBSize on->off _correctly_. */
       cl->enable_newfbsize = 1;
       log_write(LL_DETAIL, "Client %s supports desktop geometry changes",
                 cur_slot->name);
@@ -372,7 +371,7 @@ static void rf_client_encodings_data(void)
   if (cl->compress_level < 0)
     cl->compress_level = 6;     /* default compression level */
 
-  /* CopyRect was pending but client does not ask for it any more. */
+  /* CopyRect was pending but the client does not want it any more. */
   if (!cl->enc_enable[RFB_ENCODING_COPYRECT] &&
       REGION_NOTEMPTY(&cl->copy_region)) {
     REGION_UNION(&cl->pending_region, &cl->pending_region, &cl->copy_region);
@@ -404,16 +403,26 @@ static void rf_client_updatereq(void)
   rect.x2 = rect.x1 + buf_get_CARD16(&cur_slot->readbuf[5]);
   rect.y2 = rect.y1 + buf_get_CARD16(&cur_slot->readbuf[7]);
 
-  cl->update_rect = rect;
+  /* Make sure the rectangle bounds fit the framebuffer. */
+  if (rect.x1 > cl->fb_width)
+    rect.x1 = cl->fb_width;
+  if (rect.y1 > cl->fb_height)
+    rect.y1 = cl->fb_height;
+  if (rect.x2 > cl->fb_width)
+    rect.x2 = cl->fb_width;
+  if (rect.y2 > cl->fb_height)
+    rect.y2 = cl->fb_height;
 
-  /* FIXMENOW: Always clip the requested rectangle to the framebuffer size? */
+  cl->update_rect = rect;
 
   if (!cur_slot->readbuf[0]) {
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
               cur_slot->name);
-    REGION_INIT(&tmp_region, &rect, 1);
-    REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
-    REGION_UNINIT(&tmp_region);
+    if (!cl->newfbsize_pending) {
+      REGION_INIT(&tmp_region, &rect, 1);
+      REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
+      REGION_UNINIT(&tmp_region);
+    }
   } else {
     log_write(LL_DEBUG, "Received framebuffer update request from %s",
               cur_slot->name);
@@ -519,15 +528,15 @@ static void rf_client_cuttext_data(void)
 void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
-  RegionRec add_region, clip_region;
+  RegionRec add_region;
   BoxRec add_rect;
 
   if (!cl->connected || cl->newfbsize_pending)
     return;
 
   /* If the framebuffer geometry has been changed, then we don't care
-     about pending pixel updates until the client will be informed on
-     desktop size change. */
+     about pending pixel updates any more, because all clients will
+     want to update the whole framebuffer. */
   if (g_screen_info.width != cl->fb_width ||
       g_screen_info.height != cl->fb_height) {
     cl->newfbsize_pending = 1;
@@ -542,24 +551,17 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
   add_rect.y2 = add_rect.y1 + rect->h;
   REGION_INIT(&add_region, &add_rect, 4);
 
-  /* FIXMENOW: Is cl->update_rect always set correctly? */
-  REGION_INIT(&clip_region, &cl->update_rect, 1);
-
   if (rect->enc == RFB_ENCODING_COPYRECT &&
       cl->enc_enable[RFB_ENCODING_COPYRECT] &&
       !REGION_NOTEMPTY(&cl->copy_region)) {
     cl->copy_dx = rect->x - rect->src_x;
     cl->copy_dy = rect->y - rect->src_y;
-    /* FIXMENOW: Clip source region to clip_region? */
-    REGION_INTERSECT(&add_region, &add_region, &clip_region);
     REGION_UNION(&cl->copy_region, &cl->copy_region, &add_region);
   } else {
-    REGION_INTERSECT(&add_region, &add_region, &clip_region);
     REGION_UNION(&cl->pending_region, &cl->pending_region, &add_region);
   }
 
   REGION_UNINIT(&add_region);
-  REGION_UNINIT(&clip_region);
 }
 
 void fn_client_send_rects(AIO_SLOT *slot)
@@ -684,8 +686,8 @@ static void send_newfbsize(void)
 static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
-  BoxRec tmp_rect;
-  RegionRec tmp_region, clip_region;
+  BoxRec fb_rect;
+  RegionRec fb_region, clip_region;
   CARD8 msg_hdr[4] = {
     0, 0, 0, 1
   };
@@ -709,27 +711,25 @@ static void send_update(void)
     if (cl->enable_newfbsize)
       send_newfbsize();
     /* In any case, mark all the framebuffer contents as changed. */
-    tmp_rect.x1 = 0;
-    tmp_rect.y1 = 0;
-    tmp_rect.x2 = cl->fb_width;
-    tmp_rect.y2 = cl->fb_height;
-    REGION_INIT(&tmp_region, &tmp_rect, 1);
+    fb_rect.x1 = 0;
+    fb_rect.y1 = 0;
+    fb_rect.x2 = cl->fb_width;
+    fb_rect.y2 = cl->fb_height;
+    REGION_INIT(&fb_region, &fb_rect, 1);
     REGION_EMPTY(&cl->pending_region);
-    REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
-    REGION_UNINIT(&tmp_region);
+    REGION_UNION(&cl->pending_region, &cl->pending_region, &fb_region);
+    REGION_UNINIT(&fb_region);
     REGION_EMPTY(&cl->copy_region);
     /* If NewFBSize was sent, then pixel data will be sent next time. */
     if (cl->enable_newfbsize)
       return;
   }
 
-  /* Clip pending regions to the rectangle requested by the client. */
-  /* FIXME: Don't clip to cl->update_rect in other places. */
+  /* Clip pending region to the rectangle requested by the client. */
   /* FIXME: Clip source region of CopyRect. */
-  /* FIXME: Is pending_region always set correctly? */
   REGION_INIT(&clip_region, &cl->update_rect, 1);
-  REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
   REGION_INTERSECT(&cl->pending_region, &cl->pending_region, &clip_region);
+  REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
   REGION_UNINIT(&clip_region);
 
   num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
@@ -823,8 +823,8 @@ static void send_update(void)
     aio_write_nocopy(fn, block);
   }
 
-  REGION_EMPTY(&cl->copy_region);
   REGION_EMPTY(&cl->pending_region);
+  REGION_EMPTY(&cl->copy_region);
 
   /* Send LastRect marker. */
   if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
