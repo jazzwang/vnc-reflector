@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.16 2001/08/23 15:24:51 const Exp $
+ * $Id: async_io.c,v 1.17 2001/08/26 14:25:15 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -53,7 +53,7 @@ static int s_listen_fd;
 static AIO_FUNCPTR s_accept_func;
 static size_t s_new_slot_size;
 
-static int s_sig_func_set;
+static volatile int s_sig_func_set;
 static AIO_FUNCPTR s_sig_func[10];
 
 static int s_close_f;
