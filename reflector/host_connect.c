@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.23 2001/12/04 14:15:48 const Exp $
+ * $Id: host_connect.c,v 1.24 2002/06/27 14:40:39 const Exp $
  * Connecting to a VNC host
  */
 
@@ -147,7 +147,7 @@ static int parse_host_info(void)
     return 0;
   }
 
-  /* Truncate at the end of first line, respectinging MS-DOS end-of-lines */
+  /* Truncate at the end of first line, respecting MS-DOS end-of-lines */
   pos = strchr(buf, '\n');
   if (pos != NULL)
     *pos = '\0';
