@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.43 2002/09/30 05:11:19 const Exp $
+ * $Id: client_io.c,v 1.44 2002/10/03 16:25:05 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -113,8 +113,9 @@ static void cf_client(void)
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
 
-  /* Free the region structure. */
+  /* Free region structures. */
   REGION_UNINIT(&cl->pending_region);
+  REGION_UNINIT(&cl->copy_region);
 
   /* Free zlib streams.
      FIXME: Maybe put cleanup function in encoder. */
@@ -234,7 +235,8 @@ static void rf_client_initmsg(void)
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
   cl->update_in_progress = 0;
-  REGION_INIT(&cl->pending_region, NullBox, 10);
+  REGION_INIT(&cl->pending_region, NullBox, 16);
+  REGION_INIT(&cl->copy_region, NullBox, 8);
   cl->newfbsize_pending = 0;
 
   /* We are connected. */
@@ -370,6 +372,13 @@ static void rf_client_encodings_data(void)
   if (cl->compress_level < 0)
     cl->compress_level = 6;     /* default compression level */
 
+  /* CopyRect was pending but client does not ask for it any more. */
+  if (!cl->enc_enable[RFB_ENCODING_COPYRECT] &&
+      REGION_NOTEMPTY(&cl->copy_region)) {
+    REGION_UNION(&cl->pending_region, &cl->pending_region, &cl->copy_region);
+    REGION_EMPTY(&cl->copy_region);
+  }
+
   log_write(LL_DEBUG, "Encoding list set by %s", cur_slot->name);
   if (cl->enc_prefer == RFB_ENCODING_RAW) {
     log_write(LL_WARN, "Using raw encoding for client %s",
@@ -411,7 +420,9 @@ static void rf_client_updatereq(void)
   }
 
   if (!cl->update_in_progress &&
-      (cl->newfbsize_pending || REGION_NOTEMPTY(&cl->pending_region))) {
+      (cl->newfbsize_pending ||
+       REGION_NOTEMPTY(&cl->pending_region) ||
+       REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
@@ -431,7 +442,9 @@ static void wf_client_update_finished(void)
 
   cl->update_in_progress = 0;
   if (cl->update_requested &&
-      (cl->newfbsize_pending || REGION_NOTEMPTY(&cl->pending_region))) {
+      (cl->newfbsize_pending ||
+       REGION_NOTEMPTY(&cl->pending_region) ||
+       REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
@@ -506,16 +519,16 @@ static void rf_client_cuttext_data(void)
 void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
-  RegionRec tmp_region, clip_region;
-  BoxRec tmp_rect;
+  RegionRec add_region, clip_region;
+  BoxRec add_rect;
 
   if (!cl->connected || cl->newfbsize_pending)
     return;
 
-  tmp_rect.x1 = rect->x;
-  tmp_rect.y1 = rect->y;
-  tmp_rect.x2 = tmp_rect.x1 + rect->w;
-  tmp_rect.y2 = tmp_rect.y1 + rect->h;
+  add_rect.x1 = rect->x;
+  add_rect.y1 = rect->y;
+  add_rect.x2 = add_rect.x1 + rect->w;
+  add_rect.y2 = add_rect.y1 + rect->h;
 
   if (rect->enc == RFB_ENCODING_NEWFBSIZE) {
     if (rect->w != cl->fb_width || rect->h != cl->fb_height) {
@@ -528,11 +541,23 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
     }
   } else {
     /* FIXME: Is cl->update_rect always set correctly? */
-    REGION_INIT(&tmp_region, &tmp_rect, 4);
-    REGION_INIT(&clip_region, &cl->update_rect, 1)
-    REGION_INTERSECT(&tmp_region, &tmp_region, &clip_region);
-    REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
-    REGION_UNINIT(&tmp_region);
+
+    REGION_INIT(&add_region, &add_rect, 4);
+    REGION_INIT(&clip_region, &cl->update_rect, 1);
+
+    if (rect->enc == RFB_ENCODING_COPYRECT &&
+        cl->enc_enable[RFB_ENCODING_COPYRECT] &&
+        !REGION_NOTEMPTY(&cl->copy_region)) {
+      cl->copy_dx = rect->x - rect->src_x;
+      cl->copy_dy = rect->y - rect->src_y;
+      REGION_INTERSECT(&add_region, &add_region, &clip_region);
+      REGION_UNION(&cl->copy_region, &cl->copy_region, &add_region);
+    } else {
+      REGION_INTERSECT(&add_region, &add_region, &clip_region);
+      REGION_UNION(&cl->pending_region, &cl->pending_region, &add_region);
+    }
+
+    REGION_UNINIT(&add_region);
     REGION_UNINIT(&clip_region);
   }
 }
@@ -543,7 +568,9 @@ void fn_client_send_rects(AIO_SLOT *slot)
   AIO_SLOT *saved_slot = cur_slot;
 
   if (!cl->update_in_progress && cl->update_requested &&
-      (cl->newfbsize_pending || REGION_NOTEMPTY(&cl->pending_region))) {
+      (cl->newfbsize_pending ||
+       REGION_NOTEMPTY(&cl->pending_region) ||
+       REGION_NOTEMPTY(&cl->copy_region))) {
     cur_slot = slot;
     send_update();
     cl->update_in_progress = 1;
@@ -667,6 +694,7 @@ static void send_update(void)
   FB_RECT rect;
   AIO_BLOCK *block;
   AIO_FUNCPTR fn = NULL;
+  int num_copy_rects, num_penging_rects, num_all_rects;
   int raw_bytes = 0, hextile_bytes = 0;
   int i;
 
@@ -675,20 +703,55 @@ static void send_update(void)
     return;
   }
 
+  num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
+  num_penging_rects = REGION_NUM_RECTS(&cl->pending_region);
+  num_all_rects = num_penging_rects + num_copy_rects;
+
   log_write(LL_DEBUG, "Sending framebuffer update (min %d rects) to %s",
-            REGION_NUM_RECTS(&cl->pending_region), cur_slot->name);
+            num_all_rects, cur_slot->name);
 
   /* Prepare and send FramebufferUpdate message header */
   /* FIXME: Enable Tight encoding even if LastRect is not supported. */
+  /* FIXME: Do not send LastRect if all the rectangles are CopyRect. */
   if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
     buf_put_CARD16(&msg_hdr[2], 0xFFFF);
   } else {
-    buf_put_CARD16(&msg_hdr[2], REGION_NUM_RECTS(&cl->pending_region));
+    buf_put_CARD16(&msg_hdr[2], num_all_rects);
   }
   aio_write(NULL, msg_hdr, 4);
 
-  /* For each pending rectangle: */
-  for (i = 0; i < REGION_NUM_RECTS(&cl->pending_region); i++) {
+  /* For each CopyRect rectangle: */
+  for (i = 0; i < num_copy_rects; i++) {
+    rect.x = REGION_RECTS(&cl->copy_region)[i].x1;
+    rect.y = REGION_RECTS(&cl->copy_region)[i].y1;
+    rect.w = REGION_RECTS(&cl->copy_region)[i].x2 - rect.x;
+    rect.h = REGION_RECTS(&cl->copy_region)[i].y2 - rect.y;
+    rect.src_x = rect.x - cl->copy_dx;
+    rect.src_y = rect.y - cl->copy_dy;
+    rect.enc = RFB_ENCODING_COPYRECT;
+    log_write(LL_DEBUG, "Sending CopyRect rectangle %dx%d at %d,%d to %s",
+              (int)rect.w, (int)rect.h, (int)rect.x, (int)rect.y,
+              cur_slot->name);
+
+    /* Prepare the CopyRect rectangle. */
+    block = rfb_encode_copyrect_block(cl, &rect);
+
+    /* If it's the last rectangle, install hook function which would
+       be called after all data has been sent. But do not do that if
+       we use Tight encoding since there would be one more rectangle
+       (LastRect marker) */
+    if (i == num_all_rects - 1) {
+      if (cl->enc_prefer != RFB_ENCODING_TIGHT || !cl->enable_lastrect)
+        fn = wf_client_update_finished;
+    }
+
+    /* Send the rectangle.
+       FIXME: Check for block == NULL? */
+    aio_write_nocopy(fn, block);
+  }
+
+  /* For each of the usual pending rectangles: */
+  for (i = 0; i < num_penging_rects; i++) {
     rect.x = REGION_RECTS(&cl->pending_region)[i].x1;
     rect.y = REGION_RECTS(&cl->pending_region)[i].y1;
     rect.w = REGION_RECTS(&cl->pending_region)[i].x2 - rect.x;
@@ -721,7 +784,7 @@ static void send_update(void)
        be called after all data has been sent. But do not do that if
        we use Tight encoding since there would be one more rectangle
        (LastRect marker) */
-    if (i == REGION_NUM_RECTS(&cl->pending_region) - 1)
+    if (i == num_penging_rects - 1)
       fn = wf_client_update_finished;
 
     /* Send the rectangle.
@@ -729,6 +792,7 @@ static void send_update(void)
     aio_write_nocopy(fn, block);
   }
 
+  REGION_EMPTY(&cl->copy_region);
   REGION_EMPTY(&cl->pending_region);
 
   /* Send LastRect marker. */

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.44 2002/09/21 13:08:10 const Exp $
+ * $Id: host_io.c,v 1.45 2002/10/03 16:25:05 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -372,10 +372,11 @@ static void rf_host_copyrect(void)
        cur_rect.src_x + cur_rect.w > g_fb_width ||
        cur_rect.src_y >= g_fb_height ||
        cur_rect.src_y + cur_rect.h > g_fb_height ) {
-    log_write(LL_WARN,
+    log_write(LL_ERROR,
               "CopyRect from outside of the framebuffer: %dx%d from %d,%d",
               (int)cur_rect.w, (int)cur_rect.h,
               (int)cur_rect.src_x, (int)cur_rect.src_y);
+    aio_close(0);
     return;
   }
 
