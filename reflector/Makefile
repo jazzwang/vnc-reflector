@@ -18,6 +18,7 @@ SRCS =	main.c logging.c host_connect.c d3des.c rfblib.c async_io.c \
 	host_io.c client_io.c
 
 CC = gcc
+MAKEDEPEND = gccmakedep
 
 default: $(PROG)
 
@@ -28,7 +29,7 @@ clean:
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
 
 depend: $(SRCS)
-	makedepend -Y -I. $(SRCS)
+	$(MAKEDEPEND) -Y -I. $(SRCS)
 
 .c.o:
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
