@@ -7,7 +7,7 @@
  *	(GEnie : OUTER; CIS : [71755,204])
  */
 
-/* D2_DES and D3_DES code removed, by Const Kaplinsky */
+/* D2_DES and D3_DES code removed, by Constantin Kaplinsky */
 
 #define EN0	0	/* MODE == encrypt */
 #define DE1	1	/* MODE == decrypt */

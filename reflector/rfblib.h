@@ -1,7 +1,16 @@
-/* VNC Reflector Lib
- * Copyright (C) 2001 Const Kaplinsky
+/* VNC Reflector
+ * Copyright (C) 2001 HorizonLive.com, Inc.  All rights reserved.
  *
- * $Id: rfblib.h,v 1.12 2001/08/26 13:46:23 const Exp $
+ * This software is released under the terms specified in the file LICENSE,
+ * included.  HorizonLive provides e-Learning and collaborative synchronous
+ * presentation solutions in a totally Web-based environment.  For more
+ * information about HorizonLive, please see our website at
+ * http://www.horizonlive.com.
+ *
+ * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
+ * and sponsored by HorizonLive.com, Inc.
+ *
+ * $Id: rfblib.h,v 1.13 2001/10/02 09:03:45 const Exp $
  * RFB protocol definitions
  */
 

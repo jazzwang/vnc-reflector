@@ -12,7 +12,7 @@
  * (GEnie : OUTER; CIS : [71755,204]) Graven Imagery, 1992.
  */
 
-/* D2_DES and D3_DES code removed, by Const Kaplinsky */
+/* D2_DES and D3_DES code removed, by Constantin Kaplinsky */
 
 #include "d3des.h"
 
@@ -30,7 +30,7 @@ static unsigned char Df_Key[24] = {
 	0x89,0xab,0xcd,0xef,0x01,0x23,0x45,0x67 };
 
 /* The following array is reversed for VNC compatibility,
-   by Const Kaplinsky */
+   by Constantin Kaplinsky */
 
 static unsigned short bytebit[8]	= {
 /**	0200, 0100, 040, 020, 010, 04, 02, 01 };	**/
