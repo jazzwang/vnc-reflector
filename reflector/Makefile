@@ -32,3 +32,9 @@ depend: $(SRCS)
 
 # DO NOT DELETE THIS LINE -- make depend depends on it.
 
+
+d3des.o: d3des.h
+hostconnect.o: d3des.h hostconnect.h logging.h rfblib.h
+logging.o: logging.h
+main.o: hostconnect.h logging.h reflector.h rfblib.h
+
