@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: reflector.h,v 1.24 2002/07/25 17:04:34 const Exp $
+ * $Id: reflector.h,v 1.25 2002/09/03 10:48:17 const Exp $
  * Global include file
  */
 
@@ -26,5 +26,20 @@
 extern RFB_SCREEN_INFO g_screen_info;
 extern CARD32 *g_framebuffer;
 extern CARD16 g_fb_width, g_fb_height;
+
+/* actions.c */
+
+int set_actions_file(char *file_path);
+int perform_action(char *action_str);
+
+/* active.c */
+
+int write_active_file(void);
+int remove_active_file(void);
+int set_active_file(char *file_path);
+
+/* control.c */
+
+void set_control_signals(void);
 
 #endif /* _REF_REFLECTOR_H */

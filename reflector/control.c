@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: control.c,v 1.6 2001/12/02 08:30:07 const Exp $
+ * $Id: control.c,v 1.7 2002/09/03 10:48:17 const Exp $
  * Processing signals to control reflector
  */
 
@@ -29,7 +29,6 @@
 #include "rect.h"
 #include "translate.h"
 #include "client_io.h"
-#include "control.h"
 
 #define FUNC_CL_DISCONNECT   0
 #define FUNC_HOST_RECONNECT  1

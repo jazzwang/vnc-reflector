@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: active.c,v 1.2 2002/07/25 16:59:48 const Exp $
+ * $Id: active.c,v 1.3 2002/09/03 10:48:17 const Exp $
  * Active file marker implementation
  */
 
@@ -19,7 +19,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "active.h"
+#include "rfblib.h"
+#include "reflector.h"
 #include "logging.h"
 
 static char *active_file = NULL;

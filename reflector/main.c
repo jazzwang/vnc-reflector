@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.41 2002/07/25 16:59:48 const Exp $
+ * $Id: main.c,v 1.42 2002/09/03 10:48:17 const Exp $
  * Main module
  */
 
@@ -28,11 +28,8 @@
 #include "rfblib.h"
 #include "async_io.h"
 #include "logging.h"
-#include "active.h"
-#include "actions.h"
 #include "reflector.h"
 #include "host_connect.h"
-#include "control.h"
 #include "rect.h"
 #include "translate.h"
 #include "host_io.h"
