@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.c,v 1.5 2001/08/24 07:57:40 const Exp $
+ * $Id: rect.c,v 1.6 2001/08/24 09:12:34 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -57,7 +57,7 @@ void rlist_push_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
 
   rnode = malloc(sizeof(FB_RECT_NODE));
   if (rnode != NULL) {
-    memcpy(&rnode->r, rect, sizeof(FB_RECT));
+    rnode->r = *rect;
     rnode->next = NULL;
     if (rlist->last_rect == NULL) {
       rlist->first_rect = rnode;
@@ -124,7 +124,7 @@ void rlist_add_clipped_rect(FB_RECT_LIST *rlist, FB_RECT *rect,
                             FB_RECT *clip, int split_f)
 {
   FB_RECT temp;
-  memcpy(&temp, rect, sizeof(FB_RECT));
+  temp = *rect;
   rects_intersect(&temp, clip);
 
   if (rect->src_x == 0xFFFF) {
@@ -164,7 +164,7 @@ int rlist_pick_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
   if (rlist->first_rect == NULL)
     return 0;
 
-  memcpy(rect, &rlist->first_rect->r, sizeof(FB_RECT));
+  *rect = rlist->first_rect->r;
   new_first_rect = rlist->first_rect->next;
   free(rlist->first_rect);
   if (new_first_rect == NULL) {
