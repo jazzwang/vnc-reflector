@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.6 2001/08/02 11:53:00 const Exp $
+ * $Id: main.c,v 1.7 2001/08/02 12:18:48 const Exp $
  * Main module
  */
 
@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
+#include <sys/types.h>
 
 #include "rfblib.h"
 #include "async_io.h"
@@ -48,6 +50,22 @@ int main(int argc, char **argv)
             argv[0]);
   }
   log_write(LL_MSG, "Starting VNC Reflector %s", VERSION);
+
+  /* Fork the process to the background if necessary */
+  if (!opt_foreground) {
+    if (getpid() != 1) {
+      signal(SIGTTIN, SIG_IGN);
+      signal(SIGTTOU, SIG_IGN);
+      signal(SIGTSTP, SIG_IGN);
+      if (fork ())
+        return 0;
+      setsid();
+    }
+    close(0);
+    close(1);
+    close(2);
+    log_write(LL_INFO, "Switched to the background mode");
+  }
 
   read_pasword_file();
 
