@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.13 2001/10/09 14:57:23 const Exp $
+ * $Id: encode.c,v 1.14 2001/10/09 15:22:36 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -107,8 +107,7 @@ static int encode_tile_raw8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 
-/* FIXME: Get rid of static vars that can be made function-level locals. */
-static PALETTE2 pal;
+/* Variables to keep background color of previous tile */
 static CARD32 prev_bg;
 static int prev_bg_set;
 
@@ -225,13 +224,12 @@ static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
         memcpy(dst, &g_cache8[tile_ord * 256], 256);
         dst += 256;
     } else {
-      pal.bg = (CARD32)hints->bg8;
-      if (prev_bg != pal.bg || !prev_bg_set) {
+      if (prev_bg != (CARD32)hints->bg8 || !prev_bg_set) {
         *dst++ = hints->bg8;
       } else {
         *dst_buf &= ~RFB_HEXTILE_BG_SPECIFIED;
       }
-      prev_bg = pal.bg;
+      prev_bg = (CARD32)hints->bg8;
       prev_bg_set = 1;
       if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
         *dst++ = hints->fg8;
@@ -257,7 +255,7 @@ static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
       if (hints->subenc8 & RFB_HEXTILE_BG_SPECIFIED) {
         hints->bg8 = *dst++;
       } else {
-        hints->bg8 = (CARD8)pal.bg;
+        hints->bg8 = (CARD8)prev_bg;
         hints->subenc8 |= RFB_HEXTILE_BG_SPECIFIED;
       }
       if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
@@ -283,6 +281,7 @@ static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
 {                                                                       \
   CARD##bpp tile_buf[256];                                              \
+  PALETTE2 pal;                                                         \
   int bytes;                                                            \
                                                                         \
   /* Translate pixel data into client's format. */                      \
@@ -315,7 +314,7 @@ DEFINE_ENCODE_TILE(32)
  * in client pixel format. The dst_buf argument should point to an
  * array of size at least (256 * (cl->format.bits_pixel/8) + 1) bytes.
  * The pal argument should point to a valid PALETTE2 structire filled
- * in by the analyze_rectNN funtion.
+ * in by the analyze_rectNN function.
  *
  * Return value: the number of bytes put into the dst_buf or -1 if
  * this tile should be raw-encoded.
