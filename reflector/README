@@ -1,7 +1,7 @@
-=====================================================================
-                         VNC Reflector 1.1.2
-               Copyright (C) 2001 HorizonLive.com, Inc.
-=====================================================================
+===========================================================================
+                            VNC Reflector 1.1.2
+                  Copyright (C) 2001 HorizonLive.com, Inc.
+===========================================================================
 
 
 Licensing terms
@@ -46,10 +46,10 @@ Format of the HOST_INFO_FILE
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 HOST_INFO_FILE provides information about the host to connect to. It's
-first line should begin with hostname (or with an asterisk if we would
-wait for reversed host->reflector connection). Next thing is VNC
-display number after a colon (or a port number, for reversed
-connections), then follows plaintext host password after a space.
+first line should begin with hostname (or with an asterisk if we would wait
+for reversed host->reflector connection). Next thing is VNC display number
+after a colon (or a port number, for reversed connections), then follows
+plaintext host password after a space.
 
 Sample to connect to some.hostname.com's display :0 (port 5900):
 
@@ -69,28 +69,26 @@ Format of the PASSWD_FILE
 
 PASSWD_FILE keeps passwords for client connections.
 
-It may contain two lines with one password on each line. First line is
-for full-control client password, second line is for read-only client
-password. Empty lines denote no authentication. If the file contains
-one line, then there is no read-only password, and all clients would
-have been granted full-control access.
+It may contain two lines with one password on each line. First line is for
+full-control client password, second line is for read-only client password. 
+Empty lines denote no authentication. If the file contains one line, then
+there is no read-only password, and all clients would have been granted
+full-control access.
 
 
 Control signals
 ~~~~~~~~~~~~~~~
 
-  * SIGHUP signal causes VNC Reflector to disconnect all connected
-    clients.
+  * SIGHUP signal causes VNC Reflector to disconnect all connected clients.
 
   * SIGUSR1 signal tells VNC Reflector that it should re-read
-    HOST_INFO_FILE and to re-connect to host specified there (or to
-    start listening for reversed host connections). Host connection
-    would be closed when new host connection is established
-    successfully (auth is ok etc.). Client connections would be
-    preserved.
+    HOST_INFO_FILE and to re-connect to host specified there (or to start
+    listening for reversed host connections). Host connection would be
+    closed when new host connection is established successfully (auth is ok
+    etc.). Client connections would be preserved.
 
-  * SIGUSR2 signal tells VNC Reflector that it should close current
-    host connection, then re-read HOST_INFO_FILE and to re-connect to
-    host specified there (or to start listening for reversed host
-    connections). Client connections would be preserved.
+  * SIGUSR2 signal tells VNC Reflector that it should close current host
+    connection, then re-read HOST_INFO_FILE and to re-connect to host
+    specified there (or to start listening for reversed host connections). 
+    Client connections would be preserved.
 
