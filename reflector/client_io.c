@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.40 2002/09/09 07:35:31 const Exp $
+ * $Id: client_io.c,v 1.41 2002/09/10 07:10:58 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -276,8 +276,6 @@ static void rf_client_pixfmt(void)
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
 
   buf_get_pixfmt(&cur_slot->readbuf[3], &cl->format);
-  if (cl->trans_table != NULL)
-    free(cl->trans_table);
 
   log_write(LL_DETAIL, "Pixel format (%d bpp) set by %s",
             cl->format.bits_pixel, cur_slot->name);
