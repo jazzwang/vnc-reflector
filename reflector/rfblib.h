@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.22 2003/01/09 08:47:26 const Exp $
+ * $Id: rfblib.h,v 1.23 2003/01/11 09:14:50 const Exp $
  * RFB protocol definitions
  */
 
@@ -88,7 +88,6 @@ typedef struct _RFB_PIXEL_FORMAT {
  * screen (framebuffer).
  */
 
-/* FIXME: Why do we use g_screen_info.{width,height}? */
 typedef struct _RFB_SCREEN_INFO {
   CARD16 width;
   CARD16 height;
