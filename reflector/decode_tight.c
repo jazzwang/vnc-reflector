@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.8 2002/09/21 13:08:10 const Exp $
+ * $Id: decode_tight.c,v 1.9 2002/09/22 10:40:31 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -34,6 +34,7 @@
 static FB_RECT s_rect;
 static z_stream s_zstream[4];
 static int s_zstream_active[4] = { 0, 0, 0, 0 };
+static CARD8 s_reset_streams = 0;
 
 static int s_stream_id;
 static int s_filter_id;
@@ -72,6 +73,7 @@ void reset_tight_streams(void)
         }
       }
       s_zstream_active[stream_id] = 0;
+      s_reset_streams |= (1 << stream_id);
     }
   }
 }
@@ -87,7 +89,8 @@ static void rf_host_tight_compctl(void)
   CARD8 comp_ctl;
   int stream_id;
 
-  fbs_spool_byte(cur_slot->readbuf[0]);
+  fbs_spool_byte(cur_slot->readbuf[0] | s_reset_streams);
+  s_reset_streams = 0;
 
   /* Compression control byte */
   comp_ctl = cur_slot->readbuf[0];
