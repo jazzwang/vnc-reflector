@@ -64,6 +64,7 @@ Options:
   -j              - join saved sessions (see -s option) in one session file
   -t              - use Tight encoding for host communications if possible
   -T COMPR_LEVEL  - like -t, but use the specified compression level (1..9)
+  -r              - disable CopyRect encoding, e.g. for debugging purposes
   -g LOG_FILE     - write logs to the specified file [default: reflector.log]
   -v LOG_LEVEL    - set verbosity level for the log file (0..6) [default: 4]
   -f LOG_LEVEL    - run in foreground, show logs on stderr at the specified

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.24 2003/01/11 09:44:02 const Exp $
+ * $Id: rfblib.h,v 1.25 2003/05/29 08:17:01 const_k Exp $
  * RFB protocol definitions
  */
 
@@ -149,33 +149,57 @@ typedef struct _RFB_SCREEN_INFO {
  */
 
 #define buf_get_CARD8(buf)                      \
-  (*((CARD8 *)buf))
+  (*((CARD8 *)(buf)))
 
 #define buf_get_CARD16(buf)                     \
-  ((CARD16)((CARD8 *)buf)[0] << 8 |             \
-   (CARD16)((CARD8 *)buf)[1])
+  ((CARD16)((CARD8 *)(buf))[0] << 8 |           \
+   (CARD16)((CARD8 *)(buf))[1])
 
 #define buf_get_CARD32(buf)                     \
-  ((CARD32)((CARD8 *)buf)[0] << 24 |            \
-   (CARD32)((CARD8 *)buf)[1] << 16 |            \
-   (CARD32)((CARD8 *)buf)[2] << 8  |            \
-   (CARD32)((CARD8 *)buf)[3]);
+  ((CARD32)((CARD8 *)(buf))[0] << 24 |          \
+   (CARD32)((CARD8 *)(buf))[1] << 16 |          \
+   (CARD32)((CARD8 *)(buf))[2] << 8  |          \
+   (CARD32)((CARD8 *)(buf))[3]);
 
 #define buf_put_CARD8(buf, value)               \
-  *((CARD8 *)buf) = (CARD8)value;
+  *((CARD8 *)(buf)) = (CARD8)(value);
 
 #define buf_put_CARD16(buf, value)              \
 {                                               \
-  ((CARD8 *)buf)[0] = (CARD8)(value >> 8);      \
-  ((CARD8 *)buf)[1] = (CARD8)value;             \
+  ((CARD8 *)(buf))[0] = (CARD8)((value) >> 8);  \
+  ((CARD8 *)(buf))[1] = (CARD8)(value);         \
 }
 
 #define buf_put_CARD32(buf, value)              \
 {                                               \
-  ((CARD8 *)buf)[0] = (CARD8)(value >> 24);     \
-  ((CARD8 *)buf)[1] = (CARD8)(value >> 16);     \
-  ((CARD8 *)buf)[2] = (CARD8)(value >> 8);      \
-  ((CARD8 *)buf)[3] = (CARD8)value;             \
+  ((CARD8 *)(buf))[0] = (CARD8)((value) >> 24); \
+  ((CARD8 *)(buf))[1] = (CARD8)((value) >> 16); \
+  ((CARD8 *)(buf))[2] = (CARD8)((value) >> 8);  \
+  ((CARD8 *)(buf))[3] = (CARD8)(value);         \
+}
+
+#define buf_putsafe_CARD8(buf, value)           \
+{                                               \
+  CARD8 *b = (CARD8 *)(buf);                    \
+  *b = (CARD8)(value);                          \
+}
+
+#define buf_putsafe_CARD16(buf, value)          \
+{                                               \
+  CARD8 *b = (CARD8 *)(buf);                    \
+  CARD16 v = (CARD16)(value);                   \
+  b[0] = (CARD8)(v >> 8);                       \
+  b[1] = (CARD8)(v);                            \
+}
+
+#define buf_putsafe_CARD32(buf, value)          \
+{                                               \
+  CARD8 *b = (CARD8 *)(buf);                    \
+  CARD32 v = (CARD32)(value);                   \
+  b[0] = (CARD8)(v >> 24);                      \
+  b[1] = (CARD8)(v >> 16);                      \
+  b[2] = (CARD8)(v >> 8);                       \
+  b[3] = (CARD8)(v);                            \
 }
 
 /*

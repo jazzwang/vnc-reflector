@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.47 2003/01/11 09:44:02 const Exp $
+ * $Id: main.c,v 1.48 2003/05/29 08:17:01 const_k Exp $
  * Main module
  */
 
@@ -53,6 +53,7 @@ static char *opt_fbs_prefix;
 static int   opt_join_sessions;
 static char *opt_bind_ip;
 static int   opt_request_tight;
+static int   opt_request_copyrect;
 static int   opt_tight_level;
 
 static unsigned char opt_client_password[9];
@@ -131,7 +132,8 @@ int main(int argc, char **argv)
   /* Initialization */
   if (init_screen_info()) {
     read_password_file();
-    set_host_encodings(opt_request_tight, opt_tight_level);
+    set_host_encodings(opt_request_copyrect,
+                       opt_request_tight, opt_tight_level);
     set_client_passwords(opt_client_password, opt_client_ro_password);
     fbs_set_prefix(opt_fbs_prefix, opt_join_sessions);
 
@@ -207,10 +209,11 @@ static void parse_args(int argc, char **argv)
   opt_join_sessions = 0;
   opt_bind_ip = NULL;
   opt_request_tight = 0;
+  opt_request_copyrect = 1;
   opt_tight_level = -1;
 
   while (!err &&
-         (c = getopt(argc, argv, "hqjv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
+         (c = getopt(argc, argv, "hqjrv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -285,6 +288,12 @@ static void parse_args(int argc, char **argv)
       else
         opt_bind_ip = optarg;
       break;
+    case 'r':
+      if (!opt_request_copyrect)
+        err = 1;
+      else
+        opt_request_copyrect = 0;
+      break;
     case 't':
       if (opt_request_tight)
         err = 1;
@@ -352,12 +361,12 @@ static void report_usage(char *program_name)
           "  -a ACTIVE_FILE  - create file during times when a host is"
           " connected\n"
           "  -c ACTIONS_FILE - on events, execute commands specified in"
-          " a file\n"
+          " a file\n");
+  fprintf(stderr,
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
           "  -b IP_ADDRESS   - bind listening sockets to a specific IP"
-          " [default: any]\n");
-  fprintf(stderr,
+          " [default: any]\n"
           "  -s FBS_PREFIX   - save host sessions in rfbproxy-compatible"
           " files\n"
           "                    (optionally appending 3-digit session IDs"
@@ -365,11 +374,14 @@ static void report_usage(char *program_name)
           "                    filename prefix, only if used without the"
           " -j option)\n"
           "  -j              - join saved sessions (see -s option) in one"
-          " session file\n"
+          " session file\n");
+  fprintf(stderr,
           "  -t              - use Tight encoding for host communications"
           " if possible\n"
           "  -T COMPR_LEVEL  - like -t, but use the specified compression"
-          " level (1..9)\n");
+          " level (1..9)\n"
+          "  -r              - disable CopyRect encoding, e.g. for debugging"
+          " purposes\n");
   fprintf(stderr,
           "  -g LOG_FILE     - write logs to the specified file"
           " [default: reflector.log]\n"

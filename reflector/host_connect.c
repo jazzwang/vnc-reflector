@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.32 2003/01/11 09:44:02 const Exp $
+ * $Id: host_connect.c,v 1.33 2003/05/29 08:16:59 const_k Exp $
  * Connecting to a VNC host
  */
 
@@ -49,6 +49,7 @@ static void send_client_initmsg(void);
 static void rf_host_initmsg(void);
 static void rf_host_set_formats(void);
 
+static int s_request_copyrect;
 static int s_request_tight;
 static int s_tight_level;
 
@@ -64,8 +65,10 @@ static unsigned char s_host_password[9];
  * for the Tight encoding.
  */
 
-void set_host_encodings(int request_tight, int tight_level)
+void set_host_encodings(int request_copyrect,
+                        int request_tight, int tight_level)
 {
+  s_request_copyrect = request_copyrect;
   s_request_tight = request_tight;
   s_tight_level = tight_level;
 }
@@ -359,17 +362,19 @@ static void rf_host_initmsg(void)
   aio_setread(rf_host_set_formats, NULL, hs->temp_len);
 }
 
+#define MAX_ENCODINGS 10
+
 static void rf_host_set_formats(void)
 {
   HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   CARD8 *new_name;
   unsigned char setpixfmt_msg[4 + SZ_RFB_PIXEL_FORMAT];
-  unsigned char setenc_msg[32] = {
+  unsigned char setenc_msg[4 + MAX_ENCODINGS * 4] = {
     2,                          /* Message id */
     0,                          /* Padding -- not used */
     0, 0                        /* Number of encodings */
   };
-  int setenc_msg_size;
+  int num_enc = 0;
 
   /* FIXME: Don't change g_screen_info while there is an active host
      connection! */
@@ -396,35 +401,42 @@ static void rf_host_set_formats(void)
   aio_write(NULL, setpixfmt_msg, sizeof(setpixfmt_msg));
 
   if (s_request_tight) {
-    log_write(LL_DETAIL, "Requesting Tight encoding");
-    buf_put_CARD32(&setenc_msg[4],  RFB_ENCODING_TIGHT);
-    buf_put_CARD32(&setenc_msg[8],  RFB_ENCODING_HEXTILE);
-    buf_put_CARD32(&setenc_msg[12], RFB_ENCODING_COPYRECT);
-    buf_put_CARD32(&setenc_msg[16], RFB_ENCODING_RAW);
-    buf_put_CARD32(&setenc_msg[20], RFB_ENCODING_LASTRECT);
-    buf_put_CARD32(&setenc_msg[24], RFB_ENCODING_NEWFBSIZE);
-    if (s_tight_level >= 0 && s_tight_level <= 9) {
-      log_write(LL_DETAIL, "Requesting compression level %d", s_tight_level);
-      buf_put_CARD32(&setenc_msg[28], (RFB_ENCODING_COMPESSLEVEL0 +
-                                       (CARD32)s_tight_level));
-      buf_put_CARD16(&setenc_msg[2], 7);
-      setenc_msg_size = 32;
-    } else {
-      buf_put_CARD16(&setenc_msg[2], 6);
-      setenc_msg_size = 28;
-    }
+    log_write(LL_DETAIL, "Preferring Tight encoding");
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4],  RFB_ENCODING_TIGHT);
   } else {
-    log_write(LL_DETAIL, "Requesting Hextile encoding");
-    buf_put_CARD32(&setenc_msg[4],  RFB_ENCODING_HEXTILE);
-    buf_put_CARD32(&setenc_msg[8],  RFB_ENCODING_COPYRECT);
-    buf_put_CARD32(&setenc_msg[12], RFB_ENCODING_RAW);
-    buf_put_CARD32(&setenc_msg[16], RFB_ENCODING_NEWFBSIZE);
-    buf_put_CARD16(&setenc_msg[2], 4);
-    setenc_msg_size = 20;
+    log_write(LL_DETAIL, "Preferring Hextile encoding");
   }
 
+  buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_HEXTILE);
+  buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_RAW);
+  buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_NEWFBSIZE);
+
+  if (s_request_copyrect) {
+    log_write(LL_DETAIL, "Requesting CopyRect encoding");
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_COPYRECT);
+  } else {
+    log_write(LL_DETAIL, "Not requesting CopyRect encoding");
+  }
+
+  if (s_request_tight) {
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_LASTRECT);
+    if (s_tight_level >= 0 && s_tight_level <= 9) {
+      log_write(LL_DETAIL, "Requesting compression level %d", s_tight_level);
+      buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4],
+                         RFB_ENCODING_COMPESSLEVEL0 + (CARD32)s_tight_level);
+    }
+  }
+
+  if (num_enc > MAX_ENCODINGS) {
+    /* Don't wait for crash, exit now. */
+    log_write(LL_INTERR, "Internal error in rf_host_set_formats()!");
+    exit(2);
+  }
+
+  buf_put_CARD16(&setenc_msg[2], num_enc);
+
   log_write(LL_DEBUG, "Sending SetEncodings message");
-  aio_write(NULL, setenc_msg, setenc_msg_size);
+  aio_write(NULL, setenc_msg, 4 + num_enc * 4);
 
   /* If there was no local framebuffer yet, start listening for client
      connections, assuming we are mostly ready to serve clients. */
