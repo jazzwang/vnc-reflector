@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.32 2001/10/11 12:48:58 const Exp $
+ * $Id: host_io.c,v 1.33 2001/10/11 14:31:15 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -743,26 +743,33 @@ static void hextile_fill_tile(void)
     memcpy(&fb_ptr[y * g_fb_width], fb_ptr, hextile_rect.w * sizeof(CARD32));
 }
 
-/* FIXME: Not as efficient as it could be. */
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim)
 {
   int pos_x, pos_y, dim_w, dim_h;
-  int x, y;
+  int x, y, skip;
   CARD32 *fb_ptr;
 
   pos_x = pos >> 4 & 0x0F;
   pos_y = pos & 0x0F;
-  dim_w = (dim >> 4 & 0x0F) + 1;
-  dim_h = (dim & 0x0F) + 1;
+  fb_ptr = &g_framebuffer[(hextile_rect.y + pos_y) * (int)g_fb_width +
+                          (hextile_rect.x + pos_x)];
 
-  fb_ptr = &g_framebuffer[(hextile_rect.y+pos_y) * (int)g_fb_width +
-                          (hextile_rect.x+pos_x)];
+  /* Optimization for 1x1 subrects */
+  if (dim == 0) {
+    *fb_ptr = hextile_fg;
+    return;
+  }
 
-  for (y = 0; y < dim_h; y++) {
-    for (x = 0; x < dim_w; x++) {
+  /* Actually, we should add 1 to both dim_h and dim_w. */
+  dim_w = dim >> 4 & 0x0F;
+  dim_h = dim & 0x0F;
+  skip = g_fb_width - (dim_w + 1);
+
+  for (y = 0; y <= dim_h; y++) {
+    for (x = 0; x <= dim_w; x++) {
       *fb_ptr++ = hextile_fg;
     }
-    fb_ptr += g_fb_width - dim_w;
+    fb_ptr += skip;
   }
 }
 
