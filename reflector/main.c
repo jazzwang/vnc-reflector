@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.33 2001/10/05 10:36:19 const Exp $
+ * $Id: main.c,v 1.34 2001/10/09 15:32:16 const Exp $
  * Main module
  */
 
@@ -165,9 +165,9 @@ int main(int argc, char **argv)
 
     get_hextile_caching_stats(&cache_hits, &cache_misses);
     if (cache_hits + cache_misses != 0) {
-      log_write(LL_INFO, "Caching stats for 16x16 tiles: %d%% hits (%ld/%ld)",
-                (int)(cache_hits * 100 / (cache_hits + cache_misses)),
-                cache_hits, cache_hits + cache_misses);
+      log_write(LL_INFO, "Hextile BGR233 caching efficiency: %d%%",
+                (int)((cache_hits * 100 + (cache_hits + cache_misses) / 2)
+                      / (cache_hits + cache_misses)));
     }
   }
 
