@@ -1,15 +1,18 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.2 2001/08/02 11:13:38 const Exp $
+ * $Id: async_io.c,v 1.3 2001/08/02 15:33:05 const Exp $
  * Asynchronous file/socket I/O
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <fcntl.h>
 
 #include "async_io.h"
@@ -27,10 +30,14 @@ AIO_SLOT *cur_slot;
 static fd_set s_fdset_read;
 static fd_set s_fdset_write;
 static int s_max_fd;
-static int s_listen_fd;
 static AIO_FUNCPTR s_idle_func;
 static AIO_SLOT *s_first_slot;
 static AIO_SLOT *s_last_slot;
+
+static int s_listen_fd;
+static AIO_FUNCPTR s_accept_func;
+static int s_new_slot_type;
+static size_t s_new_slot_size;
 
 /*
  * Prototypes for static functions
@@ -38,15 +45,19 @@ static AIO_SLOT *s_last_slot;
 
 static void aio_process_input(AIO_SLOT *slot);
 static void aio_process_output(AIO_SLOT *slot);
+static void aio_accept_connection(void);
 
 /*
  * Implementation
  */
 
+/*
+ * Initialize I/O sybsystem. This function should be called prior to
+ * any other function herein and should NOT be called second time.
+ */
+
 void aio_init(void)
 {
-  /* NOTE: it should not be called after any other function is done. */
-
   FD_ZERO(&s_fdset_read);
   FD_ZERO(&s_fdset_write);
   s_max_fd = 0;
@@ -56,12 +67,18 @@ void aio_init(void)
   s_last_slot = NULL;
 }
 
+/*
+ * Create I/O slot for existing connection (open file). After new slot
+ * was created, initfunc would be called with cur_slot pointing to
+ * that slot. To allow reading from provided descriptor, initfunc
+ * should set some input handler using aio_setread() function.
+ */
+
 void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
 {
   size_t size;
   AIO_SLOT *slot, *saved_slot;
 
-  /* NOTE: initfunc must set input handler using aio_setread(). */
   /* FIXME: Check return value after calloc(). */
 
   size = (slot_size > sizeof(AIO_SLOT)) ? size : sizeof(AIO_SLOT);
@@ -100,6 +117,64 @@ void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
   cur_slot = saved_slot;
 }
 
+/*
+ * Create listening socket. All connections would be accepted
+ * automatically and initfunc would be called for each new slot
+ * created on incoming connection.
+ * NOTE: only one listening socket is supported at this time.
+ */
+
+int aio_listen(int port, AIO_FUNCPTR acceptfunc, int type, size_t slot_size)
+{
+  struct sockaddr_in listen_addr;
+  int optval = 1;
+
+  /* acceptfunc must be provided, otherwise we don't know
+     how to handle input and what to send as output. */
+  if (acceptfunc == NULL)
+    return 0;
+  
+  s_listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (s_listen_fd < 0)
+    return 0;
+
+  if (setsockopt(s_listen_fd, SOL_SOCKET, SO_REUSEADDR,
+                 &optval, sizeof(int)) != 0) {
+    close(s_listen_fd);
+    s_listen_fd = -1;
+    return 0;
+  }
+
+  listen_addr.sin_family = AF_INET;
+  listen_addr.sin_addr.s_addr = INADDR_ANY;
+  listen_addr.sin_port = htons((unsigned short)port);
+
+  if ( bind(s_listen_fd, (struct sockaddr *)&listen_addr,
+            sizeof(listen_addr)) != 0 ||
+       fcntl(s_listen_fd, F_SETFL, O_NONBLOCK) != 0 ||
+       listen (s_listen_fd, 5) != 0) {
+    close(s_listen_fd);
+    s_listen_fd = -1;
+    return 0;
+  }
+
+  FD_SET(s_listen_fd, &s_fdset_read);
+  if (s_listen_fd > s_max_fd)
+    s_max_fd = s_listen_fd;
+
+  s_accept_func = acceptfunc;
+  s_new_slot_type = type;
+  s_new_slot_size = slot_size;
+
+  return 1;
+}
+
+/*
+ * Main event loop. It watches for possibility to perform I/O
+ * operations on descriptors and dispatches I/O results to custom
+ * callback functions.
+ */
+
 void aio_mainloop(void)
 {
   fd_set fdset_r, fdset_w;
@@ -118,6 +193,8 @@ void aio_mainloop(void)
         if (FD_ISSET(slot->fd, &fdset_r))
           aio_process_input(slot);
       }
+      if (FD_ISSET(s_listen_fd, &fdset_r))
+        aio_accept_connection();
     } else {
       /* Do something in idle periods */
       if (s_idle_func != NULL)
@@ -135,6 +212,7 @@ void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read)
     cur_slot->alloc_f = 0;
   }
 
+  /* NOTE: readfunc must be real, not NULL */
   cur_slot->readfunc = fn;
 
   if (inbuf != NULL) {
@@ -163,6 +241,7 @@ void aio_write(AIO_FUNCPTR fn, void *outbuf, int bytes_to_write)
   /* FIXME: Check return value after malloc(). */
   /* FIXME: Provide a function that do not use memcpy(). */
 
+  /* By the way, writefunc may be NULL */
   cur_slot->writefunc = fn;
 
   block = malloc(sizeof(AIO_BLOCK) + bytes_to_write - 1);
@@ -238,5 +317,19 @@ static void aio_process_output(AIO_SLOT *slot)
   } else {
     /* FIXME: Close the slot on error */
   }
+}
+
+static void aio_accept_connection(void)
+{
+  AIO_SLOT *slot;
+  struct sockaddr_in client_addr;
+  int len, fd;
+
+  len = sizeof(client_addr);
+  fd = accept(s_listen_fd, (struct sockaddr *) &client_addr, &len);
+  if (fd < 0)
+    return;
+
+  aio_add_slot(fd, s_accept_func, s_new_slot_type, s_new_slot_size);
 }
 

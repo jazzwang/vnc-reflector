@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.7 2001/08/02 12:18:48 const Exp $
+ * $Id: main.c,v 1.8 2001/08/02 15:33:05 const Exp $
  * Main module
  */
 
@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
 #include <sys/types.h>
 
 #include "rfblib.h"
@@ -18,6 +19,7 @@
 #include "reflector.h"
 #include "host_connect.h"
 #include "host_io.h"
+#include "client_io.h"
 
 /* Configuration options */
 static int   opt_listen_port;
@@ -73,20 +75,25 @@ int main(int argc, char **argv)
   if (host_fd != -1 && setup_session(host_fd, opt_password, &desktop_info)) {
     /* Allocate framebuffer */
     framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
-    if (framebuffer) {
+    if (framebuffer == NULL) {
+      log_write(LL_ERROR, "Error allocating framebuffer");
+    } else {
       log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
                 desktop_info.width * desktop_info.height * 4);
 
-      /* Let I/O subsystem know about host connection */
-      init_host_io(host_fd);
+      /* Initialize I/O subsystem */
+      aio_init();
 
-      /* Start async I/O loop */
-      aio_mainloop();
-
-    } else {
-      log_write(LL_ERROR, "Error allocating framebuffer");
+      if (!aio_listen(opt_listen_port, af_client_accept,
+                      1, sizeof(AIO_SLOT))) {
+        log_write(LL_ERROR, "Error creating listening socket: %s",
+                  strerror(errno));
+      } else {
+        init_host_io(host_fd);
+        aio_mainloop();
+      }
+      free(framebuffer);
     }
-    free(framebuffer);
     free(desktop_info.name);
   }
 
