@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.4 2001/08/06 23:30:31 const Exp $
+ * $Id: host_connect.c,v 1.5 2001/08/08 09:49:32 const Exp $
  * Connecting to a VNC host
  */
 
@@ -87,15 +87,15 @@ int setup_session(int host_fd, char *password, RFB_SCREEN_INFO **scr)
       success = 0;
       break;
     case 1:
-      log_write(LL_MSG, "No authentication required");
+      log_write(LL_MSG, "No authentication required at host side");
       break;
     case 2:
-      log_write(LL_DETAIL, "VNC authentication required");
+      log_write(LL_DETAIL, "VNC authentication requested by host");
       if (!vnc_authenticate(host_fd, password))
         success = 0;
       break;
     default:
-      log_write(LL_ERROR, "Unknown authentication scheme");
+      log_write(LL_ERROR, "Unknown authentication scheme requested by host");
       success = 0;
     }
   }
