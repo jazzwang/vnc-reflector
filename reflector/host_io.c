@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.47 2003/05/29 16:16:45 const_k Exp $
+ * $Id: host_io.c,v 1.48 2004/08/07 17:28:46 const_k Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -266,10 +266,10 @@ static void rf_host_fbupdate_recthdr(void)
   }
 
   /* Ignore zero-size rectangles */
-  if (cur_rect.h == 0 || cur_rect.w == 0) {
-    log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring)",
+  if (cur_rect.enc != RFB_ENCODING_PTR_POS && (cur_rect.h == 0 || cur_rect.w == 0)) {
+    log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring), encoding 0x%08lX",
               (int)cur_rect.w, (int)cur_rect.h,
-              (int)cur_rect.x, (int)cur_rect.y);
+              (int)cur_rect.x, (int)cur_rect.y, cur_rect.enc);
     fbupdate_rect_done();
     return;
   }
@@ -331,6 +331,18 @@ static void rf_host_fbupdate_recthdr(void)
   case RFB_ENCODING_TIGHT:
     log_write(LL_DEBUG, "Receiving Tight-encoded data");
     setread_decode_tight(&cur_rect);
+    break;
+  case RFB_ENCODING_XCURSOR:
+    log_write(LL_DEBUG, "XCursor encoding.");
+    setread_decode_xcursor(&cur_rect);
+    break;
+  case RFB_ENCODING_RICHCURSOR:
+    log_write(LL_DEBUG, "Rich Cursor encoding.");
+    setread_decode_richcursor(&cur_rect);
+    break;
+  case RFB_ENCODING_PTR_POS:
+    log_write(LL_DEBUG, "Ptr pos encoding.");
+    setread_decode_ptr_pos(&cur_rect);
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX",

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.25 2003/05/29 08:17:01 const_k Exp $
+ * $Id: rfblib.h,v 1.26 2004/08/07 17:28:46 const_k Exp $
  * RFB protocol definitions
  */
 
@@ -96,6 +96,17 @@ typedef struct _RFB_SCREEN_INFO {
   CARD8 *name;
 } RFB_SCREEN_INFO;
 
+typedef struct _rfbXCursorColors {
+  CARD8 foreRed;
+  CARD8 foreGreen;
+  CARD8 foreBlue;
+  CARD8 backRed;
+  CARD8 backGreen;
+  CARD8 backBlue;
+} rfbXCursorColors;
+
+#define sz_rfbXCursorColors 6
+
 /*
  * Encodings
  */
@@ -117,6 +128,13 @@ typedef struct _RFB_SCREEN_INFO {
 
 #define RFB_ENCODING_LASTRECT       0xFFFFFF20
 #define RFB_ENCODING_NEWFBSIZE      0xFFFFFF21
+
+/*
+ * Mouse cursor encodings
+ */
+#define RFB_ENCODING_XCURSOR        0xFFFFFF10
+#define RFB_ENCODING_RICHCURSOR     0xFFFFFF11
+#define RFB_ENCODING_PTR_POS        0xFFFFFF18
 
 /*
  * Hextile encoding

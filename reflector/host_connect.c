@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.35 2003/07/30 18:22:07 const_k Exp $
+ * $Id: host_connect.c,v 1.36 2004/08/07 17:28:46 const_k Exp $
  * Connecting to a VNC host
  */
 
@@ -52,6 +52,7 @@ static void rf_host_set_formats(void);
 static int s_request_copyrect;
 static int s_convert_copyrect;
 static int s_request_tight;
+static int s_request_cursor;
 static int s_tight_level;
 
 static char *s_host_info_file;
@@ -67,12 +68,13 @@ static unsigned char s_host_password[9];
  */
 
 void set_host_encodings(int request_copyrect, int convert_copyrect,
-                        int request_tight, int tight_level)
+                        int request_tight, int tight_level, int request_cursor)
 {
   s_request_copyrect = request_copyrect;
   s_convert_copyrect = convert_copyrect;
   s_request_tight = request_tight;
   s_tight_level = tight_level;
+  s_request_cursor = request_cursor;
 }
 
 /*
@@ -428,6 +430,13 @@ static void rf_host_set_formats(void)
                          RFB_ENCODING_COMPESSLEVEL0 + (CARD32)s_tight_level);
     }
   }
+
+  if (s_request_cursor) {
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_XCURSOR);
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_RICHCURSOR);
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_PTR_POS);
+  }
+
 
   if (num_enc > MAX_ENCODINGS) {
     /* Don't wait for crash, exit now. */

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.52 2003/04/09 18:44:43 const Exp $
+ * $Id: client_io.c,v 1.53 2004/08/07 17:28:46 const_k Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -56,6 +56,8 @@ static void rf_client_cuttext_data(void);
 
 static void set_trans_func(CL_SLOT *cl);
 static void send_newfbsize(void);
+static void send_cursorshape(void);
+static void send_ptr_pos(void);
 static void send_update(void);
 
 /*
@@ -366,6 +368,22 @@ static void rf_client_encodings_data(void)
       cl->enable_newfbsize = 1;
       log_write(LL_DETAIL, "Client %s supports desktop geometry changes",
                 cur_slot->name);
+    } else if (enc == RFB_ENCODING_XCURSOR) {
+      /* If we have a cursor, we'll send it */
+      if (crsr_get_type())
+	cl->newcursor_pending = 1;
+      log_write(LL_DETAIL, "Client %s supports XCursor updates.",
+		cur_slot->name);
+    } else if (enc == RFB_ENCODING_RICHCURSOR) {
+      /* If we have a cursor, we'll send it */
+      if (crsr_get_type())
+	cl->newcursor_pending = 1;
+      log_write(LL_DETAIL, "Client %s supports Rich Cursor updates.",
+		cur_slot->name);
+    } else if (enc == RFB_ENCODING_PTR_POS) {
+      /* FIXME: anything to do here? */
+      log_write(LL_ERROR, "Client %s supports Pointer Position updates.",
+		cur_slot->name);
     }
   }
   if (cl->compress_level < 0)
@@ -433,6 +451,7 @@ static void rf_client_updatereq(void)
 
   if (!cl->update_in_progress &&
       (cl->newfbsize_pending ||
+       cl->ptr_pos_pending ||
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
@@ -451,6 +470,7 @@ static void wf_client_update_finished(void)
   cl->update_in_progress = 0;
   if (cl->update_requested &&
       (cl->newfbsize_pending ||
+       cl->ptr_pos_pending ||
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
@@ -583,6 +603,7 @@ void fn_client_send_rects(AIO_SLOT *slot)
 
   if (!cl->update_in_progress && cl->update_requested &&
       (cl->newfbsize_pending ||
+       cl->ptr_pos_pending ||
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     cur_slot = slot;
@@ -610,6 +631,18 @@ void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, size_t len)
 
     cur_slot = saved_slot;
   }
+}
+
+void fn_client_send_xcursor(AIO_SLOT *slot)
+{
+  CL_SLOT *cl = (CL_SLOT *)slot;
+  cl->newcursor_pending = 1;
+}
+
+void fn_client_send_ptr_pos(AIO_SLOT *slot)
+{
+  CL_SLOT *cl = (CL_SLOT *)slot;
+  cl->ptr_pos_pending = 1;
 }
 
 /*
@@ -692,6 +725,54 @@ static void send_newfbsize(void)
   cl->update_requested = 0;
 }
 
+void send_cursorshape(void)
+{
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  CARD8 rect_hdr_col[12 + sz_rfbXCursorColors];
+  CARD8 *bmps;
+  CARD32 hdr_size = 12, size;
+  FB_RECT *rect;
+
+  cl->newcursor_pending = 0;
+  if (!cl->connected) {
+    return;
+  }
+
+  /* assemble header and cursor data */
+  rect = crsr_get_rect();
+  bmps = crsr_get_bmps();
+  put_rect_header(rect_hdr_col, rect);
+  if (crsr_get_type() == RFB_ENCODING_RICHCURSOR) {
+    log_write(LL_DEBUG, "Sending RichCursor update to %s", cur_slot->name);
+    size = rect->w * rect->h * (g_screen_info.pixformat.bits_pixel / 8);
+    size += ((rect->w + 7) / 8) * rect->h;
+  } else if (crsr_get_type() == RFB_ENCODING_XCURSOR) {
+    log_write(LL_DEBUG, "Sending XCursor update to %s", cur_slot->name);
+    size = ((rect->w + 7) / 8) * rect->h * 2;
+    hdr_size += sz_rfbXCursorColors;
+    memcpy(rect_hdr_col + 12, crsr_get_col(), sz_rfbXCursorColors);
+  } else {
+    return;
+  }
+
+  /* write rect header and cursor data */
+  aio_write(NULL, rect_hdr_col, hdr_size);
+  aio_write(NULL, bmps, size);
+}
+
+void send_ptr_pos(void)
+{
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  CARD8 rect_hdr[12];
+
+  if (cl->connected) {
+    log_write(LL_DEBUG, "Sending Pointer Position update to %s", cur_slot->name);
+    put_rect_header(rect_hdr, crsr_get_pos_rect());
+    aio_write(NULL, rect_hdr, 12);
+  }
+  cl->ptr_pos_pending = 0;
+}
+
 /*
  * Send pending framebuffer update.
  * FIXME: Function too big.
@@ -768,6 +849,10 @@ static void send_update(void)
   num_penging_rects = REGION_NUM_RECTS(&cl->pending_region);
   num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
   num_all_rects = num_penging_rects + num_copy_rects;
+  if (cl->newcursor_pending)
+      num_all_rects++;
+  if (cl->ptr_pos_pending)
+      num_all_rects++;
   if (num_all_rects == 0)
     return;
 
@@ -862,6 +947,14 @@ static void send_update(void)
 
   REGION_EMPTY(&cl->pending_region);
   REGION_EMPTY(&cl->copy_region);
+
+  /* cursor update */
+  if (cl->newcursor_pending) 
+    send_cursorshape();
+
+  /* pointer position update */
+  if (cl->ptr_pos_pending)
+    send_ptr_pos();
 
   /* Send LastRect marker. */
   if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {

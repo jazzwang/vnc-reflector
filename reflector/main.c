@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.49 2003/05/29 16:16:45 const_k Exp $
+ * $Id: main.c,v 1.50 2004/08/07 17:28:46 const_k Exp $
  * Main module
  */
 
@@ -54,6 +54,7 @@ static int   opt_join_sessions;
 static char *opt_bind_ip;
 static int   opt_request_tight;
 static int   opt_request_copyrect;
+static int   opt_request_cursor;
 static int   opt_convert_copyrect;
 static int   opt_tight_level;
 
@@ -134,7 +135,7 @@ int main(int argc, char **argv)
   if (init_screen_info()) {
     read_password_file();
     set_host_encodings(opt_request_copyrect, opt_convert_copyrect,
-                       opt_request_tight, opt_tight_level);
+                       opt_request_tight, opt_tight_level, opt_request_cursor);
     set_client_passwords(opt_client_password, opt_client_ro_password);
     fbs_set_prefix(opt_fbs_prefix, opt_join_sessions);
 
@@ -211,11 +212,12 @@ static void parse_args(int argc, char **argv)
   opt_bind_ip = NULL;
   opt_request_tight = 0;
   opt_request_copyrect = 1;
+  opt_request_cursor = 0;
   opt_convert_copyrect = 0;
   opt_tight_level = -1;
 
   while (!err &&
-         (c = getopt(argc, argv, "hqjrRv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
+         (c = getopt(argc, argv, "hqjrRxv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -225,6 +227,12 @@ static void parse_args(int argc, char **argv)
       break;
     case 'j':
       opt_join_sessions = 1;
+      break;
+    case 'x':
+      if (opt_request_cursor)
+        err = 1;
+      else
+        opt_request_cursor = 1;
       break;
     case 'v':
       if (opt_file_loglevel != -1)
@@ -403,6 +411,7 @@ static void report_usage(char *program_name)
           " at the specified\n"
           "                    verbosity level (0..%d) [note: use %d for"
           " normal output]\n"
+          "  -x              - request rich cursor and xcursor updates\n"
           "  -q              - suppress printing copyright banner at startup\n"
           "  -h              - print this help message\n\n",
           LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
