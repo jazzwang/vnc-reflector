@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.34 2003/05/29 16:16:45 const_k Exp $
+ * $Id: host_connect.c,v 1.35 2003/07/30 18:22:07 const_k Exp $
  * Connecting to a VNC host
  */
 
@@ -237,7 +237,7 @@ static void rf_host_ver(void)
   char *buf = (char *)cur_slot->readbuf;
   int major = 3, minor = 3;
   int remote_major, remote_minor;
-  char ver_msg[12];
+  char ver_msg[16];
 
   if ( strncmp(buf, "RFB ", 4) != 0 || !isdigit(buf[4]) ||
        !isdigit(buf[4]) || !isdigit(buf[5]) || !isdigit(buf[6]) ||
