@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.8 2001/08/04 21:58:57 const Exp $
+ * $Id: host_io.c,v 1.9 2001/08/04 22:23:06 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -38,7 +38,9 @@ static void request_update(int incr);
  * Implementation
  */
 
-/* This is the only function visible from outside */
+static AIO_SLOT *host_slot;
+
+/* Initializing host I/O */
 void init_host_io(int fd)
 {
   aio_add_slot(fd, NULL, if_host, sizeof(AIO_SLOT));
@@ -47,6 +49,7 @@ void init_host_io(int fd)
 /* Initializing I/O slot */
 static void if_host(void)
 {
+  host_slot = cur_slot;
   aio_setclose(cf_host);
 
   log_write(LL_DETAIL, "Requesting full framebuffer update");
@@ -246,6 +249,18 @@ static void rf_host_cuttext_data(void)
               cur_slot->readbuf);
   }
   aio_setread(rf_host_msg, NULL, 1);
+}
+
+/*************************************/
+/* Functions called from client_io.c */
+/*************************************/
+
+void pass_msg_to_host(CARD8 *msg, size_t len)
+{
+  AIO_SLOT *saved_slot = cur_slot;
+  cur_slot = host_slot;
+  aio_write(NULL, msg, len);
+  cur_slot = saved_slot;
 }
 
 /********************/

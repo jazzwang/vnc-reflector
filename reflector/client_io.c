@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.9 2001/08/04 22:06:17 const Exp $
+ * $Id: client_io.c,v 1.10 2001/08/04 22:23:06 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -16,8 +16,9 @@
 #include "reflector.h"
 #include "rect.h"
 #include "encode.h"
-#include "d3des.h"
+#include "host_io.h"
 #include "client_io.h"
+#include "d3des.h"
 
 static unsigned char *s_password;
 
@@ -316,11 +317,21 @@ static void wf_client_update_finished(void)
 
 static void rf_client_keyevent(void)
 {
+  CARD8 msg[8];
+
+  msg[0] = 4;                   /* KeyEvent */
+  memcpy(&msg[1], cur_slot->readbuf, 7);
+  pass_msg_to_host(msg, sizeof(msg));
   aio_setread(rf_client_msg, NULL, 1);
 }
 
 static void rf_client_ptrevent(void)
 {
+  CARD8 msg[6];
+
+  msg[0] = 5;                   /* PointerEvent */
+  memcpy(&msg[1], cur_slot->readbuf, 5);
+  pass_msg_to_host(msg, sizeof(msg));
   aio_setread(rf_client_msg, NULL, 1);
 }
 
