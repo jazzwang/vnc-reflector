@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.13 2001/08/08 09:36:19 const Exp $
+ * $Id: client_io.c,v 1.14 2001/08/08 09:52:28 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -29,6 +29,7 @@ static unsigned char *s_password;
 static void cf_client(void);
 static void rf_client_ver(void);
 static void rf_client_auth(void);
+static void wf_client_auth_failed(void);
 static void rf_client_initmsg(void);
 static void rf_client_msg(void);
 static void rf_client_pixfmt(void);
@@ -144,14 +145,18 @@ static void rf_client_auth(void)
   if (memcmp(cur_slot->readbuf, buf, 16) != 0) {
     log_write(LL_WARN, "Authentication failed for %s", cur_slot->name);
     buf_put_CARD32(buf, 1);
-    aio_write(NULL, buf, 4);
-    aio_close(0);
+    aio_write(wf_client_auth_failed, buf, 4);
   } else {
     log_write(LL_MSG, "Authentication passed by %s", cur_slot->name);
     buf_put_CARD32(buf, 0);
     aio_write(NULL, buf, 4);
     aio_setread(rf_client_initmsg, NULL, 1);
   }
+}
+
+static void wf_client_auth_failed(void)
+{
+  aio_close(0);
 }
 
 static void rf_client_initmsg(void)
