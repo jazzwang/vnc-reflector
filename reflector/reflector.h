@@ -1,14 +1,14 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: reflector.h,v 1.13 2001/08/28 18:16:26 const Exp $
+ * $Id: reflector.h,v 1.14 2001/09/08 07:49:29 const Exp $
  * Global include file
  */
 
 #ifndef _REF_REFLECTOR_H
 #define _REF_REFLECTOR_H
 
-#define VERSION  "1.1"
+#define VERSION  "1.1.1"
 
 /* FIXME: Too many header files with too many dependencies */
 
