@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_cursor.c,v 1.3 2004/08/11 22:08:25 grolloj Exp $
+ * $Id: decode_cursor.c,v 1.4 2004/10/14 19:50:38 grolloj Exp $
  * Connecting to a VNC host
  */
 
@@ -40,6 +40,7 @@ static CARD8 *s_bmps = NULL;
 static CARD16 s_curs_x = 0;
 static CARD16 s_curs_y = 0;
 static int s_type = 0;
+static int s_read_size = 0;
 
 
 /*
@@ -76,6 +77,7 @@ void setread_decode_richcursor(FB_RECT *r)
       aio_close(0);
       return;
     }
+    s_read_size = size;
     aio_setread(rf_host_richcursor_bmps, s_bmps, size);
   }
 }
@@ -122,6 +124,8 @@ static void rf_host_xcursor_color(void)
 {
   CARD32 size;
 
+  fbs_spool_data(cur_slot->readbuf, sz_rfbXCursorColors);
+
   /* calculate size of two cursor bitmaps to follow */
   size = ((s_curs_rect.w + 7) / 8) * s_curs_rect.h * 2;
   if (!s_bmps) {
@@ -134,11 +138,13 @@ static void rf_host_xcursor_color(void)
     aio_close(0);
     return;
   }
+  s_read_size = size;
   aio_setread(rf_host_xcursor_bmps, s_bmps, size);
 }
 
 static void rf_host_xcursor_bmps(void)
 {
+  fbs_spool_data(cur_slot->readbuf, s_read_size);
   s_type = RFB_ENCODING_XCURSOR;
   rf_host_cursor();
   fbupdate_rect_done();
@@ -146,6 +152,7 @@ static void rf_host_xcursor_bmps(void)
 
 static void rf_host_richcursor_bmps(void)
 {
+  fbs_spool_data(cur_slot->readbuf, s_read_size);
   s_type = RFB_ENCODING_RICHCURSOR;
   rf_host_cursor();
   fbupdate_rect_done();
