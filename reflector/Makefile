@@ -10,7 +10,7 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.33 2002/09/21 12:43:01 const Exp $
+# $Id: Makefile,v 1.34 2003/01/06 04:38:25 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
@@ -29,7 +29,7 @@ CFLAGS =	-g -pedantic -Wall $(IFLAGS)
 CONFFLAGS =	-DUSE_POLL
 
 # Link with zlib and JPEG libraries
-LDFLAGS =	-lz -ljpeg
+LDFLAGS =	-L/usr/local/lib -lz -ljpeg
 
 PROG = 	vncreflector
 
