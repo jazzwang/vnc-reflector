@@ -14,10 +14,10 @@ LDFLAGS =
 PROG = 	vncreflector
 
 OBJS = 	main.o logging.o host_connect.o d3des.o rfblib.o async_io.o \
-	host_io.o client_io.o encode.o rect.o
+	host_io.o client_io.o encode.o rect.o translate.o
 
 SRCS =	main.c logging.c host_connect.c d3des.c rfblib.c async_io.c \
-	host_io.c client_io.c encode.c rect.c
+	host_io.c client_io.c encode.c rect.c translate.c
 
 CC = gcc
 MAKEDEPEND = gccmakedep
@@ -51,3 +51,4 @@ client_io.o: client_io.c rfblib.h logging.h async_io.h reflector.h rect.h \
   encode.h host_io.h client_io.h d3des.h
 encode.o: encode.c rfblib.h reflector.h async_io.h rect.h client_io.h encode.h
 rect.o: rect.c rfblib.h rect.h
+translate.o: translate.c rfblib.h reflector.h rect.h
