@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.10 2001/10/06 17:58:57 const Exp $
+ * $Id: encode.c,v 1.11 2001/10/09 10:34:32 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -86,21 +86,28 @@ AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r)
  * Hextile encoder
  */
 
+/* Medium-level functions */
+static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static int encode_tile8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static int encode_tile16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static int encode_tile32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static int encode_tile_raw8(CARD8 *dst_buf,CL_SLOT *cl,FB_RECT *r);
-static int encode_tile_raw16(CARD8 *dst_buf,CL_SLOT *cl,FB_RECT *r);
-static int encode_tile_raw32(CARD8 *dst_buf,CL_SLOT *cl,FB_RECT *r);
-static void analyze_rect8(CARD8 *dst_buf, FB_RECT *r);
-static void analyze_rect16(CARD16 *dst_buf, FB_RECT *r);
-static void analyze_rect32(CARD32 *dst_buf, FB_RECT *r);
 
-static CARD32 bg, fg;
+/* Low-level functions */
+static int encode_tile_ht8(CARD8 *dst_buf, CARD8 *tile_buf, FB_RECT *r);
+static int encode_tile_ht16(CARD8 *dst_buf, CARD16 *tile_buf, FB_RECT *r);
+static int encode_tile_ht32(CARD8 *dst_buf, CARD32 *tile_buf, FB_RECT *r);
+static int encode_tile_raw8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static int encode_tile_raw16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static int encode_tile_raw32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+
+/* FIXME: Get rid of static vars that can be made function-level locals. */
+static PALETTE2 pal;
 static CARD32 prev_bg;
 static int prev_bg_set;
-static int num_colors;
+
+/*
+ * Highest-level function implementing Hextile encoder. It iterates
+ * over tiles 16x16 or less pixels each, and calls appropriate
+ * lower-level functions for them.
+ */
 
 AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
 {
@@ -139,20 +146,12 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
     for (tile_r.x = r->x; tile_r.x < rx1; tile_r.x += 16) {
       if (rx1 - tile_r.x < 16)
         tile_r.w = rx1 - tile_r.x;
-      switch (cl->format.bits_pixel) {
-      case 8:
-        /* Can we use caching for this tile? */
-        if (aligned_f && cl->bgr233_f && tile_r.w == 16 && tile_r.h == 16)
-          data_ptr += encode_tile_bgr233(data_ptr, cl, &tile_r);
-        else
-          data_ptr += encode_tile8(data_ptr, cl, &tile_r);
-        break;
-      case 16:
-        data_ptr += encode_tile16(data_ptr, cl, &tile_r);
-        break;
-      case 32:
-        data_ptr += encode_tile32(data_ptr, cl, &tile_r);
-        break;
+
+      /* To cache or not to cache? */
+      if (aligned_f && cl->bgr233_f && tile_r.w == 16 && tile_r.h == 16) {
+        data_ptr += encode_tile_bgr233(data_ptr, cl, &tile_r);
+      } else {
+        data_ptr += encode_tile(data_ptr, cl, &tile_r);
       }
     }
   }
@@ -162,7 +161,7 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
 }
 
 /*
- * Some statistics
+ * Some statistics for cache utilization.
  */
 
 static long s_cache_hits = 0, s_cache_misses = 0;
@@ -174,14 +173,54 @@ void get_hextile_caching_stats(long *hits, long *misses)
 }
 
 /*
- * Encode properly-aligned 16x16 BGR233 tile, using data from cache if
- * available, or saving encoded data in cache otherwise.
+ * A function to encode a tile (of size 16x16 or less) using Hextile
+ * encoding.
+ */
+
+static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
+{
+  CARD32 tile_buf[256];         /* Properly aligned for any pixel format */
+  int bytes;
+
+  /* Perform pixel format translation */
+  /* FIXME: Do it in encode_tile_htNN()? */
+  (*cl->trans_func)(tile_buf, r, cl->trans_table);
+
+  switch (cl->format.bits_pixel) {
+
+  case 8:
+    bytes = encode_tile_ht8(dst_buf, (CARD8 *)tile_buf, r);
+    if (bytes < 0)
+      bytes = encode_tile_raw8(dst_buf, cl, r);
+    break;
+
+  case 16:
+    bytes = encode_tile_ht16(dst_buf, (CARD16 *)tile_buf, r);
+    if (bytes < 0)
+      bytes = encode_tile_raw16(dst_buf, cl, r);
+    break;
+
+  case 32:
+    bytes = encode_tile_ht32(dst_buf, tile_buf, r);
+    if (bytes < 0)
+      bytes = encode_tile_raw32(dst_buf, cl, r);
+    break;
+  }
+
+  return bytes;
+}
+
+/*
+ * Encode properly-aligned 16x16 tile in BGR233 pixel format, using
+ * data from cache if available, or saving encoded data in cache
+ * otherwise.
  */
 
 static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 {
   int tiles_in_row, tile_ord;
   TILE_HINTS *hints;
+  CARD8 tile_buf[256];
   CARD8 *dst = dst_buf;
   size_t data_size;
   int dst_bytes;
@@ -199,13 +238,13 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
         memcpy(dst, &g_cache8[tile_ord * 256], 256);
         dst += 256;
     } else {
-      bg = (CARD32)hints->bg8;
-      if (prev_bg != bg || !prev_bg_set) {
+      pal.bg = (CARD32)hints->bg8;
+      if (prev_bg != pal.bg || !prev_bg_set) {
         *dst++ = hints->bg8;
       } else {
         *dst_buf &= ~RFB_HEXTILE_BG_SPECIFIED;
       }
-      prev_bg = bg;
+      prev_bg = pal.bg;
       prev_bg_set = 1;
       if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
         *dst++ = hints->fg8;
@@ -220,7 +259,10 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
   } else {                      /* Cache miss */
     s_cache_misses++;
 
-    dst_bytes = encode_tile8(dst_buf, cl, r);
+    (*cl->trans_func)(tile_buf, r, cl->trans_table);
+    dst_bytes = encode_tile_ht8(dst_buf, tile_buf, r);
+    if (dst_bytes < 0)
+      dst_bytes = encode_tile_raw8(dst_buf, cl, r);
 
     hints->subenc8 = *dst++;
     if (hints->subenc8 & RFB_HEXTILE_RAW) {
@@ -229,7 +271,7 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
       if (hints->subenc8 & RFB_HEXTILE_BG_SPECIFIED) {
         hints->bg8 = *dst++;
       } else {
-        hints->bg8 = (CARD8)bg;
+        hints->bg8 = (CARD8)pal.bg;
         hints->subenc8 |= RFB_HEXTILE_BG_SPECIFIED;
       }
       if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
@@ -248,125 +290,125 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 
 /*
  * A function to encode a tile (of size 16x16 or less) using Hextile
- * encoding. The dst_buf argument should point to an array of size at
- * least (256 * (cl->format.bits_pixel/8) + 1) bytes. Returns number
- * of bytes put into the dst_buf.
+ * encoding. The tile_buf should point to raw pixel data for the tile
+ * in client pixel format. The dst_buf argument should point to an
+ * array of size at least (256 * (cl->format.bits_pixel/8) + 1) bytes.
+ * This funtion returns number of bytes put into the dst_buf or -1 if
+ * this tile should be raw-encoded.
+ * NOTE: tile_buf[] contents would be destroyed by this function.
  */
 
-#define DEFINE_ENCODE_TILE(bpp)                                         \
-                                                                        \
-static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
-{                                                                       \
-  CARD##bpp tile_buf[256];                                              \
-  CARD8 *dst = dst_buf;                                                 \
-  CARD8 *dst_num_subrects;                                              \
-  CARD8 *dst_limit;                                                     \
-  int x, y, sx, sy;                                                     \
-  int best_w, best_h, max_x;                                            \
-  CARD##bpp color, bg_color;                                            \
-  CARD8 subenc = 0;                                                     \
-                                                                        \
-  /* Perform pixel format translation */                                \
-  (*cl->trans_func)(tile_buf, r, cl->trans_table);                      \
-                                                                        \
-  /* Count colors, consider bg, fg */                                   \
-  analyze_rect##bpp(tile_buf, r);                                       \
-  bg_color = (CARD##bpp)bg;                                             \
-                                                                        \
-  /* Set appropriate sub-encoding flags */                              \
-  if (prev_bg != bg || !prev_bg_set) {                                  \
-    subenc |= RFB_HEXTILE_BG_SPECIFIED;                                 \
-  }                                                                     \
-  if (num_colors != 1) {                                                \
-    subenc |= RFB_HEXTILE_ANY_SUBRECTS;                                 \
-    if (num_colors == 0)                                                \
-      subenc |= RFB_HEXTILE_SUBRECTS_COLOURED;                          \
-    else                                                                \
-      subenc |= RFB_HEXTILE_FG_SPECIFIED;                               \
-  }                                                                     \
-  *dst++ = subenc;                                                      \
-  prev_bg = bg;                                                         \
-  prev_bg_set = 1;                                                      \
-                                                                        \
-  /* Write subencoding-dependent heading data */                        \
-  if (subenc & RFB_HEXTILE_BG_SPECIFIED) {                              \
-    BUF_PUT_PIXEL##bpp(dst, bg_color);                                  \
-    dst += sizeof(CARD##bpp);                                           \
-  }                                                                     \
-  if (subenc & RFB_HEXTILE_FG_SPECIFIED) {                              \
-    color = (CARD##bpp)fg;                                              \
-    BUF_PUT_PIXEL##bpp(dst, color);                                     \
-    dst += sizeof(CARD##bpp);                                           \
-  }                                                                     \
-  if (subenc & RFB_HEXTILE_ANY_SUBRECTS) {                              \
-      dst_num_subrects = dst;                                           \
-      *dst++ = 0;                                                       \
-  }                                                                     \
-                                                                        \
-  /* Sort out the simplest case, solid-color tile */                    \
-  if (num_colors == 1)                                                  \
-    return (dst - dst_buf);                                             \
-                                                                        \
-  /* Limit data size in dst_buf */                                      \
-  dst_limit = dst_buf + r->w * r->h * sizeof(CARD##bpp) + 1;            \
-                                                                        \
-  /* Find and encode sub-rectangles */                                  \
-                                                                        \
-  for (y = 0; y < r->h; y++) {                                          \
-    for (x = 0; x < r->w; x++) {                                        \
-      /* Skip background-colored pixels */                              \
-      if (tile_buf[y * r->w + x] == bg_color) {                         \
-        continue;                                                       \
-      }                                                                 \
-      /* Determine dimensions of the best subrect */                    \
-      color = tile_buf[y * r->w + x];                                   \
-      best_w = 1;                                                       \
-      best_h = 1;                                                       \
-      max_x = r->w;                                                     \
-      for (sy = y; sy < r->h; sy++) {                                   \
-        for (sx = x; sx < max_x; sx++) {                                \
-          if (tile_buf[sy * r->w + sx] != color)                        \
-            break;                                                      \
-        }                                                               \
-        max_x = sx;                                                     \
-        if (max_x == x)                                                 \
-          break;                                                        \
-        if ((sx - x) * (sy - y + 1) > best_w * best_h) {                \
-          best_w = (sx - x);                                            \
-          best_h = (sy - y + 1);                                        \
-        }                                                               \
-      }                                                                 \
-      /* Encode subrect of size (best_w * best_h) */                    \
-      if (subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {                     \
-        if (dst + sizeof(CARD##bpp) + 2 >= dst_limit)                   \
-          return encode_tile_raw##bpp(dst_buf, cl, r);                  \
-                                                                        \
-        BUF_PUT_PIXEL##bpp(dst, color);                                 \
-        dst += sizeof(CARD##bpp);                                       \
-      } else {                                                          \
-        if (dst + 2 >= dst_limit)                                       \
-          return encode_tile_raw##bpp(dst_buf, cl, r);                  \
-      }                                                                 \
-      *dst++ = (CARD8)((x << 4) | (y & 0x0F));                          \
-      *dst++ = (CARD8)(((best_w - 1) << 4) | ((best_h - 1) & 0x0F));    \
-      (*dst_num_subrects)++;                                            \
-                                                                        \
-      /* Fill in processed subrect with background color */             \
-      for (sy = y + 1; sy < y + best_h; sy++) {                         \
-        for (sx = x; sx < x + best_w; sx++)                             \
-          tile_buf[sy * r->w + sx] = bg_color;                          \
-      }                                                                 \
-      /* Skip to the next pixel of different color */                   \
-      x += (best_w - 1);                                                \
-    }                                                                   \
-  }                                                                     \
-                                                                        \
-  return (dst - dst_buf);                                               \
+#define DEFINE_ENCODE_TILE_HT(bpp)                                           \
+                                                                             \
+static int                                                                   \
+encode_tile_ht##bpp(CARD8 *dst_buf, CARD##bpp *tile_buf, FB_RECT *r)         \
+{                                                                            \
+  CARD8 *dst = dst_buf;                                                      \
+  CARD8 *dst_num_subrects;                                                   \
+  CARD8 *dst_limit;                                                          \
+  int x, y, sx, sy;                                                          \
+  int best_w, best_h, max_x;                                                 \
+  CARD##bpp color, bg_color;                                                 \
+  CARD8 subenc = 0;                                                          \
+                                                                             \
+  /* Count colors, consider bg, fg */                                        \
+  analyze_rect##bpp(tile_buf, r, &pal);                                      \
+  bg_color = (CARD##bpp)pal.bg;                                              \
+                                                                             \
+  /* Set appropriate sub-encoding flags */                                   \
+  if (prev_bg != pal.bg || !prev_bg_set) {                                   \
+    subenc |= RFB_HEXTILE_BG_SPECIFIED;                                      \
+  }                                                                          \
+  if (pal.num_colors != 1) {                                                 \
+    subenc |= RFB_HEXTILE_ANY_SUBRECTS;                                      \
+    if (pal.num_colors == 0)                                                 \
+      subenc |= RFB_HEXTILE_SUBRECTS_COLOURED;                               \
+    else                                                                     \
+      subenc |= RFB_HEXTILE_FG_SPECIFIED;                                    \
+  }                                                                          \
+  *dst++ = subenc;                                                           \
+  prev_bg = pal.bg;                                                          \
+  prev_bg_set = 1;                                                           \
+                                                                             \
+  /* Write subencoding-dependent heading data */                             \
+  if (subenc & RFB_HEXTILE_BG_SPECIFIED) {                                   \
+    BUF_PUT_PIXEL##bpp(dst, bg_color);                                       \
+    dst += sizeof(CARD##bpp);                                                \
+  }                                                                          \
+  if (subenc & RFB_HEXTILE_FG_SPECIFIED) {                                   \
+    color = (CARD##bpp)pal.fg;                                               \
+    BUF_PUT_PIXEL##bpp(dst, color);                                          \
+    dst += sizeof(CARD##bpp);                                                \
+  }                                                                          \
+  if (subenc & RFB_HEXTILE_ANY_SUBRECTS) {                                   \
+      dst_num_subrects = dst;                                                \
+      *dst++ = 0;                                                            \
+  }                                                                          \
+                                                                             \
+  /* Sort out the simplest case, solid-color tile */                         \
+  if (pal.num_colors == 1)                                                   \
+    return (dst - dst_buf);                                                  \
+                                                                             \
+  /* Limit data size in dst_buf */                                           \
+  dst_limit = dst_buf + r->w * r->h * sizeof(CARD##bpp) + 1;                 \
+                                                                             \
+  /* Find and encode sub-rectangles */                                       \
+                                                                             \
+  for (y = 0; y < r->h; y++) {                                               \
+    for (x = 0; x < r->w; x++) {                                             \
+      /* Skip background-colored pixels */                                   \
+      if (tile_buf[y * r->w + x] == bg_color) {                              \
+        continue;                                                            \
+      }                                                                      \
+      /* Determine dimensions of the best subrect */                         \
+      color = tile_buf[y * r->w + x];                                        \
+      best_w = 1;                                                            \
+      best_h = 1;                                                            \
+      max_x = r->w;                                                          \
+      for (sy = y; sy < r->h; sy++) {                                        \
+        for (sx = x; sx < max_x; sx++) {                                     \
+          if (tile_buf[sy * r->w + sx] != color)                             \
+            break;                                                           \
+        }                                                                    \
+        max_x = sx;                                                          \
+        if (max_x == x)                                                      \
+          break;                                                             \
+        if ((sx - x) * (sy - y + 1) > best_w * best_h) {                     \
+          best_w = (sx - x);                                                 \
+          best_h = (sy - y + 1);                                             \
+        }                                                                    \
+      }                                                                      \
+      /* Encode subrect of size (best_w * best_h) */                         \
+      if (subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {                          \
+        if (dst + sizeof(CARD##bpp) + 2 >= dst_limit)                        \
+          return -1;                                                         \
+                                                                             \
+        BUF_PUT_PIXEL##bpp(dst, color);                                      \
+        dst += sizeof(CARD##bpp);                                            \
+      } else {                                                               \
+        if (dst + 2 >= dst_limit)                                            \
+          return -1;                                                         \
+      }                                                                      \
+      *dst++ = (CARD8)((x << 4) | (y & 0x0F));                               \
+      *dst++ = (CARD8)(((best_w - 1) << 4) | ((best_h - 1) & 0x0F));         \
+      (*dst_num_subrects)++;                                                 \
+                                                                             \
+      /* Fill in processed subrect with background color */                  \
+      for (sy = y + 1; sy < y + best_h; sy++) {                              \
+        for (sx = x; sx < x + best_w; sx++)                                  \
+          tile_buf[sy * r->w + sx] = bg_color;                               \
+      }                                                                      \
+      /* Skip to the next pixel of different color */                        \
+      x += (best_w - 1);                                                     \
+    }                                                                        \
+  }                                                                          \
+                                                                             \
+  return (dst - dst_buf);                                                    \
 }
 
-DEFINE_ENCODE_TILE(8)
-DEFINE_ENCODE_TILE(16)
-DEFINE_ENCODE_TILE(32)
+DEFINE_ENCODE_TILE_HT(8)
+DEFINE_ENCODE_TILE_HT(16)
+DEFINE_ENCODE_TILE_HT(32)
 
 /*
  * Encoding a tile using raw sub-encoding in hextile.
@@ -393,41 +435,42 @@ DEFINE_ENCODE_TILE_RAW(32)
 
 /*
  * Determine number of colors in a tile, choose background and
- * foreground colors.
+ * foreground colors. Note that this function is used not only by
+ * Hextile encoder.
  */
 
-#define DEFINE_ANALYZE_RECT(bpp)                                           \
-                                                                           \
-static void analyze_rect##bpp(CARD##bpp *dst_buf, FB_RECT *r)              \
-{                                                                          \
-  int i;                                                                   \
-  int bg_count = 0, fg_count = 0;                                          \
-  CARD32 pixel;                                                            \
-                                                                           \
-  bg = fg = (CARD32)*dst_buf++;                                            \
-  num_colors = 1;                                                          \
-  for (i = 1; i < r->h * r->w; i++) {                                      \
-    pixel = (CARD32)*dst_buf++;                                            \
-    if (pixel == bg) {                                                     \
-      bg_count++;                                                          \
-    } else if (pixel == fg) {                                              \
-      fg_count++;                                                          \
-    } else if (num_colors == 1) {                                          \
-      num_colors++;             /* Two different colors */                 \
-      fg = pixel;                                                          \
-      fg_count++;                                                          \
-    } else {                                                               \
-      num_colors = 0;           /* More than two different colors */       \
-      break;                                                               \
-    }                                                                      \
-  }                                                                        \
-                                                                           \
-  /* Background color is one that occupies more pixels */                  \
-  if (fg_count > bg_count) {                                               \
-    pixel = bg;                                                            \
-    bg = fg;                                                               \
-    fg = pixel;                                                            \
-  }                                                                        \
+#define DEFINE_ANALYZE_RECT(bpp)                                             \
+                                                                             \
+void analyze_rect##bpp(CARD##bpp *buf, FB_RECT *r, PALETTE2 *pal)            \
+{                                                                            \
+  int i;                                                                     \
+  int bg_count = 0, fg_count = 0;                                            \
+  CARD32 pixel;                                                              \
+                                                                             \
+  pal->bg = pal->fg = (CARD32)*buf++;                                        \
+  pal->num_colors = 1;                                                       \
+  for (i = 1; i < r->h * r->w; i++) {                                        \
+    pixel = (CARD32)*buf++;                                                  \
+    if (pixel == pal->bg) {                                                  \
+      bg_count++;                                                            \
+    } else if (pixel == pal->fg) {                                           \
+      fg_count++;                                                            \
+    } else if (pal->num_colors == 1) {                                       \
+      pal->num_colors++;        /* Two different colors */                   \
+      pal->fg = pixel;                                                       \
+      fg_count++;                                                            \
+    } else {                                                                 \
+      pal->num_colors = 0;      /* More than two different colors */         \
+      break;                                                                 \
+    }                                                                        \
+  }                                                                          \
+                                                                             \
+  /* Background color is one that occupies more pixels */                    \
+  if (fg_count > bg_count) {                                                 \
+    pixel = pal->bg;                                                         \
+    pal->bg = pal->fg;                                                       \
+    pal->fg = pixel;                                                         \
+  }                                                                          \
 }
 
 DEFINE_ANALYZE_RECT(8)

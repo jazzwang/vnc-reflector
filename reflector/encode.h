@@ -10,12 +10,18 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.h,v 1.7 2001/10/05 10:36:19 const Exp $
+ * $Id: encode.h,v 1.8 2001/10/09 10:34:32 const Exp $
  * Encoding screen rectangles.
  */
 
 #ifndef _REFLIB_ENCODE_H
 #define _REFLIB_ENCODE_H
+
+typedef struct _PALETTE2 {
+  int num_colors;
+  CARD32 bg;
+  CARD32 fg;
+} PALETTE2;
 
 #define BUF_PUT_PIXEL8(buf, pixel)  *(buf) = (pixel)
 
@@ -38,6 +44,10 @@ int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc);
 AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r);
 AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r);
 AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r);
+
+void analyze_rect8(CARD8 *buf, FB_RECT *r, PALETTE2 *pal);
+void analyze_rect16(CARD16 *buf, FB_RECT *r, PALETTE2 *pal);
+void analyze_rect32(CARD32 *buf, FB_RECT *r, PALETTE2 *pal);
 
 void get_hextile_caching_stats(long *hits, long *misses);
 
