@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.8 2001/08/04 21:58:57 const Exp $
+ * $Id: client_io.c,v 1.9 2001/08/04 22:06:17 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -272,9 +272,15 @@ static void rf_client_encodings_data(void)
 static void rf_client_updatereq(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  FB_RECT rect;
+
+  rect.x = buf_get_CARD16(&cur_slot->readbuf[1]);
+  rect.y = buf_get_CARD16(&cur_slot->readbuf[3]);
+  rect.w = buf_get_CARD16(&cur_slot->readbuf[5]);
+  rect.h = buf_get_CARD16(&cur_slot->readbuf[7]);
 
   if (!cur_slot->readbuf[0]) {
-    cl->update_full = 1;
+    rlist_add_rect(&cl->pending_rects, &rect, 16);
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
               cur_slot->name);
   } else {
@@ -288,7 +294,6 @@ static void rf_client_updatereq(void)
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
-    cl->update_full = 0;
   }
 
   aio_setread(rf_client_msg, NULL, 1);
@@ -306,7 +311,6 @@ static void wf_client_update_finished(void)
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
-    cl->update_full = 0;
   }
 }
 
@@ -353,7 +357,6 @@ void fn_client_send_rects(AIO_SLOT *slot)
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
-    cl->update_full = 0;
     cur_slot = saved_slot;
   }
 }

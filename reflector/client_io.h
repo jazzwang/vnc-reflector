@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.h,v 1.6 2001/08/04 21:58:57 const Exp $
+ * $Id: client_io.h,v 1.7 2001/08/04 22:06:17 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -24,7 +24,6 @@ typedef struct _CL_SLOT {
   unsigned int connected          :1;
   unsigned int update_requested   :1;
   unsigned int update_in_progress :1;
-  unsigned int update_full        :1;
 } CL_SLOT;
 
 void set_client_password(unsigned char *password);
