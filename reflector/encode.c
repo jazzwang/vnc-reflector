@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.15 2001/10/10 06:33:46 const Exp $
+ * $Id: encode.c,v 1.16 2001/10/10 06:36:45 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -34,12 +34,12 @@ TILE_HINTS *g_hints = NULL;
 CARD8 *g_cache8 = NULL;
 
 /********************************************************************/
-/*                     Initialization / cleanup                     */
+/*                   Maintaining cache structures                   */
 /********************************************************************/
 
 static int s_cache_size;
 
-/* FIXME: Allocate cache in encoder on demand. */
+/* FIXME: Allocate cache on demand. */
 /* FIXME: Bad function naming. */
 
 int allocate_encoders_cache(void)
