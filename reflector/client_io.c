@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.44 2002/10/03 16:25:05 const Exp $
+ * $Id: client_io.c,v 1.45 2002/10/11 12:05:24 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -687,6 +687,7 @@ static void send_newfbsize(void)
 static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  RegionRec clip_region;
   CARD8 msg_hdr[4] = {
     0, 0, 0, 1
   };
@@ -703,9 +704,20 @@ static void send_update(void)
     return;
   }
 
+  /* Clip pending regions to the rectangle requested by the client. */
+  /* FIXME: Don't clip to cl->update_rect in other places. */
+  /* FIXME: Clip source region of CopyRect. */
+  /* FIXME: Is pending_region always set correctly? */
+  REGION_INIT(&clip_region, &cl->update_rect, 1);
+  REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
+  REGION_INTERSECT(&cl->pending_region, &cl->pending_region, &clip_region);
+  REGION_UNINIT(&clip_region);
+
   num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
   num_penging_rects = REGION_NUM_RECTS(&cl->pending_region);
   num_all_rects = num_penging_rects + num_copy_rects;
+  if (num_all_rects == 0)
+    return;
 
   log_write(LL_DEBUG, "Sending framebuffer update (min %d rects) to %s",
             num_all_rects, cur_slot->name);
