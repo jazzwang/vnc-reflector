@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.49 2003/01/09 08:47:01 const Exp $
+ * $Id: client_io.c,v 1.50 2003/01/09 15:35:12 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -527,6 +527,8 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
   CL_SLOT *cl = (CL_SLOT *)slot;
   RegionRec add_region;
   BoxRec add_rect;
+  int stored;
+  int dx, dy;
 
   if (!cl->connected || cl->newfbsize_pending)
     return;
@@ -534,6 +536,7 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
   /* If the framebuffer geometry has been changed, then we don't care
      about pending pixel updates any more, because all clients will
      want to update the whole framebuffer. */
+
   if (g_screen_info.width != cl->fb_width ||
       g_screen_info.height != cl->fb_height) {
     cl->newfbsize_pending = 1;
@@ -548,15 +551,27 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
   add_rect.y2 = add_rect.y1 + rect->h;
   REGION_INIT(&add_region, &add_rect, 4);
 
+  /* FIXME: Currently, CopyRect is stored in copy_region only if there
+     were no other non-CopyRect updates pending for this client.
+     Normally, that's ok, because VNC servers send CopyRect rectangles
+     before non-CopyRect ones, but of course more elegant and
+     efficient handling could be possible to implement here. */
+  stored = 0;
   if (rect->enc == RFB_ENCODING_COPYRECT &&
       cl->enc_enable[RFB_ENCODING_COPYRECT] &&
-      !REGION_NOTEMPTY(&cl->copy_region)) {
-    cl->copy_dx = rect->x - rect->src_x;
-    cl->copy_dy = rect->y - rect->src_y;
-    REGION_UNION(&cl->copy_region, &cl->copy_region, &add_region);
-  } else {
-    REGION_UNION(&cl->pending_region, &cl->pending_region, &add_region);
+      !REGION_NOTEMPTY(&cl->pending_region)) {
+    dx = rect->x - rect->src_x;
+    dy = rect->y - rect->src_y;
+    if (!REGION_NOTEMPTY(&cl->copy_region) ||
+        (dx == cl->copy_dx && dy == cl->copy_dy)) {
+      REGION_UNION(&cl->copy_region, &cl->copy_region, &add_region);
+      cl->copy_dx = dx;
+      cl->copy_dy = dy;
+      stored = 1;
+    }
   }
+  if (!stored)
+    REGION_UNION(&cl->pending_region, &cl->pending_region, &add_region);
 
   REGION_UNINIT(&add_region);
 }
@@ -686,7 +701,7 @@ static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
   BoxRec fb_rect;
-  RegionRec fb_region, clip_region;
+  RegionRec fb_region, clip_region, outer_region;
   CARD8 msg_hdr[4] = {
     0, 0, 0, 1
   };
@@ -696,7 +711,7 @@ static void send_update(void)
   AIO_FUNCPTR fn = NULL;
   int num_copy_rects, num_penging_rects, num_all_rects;
   int raw_bytes = 0, hextile_bytes = 0;
-  int i;
+  int i, idx, rev_order;
 
   /* Process framebuffer size change. */
   if (cl->newfbsize_pending) {
@@ -712,8 +727,7 @@ static void send_update(void)
     fb_rect.x2 = cl->fb_width;
     fb_rect.y2 = cl->fb_height;
     REGION_INIT(&fb_region, &fb_rect, 1);
-    REGION_EMPTY(&cl->pending_region);
-    REGION_UNION(&cl->pending_region, &cl->pending_region, &fb_region);
+    REGION_COPY(&cl->pending_region, &fb_region);
     REGION_UNINIT(&fb_region);
     REGION_EMPTY(&cl->copy_region);
     /* If NewFBSize is supported by the client, send only NewFBSize
@@ -722,15 +736,28 @@ static void send_update(void)
       send_newfbsize();
       return;
     }
+  } else {
+    /* Exclude CopyRect areas covered by pending_region. */
+    REGION_SUBTRACT(&cl->copy_region, &cl->copy_region, &cl->pending_region);
   }
 
-  /* Clip pending region to the rectangle requested by the client. */
-  /* FIXME: Clip source region of CopyRect. */
+  /* Clip regions to the rectangle requested by the client. */
   REGION_INIT(&clip_region, &cl->update_rect, 1);
   REGION_INTERSECT(&cl->pending_region, &cl->pending_region, &clip_region);
-  REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
+  if (REGION_NOTEMPTY(&cl->copy_region)) {
+    REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
+
+    REGION_INIT(&outer_region, NullBox, 8);
+    REGION_COPY(&outer_region, &cl->copy_region);
+    REGION_TRANSLATE(&clip_region, cl->copy_dx, cl->copy_dy);
+    REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
+    REGION_SUBTRACT(&outer_region, &outer_region, &cl->copy_region);
+    REGION_UNION(&cl->pending_region, &cl->pending_region, &outer_region);
+    REGION_UNINIT(&outer_region);
+  }
   REGION_UNINIT(&clip_region);
 
+  /* Compute the number of rectangles in regions. */
   num_penging_rects = REGION_NUM_RECTS(&cl->pending_region);
   num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
   num_all_rects = num_penging_rects + num_copy_rects;
@@ -740,7 +767,7 @@ static void send_update(void)
   log_write(LL_DEBUG, "Sending framebuffer update (min %d rects) to %s",
             num_all_rects, cur_slot->name);
 
-  /* Prepare and send FramebufferUpdate message header */
+  /* Prepare and send FramebufferUpdate message header. */
   /* FIXME: Enable Tight encoding even if LastRect is not supported. */
   /* FIXME: Do not send LastRect if all the rectangles are CopyRect. */
   if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
@@ -750,12 +777,16 @@ static void send_update(void)
   }
   aio_write(NULL, msg_hdr, 4);
 
+  /* Determine the order in which CopyRect rectangles should be sent. */
+  rev_order = (cl->copy_dy > 0 || (cl->copy_dy == 0 && cl->copy_dx > 0));
+
   /* For each CopyRect rectangle: */
   for (i = 0; i < num_copy_rects; i++) {
-    rect.x = REGION_RECTS(&cl->copy_region)[i].x1;
-    rect.y = REGION_RECTS(&cl->copy_region)[i].y1;
-    rect.w = REGION_RECTS(&cl->copy_region)[i].x2 - rect.x;
-    rect.h = REGION_RECTS(&cl->copy_region)[i].y2 - rect.y;
+    idx = (rev_order) ? num_copy_rects - i - 1 : i;
+    rect.x = REGION_RECTS(&cl->copy_region)[idx].x1;
+    rect.y = REGION_RECTS(&cl->copy_region)[idx].y1;
+    rect.w = REGION_RECTS(&cl->copy_region)[idx].x2 - rect.x;
+    rect.h = REGION_RECTS(&cl->copy_region)[idx].y2 - rect.y;
     rect.src_x = rect.x - cl->copy_dx;
     rect.src_y = rect.y - cl->copy_dy;
     rect.enc = RFB_ENCODING_COPYRECT;
