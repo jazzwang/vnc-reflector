@@ -10,13 +10,14 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_cursor.c,v 1.5 2004/10/14 19:53:28 grolloj Exp $
+ * $Id: decode_cursor.c,v 1.6 2004/11/10 16:29:04 grolloj Exp $
  * Connecting to a VNC host
  */
 
 #include <stdlib.h>
 #include <sys/types.h>
 #include <zlib.h>
+#include <string.h>
 
 #include "rfblib.h"
 #include "logging.h"
@@ -37,6 +38,9 @@ static FB_RECT s_curs_rect;
 static FB_RECT s_pos_rect;
 static CARD8 s_xcursor_colors[sz_rfbXCursorColors];
 static CARD8 *s_bmps = NULL;
+static FB_RECT s_new_curs_rect;
+static CARD8 s_new_xcursor_colors[sz_rfbXCursorColors];
+static CARD8 *s_new_bmps = NULL;
 static CARD16 s_curs_x = 0;
 static CARD16 s_curs_y = 0;
 static int s_type = 0;
@@ -49,10 +53,10 @@ static int s_has_pos = 0;
  */
 void setread_decode_xcursor(FB_RECT *r)
 {
-  s_curs_rect = *r;
+  s_new_curs_rect = *r;
 
-  if (s_curs_rect.w * s_curs_rect.h) {
-    aio_setread(rf_host_xcursor_color, s_xcursor_colors, sz_rfbXCursorColors);
+  if (s_new_curs_rect.w * s_new_curs_rect.h) {
+    aio_setread(rf_host_xcursor_color, s_new_xcursor_colors, sz_rfbXCursorColors);
   }
 }
 
@@ -60,26 +64,22 @@ void setread_decode_richcursor(FB_RECT *r)
 {
   CARD32 size;
 
-  s_curs_rect = *r;
+  s_new_curs_rect = *r;
 
-  if (s_curs_rect.w * s_curs_rect.h) {
+  if (s_new_curs_rect.w * s_new_curs_rect.h) {
     /* calculate size of two cursor bitmaps to follow */
     /* cursor image in client pixel format */
     /* transparency data for cursor */
-    size = s_curs_rect.w * s_curs_rect.h * (g_screen_info.pixformat.bits_pixel / 8);
-    size += ((s_curs_rect.w + 7) / 8) * s_curs_rect.h;
-    if (!s_bmps) {
-      s_bmps = malloc(size);
-    } else {
-      s_bmps = realloc(s_bmps, size);
-    }
-    if (!s_bmps) {
+    size = s_new_curs_rect.w * s_new_curs_rect.h * (g_screen_info.pixformat.bits_pixel / 8);
+    size += ((s_new_curs_rect.w + 7) / 8) * s_new_curs_rect.h;
+    s_new_bmps = realloc(s_new_bmps, size);
+    if (!s_new_bmps) {
       log_write(LL_ERROR, "Failed to allocate memory for cursor pixmaps");
       aio_close(0);
       return;
     }
     s_read_size = size;
-    aio_setread(rf_host_richcursor_bmps, s_bmps, size);
+    aio_setread(rf_host_richcursor_bmps, s_new_bmps, size);
   }
 }
 
@@ -145,24 +145,29 @@ static void rf_host_xcursor_color(void)
   fbs_spool_data(cur_slot->readbuf, sz_rfbXCursorColors);
 
   /* calculate size of two cursor bitmaps to follow */
-  size = ((s_curs_rect.w + 7) / 8) * s_curs_rect.h * 2;
-  if (!s_bmps) {
-    s_bmps = malloc(size);
-  } else {
-    s_bmps = realloc(s_bmps, size);
-  }
-  if (!s_bmps) {
+  size = ((s_new_curs_rect.w + 7) / 8) * s_new_curs_rect.h * 2;
+  s_new_bmps = realloc(s_new_bmps, size);
+  if (!s_new_bmps) {
     log_write(LL_ERROR, "Failed to allocate memory for cursor pixmaps");
     aio_close(0);
     return;
   }
   s_read_size = size;
-  aio_setread(rf_host_xcursor_bmps, s_bmps, size);
+  aio_setread(rf_host_xcursor_bmps, s_new_bmps, size);
 }
 
 static void rf_host_xcursor_bmps(void)
 {
   fbs_spool_data(cur_slot->readbuf, s_read_size);
+  s_curs_rect = s_new_curs_rect;
+  memcpy(s_xcursor_colors, s_new_xcursor_colors, sz_rfbXCursorColors);
+  s_bmps = realloc(s_bmps, s_read_size);
+  if (!s_bmps) {
+    log_write(LL_ERROR, "Failed to allocate memory for cursor pixmaps");
+    aio_close(0);
+    return;
+  }
+  memcpy(s_bmps, s_new_bmps, s_read_size);
   s_type = RFB_ENCODING_XCURSOR;
   rf_host_cursor();
   fbupdate_rect_done();
@@ -171,6 +176,14 @@ static void rf_host_xcursor_bmps(void)
 static void rf_host_richcursor_bmps(void)
 {
   fbs_spool_data(cur_slot->readbuf, s_read_size);
+  s_curs_rect = s_new_curs_rect;
+  s_bmps = realloc(s_bmps, s_read_size);
+  if (!s_bmps) {
+    log_write(LL_ERROR, "Failed to allocate memory for cursor pixmaps");
+    aio_close(0);
+    return;
+  }
+  memcpy(s_bmps, s_new_bmps, s_read_size);
   s_type = RFB_ENCODING_RICHCURSOR;
   rf_host_cursor();
   fbupdate_rect_done();
