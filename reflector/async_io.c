@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.14 2001/08/23 10:52:32 const Exp $
+ * $Id: async_io.c,v 1.15 2001/08/23 11:42:19 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -314,8 +314,6 @@ void aio_mainloop(void)
       slot = s_first_slot;
       while (slot != NULL && !s_close_f) {
         next_slot = slot->next;
-        if (s_sig_func_set)
-          aio_process_func_list();
         if (s_fd_array[slot->idx].revents & (POLLERR | POLLHUP | POLLNVAL)) {
           slot->errio_f = 1;
           slot->close_f = 1;
@@ -368,8 +366,6 @@ void aio_mainloop(void)
       slot = s_first_slot;
       while (slot != NULL && !s_close_f) {
         next_slot = slot->next;
-        if (s_sig_func_set)
-          aio_process_func_list();
         if (FD_ISSET(slot->fd, &fdset_w))
           aio_process_output(slot);
         if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f)
