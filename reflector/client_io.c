@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.23 2001/08/19 18:38:11 const Exp $
+ * $Id: client_io.c,v 1.24 2001/08/20 09:05:44 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -467,10 +467,13 @@ void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, size_t len)
 
   if (cl->connected) {
     cur_slot = slot;
+
     log_write(LL_DEBUG, "Sending ServerCutText message to %s", cur_slot->name);
     buf_put_CARD32(&svr_cuttext_hdr[4], (CARD32)len);
     aio_write(NULL, svr_cuttext_hdr, 8);
-    aio_write(NULL, text, (size_t)len);
+    if (len)
+      aio_write(NULL, text, len);
+
     cur_slot = saved_slot;
   }
 }
