@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.10 2001/08/23 09:27:11 const Exp $
+ * $Id: host_connect.c,v 1.11 2001/08/23 10:52:32 const Exp $
  * Connecting to a VNC host
  */
 
@@ -76,7 +76,8 @@ int connect_to_host(char *host, int port, int cl_listen_port,
   log_write(LL_MSG, "Connection established");
 
   /* Copy arguments to static variables */
-  s_cl_listen_port = cl_listen_port;
+  if (cl_listen_port != 0)
+    s_cl_listen_port = cl_listen_port;
   strncpy((char *)s_password, (char *)password, sizeof(s_password) - 1);
   s_password[sizeof(s_password) - 1] = '\0';
 

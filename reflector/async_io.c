@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.13 2001/08/20 10:04:25 const Exp $
+ * $Id: async_io.c,v 1.14 2001/08/23 10:52:32 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -53,6 +53,9 @@ static int s_listen_fd;
 static AIO_FUNCPTR s_accept_func;
 static size_t s_new_slot_size;
 
+static int s_sig_func_set;
+static AIO_FUNCPTR s_sig_func[10];
+
 static int s_close_f;
 
 /*
@@ -61,6 +64,7 @@ static int s_close_f;
 
 static void aio_process_input(AIO_SLOT *slot);
 static void aio_process_output(AIO_SLOT *slot);
+static void aio_process_func_list(void);
 static void aio_accept_connection(void);
 static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 
@@ -79,6 +83,8 @@ static void sh_interrupt (int signo);
 
 void aio_init(void)
 {
+  int i;
+
 #ifdef USE_POLL
   s_fd_array_size = 0;
 #else
@@ -91,6 +97,10 @@ void aio_init(void)
   s_first_slot = NULL;
   s_last_slot = NULL;
   s_close_f = 0;
+
+  s_sig_func_set = 0;
+  for (i = 0; i < 10; i++)
+    s_sig_func[i] = NULL;
 }
 
 /*
@@ -242,6 +252,23 @@ void aio_walk_slots(AIO_FUNCPTR fn, int type)
 }
 
 /*
+ * This function should be called if we have to execute a function
+ * when I/O state is consistent, but currently we are not sure if it's
+ * safe (e.g. to be called from signal handlers). fn_type should be a
+ * number in the range of 0..9 and if there are two or more functions
+ * of the same fn_type set, only one of them would be called
+ * (probably, the latest set).
+ */
+
+void aio_call_func(AIO_FUNCPTR fn, int fn_type)
+{
+  if (fn_type < 10) {
+    s_sig_func[fn_type] = fn;
+    s_sig_func_set = 1;
+  }
+}
+
+/*
  * Function to close connection slot. Operates on *cur_slot.
  * If fatal is not 0 then close all other slots and quit
  * event loop. Note that a slot would not be destroyed right
@@ -279,11 +306,16 @@ void aio_mainloop(void)
   signal(SIGTERM, sh_interrupt);
   signal(SIGINT, sh_interrupt);
 
+  if (s_sig_func_set)
+    aio_process_func_list();
+
   while (!s_close_f) {
-    if (poll(s_fd_array, s_fd_array_size, 10000) > 0) {
+    if (poll(s_fd_array, s_fd_array_size, 1000) > 0) {
       slot = s_first_slot;
       while (slot != NULL && !s_close_f) {
         next_slot = slot->next;
+        if (s_sig_func_set)
+          aio_process_func_list();
         if (s_fd_array[slot->idx].revents & (POLLERR | POLLHUP | POLLNVAL)) {
           slot->errio_f = 1;
           slot->close_f = 1;
@@ -301,10 +333,13 @@ void aio_mainloop(void)
            (s_fd_array[s_listen_fd_idx].revents & POLLIN) &&
            !s_close_f )
         aio_accept_connection();
+      if (s_sig_func_set)
+        aio_process_func_list();
     } else {
-      /* Do something in idle periods */
-      if (s_idle_func != NULL)
-        (*s_idle_func)();
+      if (s_sig_func_set)
+        aio_process_func_list();
+      else if (s_idle_func != NULL)
+        (*s_idle_func)();       /* Do something in idle periods */
     }
   }
   /* Stop listening, close all slots and exit */
@@ -321,15 +356,20 @@ void aio_mainloop(void)
   struct timeval timeout;
   AIO_SLOT *slot, *next_slot;
 
+  if (s_sig_func_set)
+    aio_process_func_list();
+
   while (!s_close_f) {
     memcpy(&fdset_r, &s_fdset_read, sizeof(fd_set));
     memcpy(&fdset_w, &s_fdset_write, sizeof(fd_set));
-    timeout.tv_sec = 10;        /* Ten seconds timeout */
+    timeout.tv_sec = 1;         /* One second timeout */
     timeout.tv_usec = 0;
     if (select(s_max_fd + 1, &fdset_r, &fdset_w, NULL, &timeout) > 0) {
       slot = s_first_slot;
       while (slot != NULL && !s_close_f) {
         next_slot = slot->next;
+        if (s_sig_func_set)
+          aio_process_func_list();
         if (FD_ISSET(slot->fd, &fdset_w))
           aio_process_output(slot);
         if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f)
@@ -340,10 +380,13 @@ void aio_mainloop(void)
       }
       if (s_listen_fd != -1 && FD_ISSET(s_listen_fd, &fdset_r) && !s_close_f)
         aio_accept_connection();
+      if (s_sig_func_set)
+        aio_process_func_list();
     } else {
-      /* Do something in idle periods */
-      if (s_idle_func != NULL)
-        (*s_idle_func)();
+      if (s_sig_func_set)
+        aio_process_func_list();
+      else if (s_idle_func != NULL)
+        (*s_idle_func)();       /* Do something in idle periods */
     }
   }
   /* Stop listening, close all slots and exit */
@@ -507,6 +550,21 @@ static void aio_process_output(AIO_SLOT *slot)
   }
 }
 
+static void aio_process_func_list(void)
+{
+  int i;
+
+  while (s_sig_func_set) {
+    s_sig_func_set = 0;
+    for (i = 0; i < 10; i++) {
+      if (s_sig_func[i] != NULL) {
+        (*s_sig_func[i])();
+        s_sig_func[i] = NULL;
+      }
+    }
+  }
+}
+
 static void aio_accept_connection(void)
 {
   AIO_SLOT *slot;
@@ -594,7 +652,7 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
 }
 
 /*
- * Signal handler catching SEGTERM and SIGINT signals
+ * Signal handler catching SIGTERM and SIGINT signals
  */
 
 static void sh_interrupt (int signo)

@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.21 2001/08/23 09:27:11 const Exp $
+ * $Id: main.c,v 1.22 2001/08/23 10:52:32 const Exp $
  * Main module
  */
 
@@ -19,8 +19,8 @@
 #include "async_io.h"
 #include "logging.h"
 #include "reflector.h"
-#include "rect.h"
 #include "host_connect.h"
+#include "control.h"
 
 /*
  * Configuration options
@@ -102,12 +102,13 @@ int main(int argc, char **argv)
   if (connect_to_host(opt_hostname, opt_hostport, opt_cl_listen_port,
                       opt_host_password)) {
     if (write_pid_file()) {
+      set_control_signals();
       aio_mainloop();
       remove_pid_file();
     }
   }
 
-  /* Free everything */
+  /* Cleanup */
   if (g_framebuffer != NULL) {
     log_write(LL_DEBUG, "Freeing framebuffer");
     free(g_framebuffer);

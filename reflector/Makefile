@@ -1,7 +1,7 @@
 # VNC Reflector
 # Copyright (C) 2001 Const Kaplinsky
 #
-# $Id: Makefile,v 1.22 2001/08/23 10:06:54 const Exp $
+# $Id: Makefile,v 1.23 2001/08/23 10:52:32 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS.
 
@@ -24,10 +24,10 @@ LDFLAGS =
 PROG = 	vncreflector
 
 OBJS = 	main.o logging.o host_connect.o d3des.o rfblib.o async_io.o \
-	host_io.o client_io.o encode.o rect.o translate.o
+	host_io.o client_io.o encode.o rect.o translate.o control.o
 
 SRCS =	main.c logging.c host_connect.c d3des.c rfblib.c async_io.c \
-	host_io.c client_io.c encode.c rect.c translate.c
+	host_io.c client_io.c encode.c rect.c translate.c control.c
 
 CC = gcc
 MAKEDEPEND = gccmakedep
@@ -48,8 +48,8 @@ depend: $(SRCS)
 
 
 # DO NOT DELETE
-main.o: main.c rfblib.h async_io.h logging.h reflector.h rect.h \
-  host_connect.h
+main.o: main.c rfblib.h async_io.h logging.h reflector.h host_connect.h \
+  control.h
 logging.o: logging.c logging.h
 host_connect.o: host_connect.c rfblib.h reflector.h logging.h async_io.h \
   host_io.h rect.h translate.h client_io.h host_connect.h
@@ -65,3 +65,5 @@ encode.o: encode.c rfblib.h reflector.h async_io.h rect.h translate.h \
 rect.o: rect.c rfblib.h rect.h
 translate.o: translate.c rfblib.h reflector.h rect.h async_io.h translate.h \
   client_io.h
+control.o: control.c rfblib.h async_io.h logging.h reflector.h \
+  host_connect.h host_io.h rect.h translate.h client_io.h control.h
