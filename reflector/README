@@ -1,5 +1,5 @@
                          ===================
-                          VNC Reflector 0.9
+                          VNC Reflector 1.1
                          ===================
 
 Command-line usage
@@ -12,8 +12,9 @@ Options:
   -i PID_FILE     - write pid file, appending listening port to filename
   -p PASSWD_FILE  - read plaintext client password file [default: passwd]
   -l LISTEN_PORT  - port to listen for client connections [default: 5999]
-  -s FBS_FILE     - save host sessions in rfbproxy-compatible files,
-                    appending 3-digit session numbers to filename
+  -b IP_ADDRESS   - bind listening sockets to specific IP [default: any]
+  -s FBS_PREFIX   - save host sessions in rfbproxy-compatible files,
+                    appending 3-digit session IDs to filename prefix
   -g LOG_FILE     - write logs to specified file [default: reflector.log]
   -v LOG_LEVEL    - set verbosity level for log file (0..6) [default: 4]
   -f LOG_LEVEL    - run in foreground, show logs on stderr at specified
@@ -42,8 +43,6 @@ Sample to listen for host connection on the port 5998:
 *:5998 PaS$w0rD
 === cut ===
 
-NOTE: current version does not support reversed connections yet.
-
 
 Format of the PASSWD_FILE
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,6 +55,7 @@ password. Empty lines denote no authentication. If the file contains
 one line, then there is no read-only password, and all clients would
 have been granted full-control access.
 
+
 Control signals
 ~~~~~~~~~~~~~~~
 
@@ -63,7 +63,14 @@ Control signals
     clients.
 
   * SIGUSR1 signal tells VNC Reflector that it should re-read
-    HOST_INFO_FILE and to re-connect to host specified there
-    preserving client connections. Note that in the current version,
-    desktop geometry of all hosts should be the same.
+    HOST_INFO_FILE and to re-connect to host specified there (or to
+    start listening for reversed host connections). Host connection
+    would be closed when new host connection is established
+    successfully (auth is ok etc.). Client connections would be
+    preserved.
+
+  * SIGUSR2 signal tells VNC Reflector that it should close current
+    host connection, then re-read HOST_INFO_FILE and to re-connect to
+    host specified there (or to start listening for reversed host
+    connections). Client connections would be preserved.
 
