@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.18 2001/08/08 12:56:51 const Exp $
+ * $Id: client_io.c,v 1.19 2001/08/11 02:49:04 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -438,11 +438,11 @@ static void send_update(void)
     0, 0, 0, 0
   };
   FB_RECT rect;
-
-  /* FIXME: This sends the whole framebuffer to the client! */
+  AIO_BLOCK *block;
+  int raw_bytes = 0, hextile_bytes = 0;
 
   log_write(LL_DEBUG, "Sending framebuffer update (%d rects) to %s",
-            cl->pending_rects.num_rects, cl->s.name);
+            cl->pending_rects.num_rects, cur_slot->name);
 
   buf_put_CARD16(&msg_hdr[2], cl->pending_rects.num_rects);
   aio_write(NULL, msg_hdr, 4);
@@ -452,9 +452,25 @@ static void send_update(void)
     buf_put_CARD16(&rect_hdr[2], rect.y);
     buf_put_CARD16(&rect_hdr[4], rect.w);
     buf_put_CARD16(&rect_hdr[6], rect.h);
+    if (cl->enc_enable[RFB_ENCODING_HEXTILE]) {
+      buf_put_CARD32(&rect_hdr[8], RFB_ENCODING_HEXTILE);
+    }
     aio_write(NULL, rect_hdr, 12);
-    aio_write_nocopy(wf_client_update_finished,
-                     rfb_encode_raw_block(&cl->format, &rect));
+    if (cl->enc_enable[RFB_ENCODING_HEXTILE]) {
+      block = rfb_encode_hextile_block(&cl->format, &rect);
+      if (block != NULL) {
+        hextile_bytes += block->data_size;
+        raw_bytes += rect.w * rect.h * (cl->format.bits_pixel / 8);
+      }
+      aio_write_nocopy(wf_client_update_finished, block);
+    } else {
+      aio_write_nocopy(wf_client_update_finished,
+                       rfb_encode_raw_block(&cl->format, &rect));
+    }
   }
+
+  if (hextile_bytes)
+    log_write(LL_DEBUG, "Hextile stats for %s: %d(raw) -> %d(hextile)",
+              cur_slot->name, raw_bytes, hextile_bytes);
 }
 
