@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.11 2001/08/27 08:37:03 const Exp $
+ * $Id: async_io.h,v 1.12 2001/08/28 17:28:47 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -53,6 +53,7 @@ typedef struct _AIO_SLOT {
   unsigned listening_f :1;      /* 1 if this slot is listening one         */
   unsigned alloc_f     :1;      /* 1 if buffer has to be freed with free() */
   unsigned close_f     :1;      /* 1 if the slot is about to be closed     */
+  unsigned fd_closed_f :1;      /* 1 if fd has been closed already         */
   unsigned errio_f     :1;      /* 1 if there was an I/O problem           */
   unsigned errread_f   :1;      /* 1 if there was a problem reading data   */
   unsigned errwrite_f  :1;      /* 1 if there was a problem writing data   */
@@ -75,10 +76,12 @@ extern AIO_SLOT *cur_slot;
  */
 
 void aio_init(void);
-void aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size);
-int aio_listen(int port, AIO_FUNCPTR initfunc, size_t slot_size);
+int aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size);
+int aio_listen(int port, AIO_FUNCPTR initfunc, AIO_FUNCPTR acceptfunc,
+               size_t slot_size);
 int aio_walk_slots(AIO_FUNCPTR fn, int type);
-void aio_close(int fatal);
+void aio_close(int fatal_f);
+void aio_close_other(AIO_SLOT *slot, int fatal_f);
 void aio_mainloop(void);
 void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read);
 void aio_write(AIO_FUNCPTR fn, void *outbuf, int bytes_to_write);

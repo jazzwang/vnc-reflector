@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: control.c,v 1.2 2001/08/23 15:24:51 const Exp $
+ * $Id: control.c,v 1.3 2001/08/28 17:28:47 const Exp $
  * Processing signals to control reflector
  */
 
@@ -25,11 +25,16 @@
 #define FUNC_HOST_RECONNECT  1
 
 static void sh_disconnect_clients(int signo);
-static void sh_reconnect_to_host(int signo);
+static void sh_reconnect_noclose(int signo);
+static void sh_reconnect_close(int signo);
+
 static void safe_disconnect_clients(void);
-static void fn_disconnect_client(AIO_SLOT *slot);
-static void safe_reconnect_to_host(void);
-static void fn_reconnect_to_host(AIO_SLOT *slot);
+static void safe_reconnect_noclose(void);
+static void safe_reconnect_close(void);
+
+static void fn_close(AIO_SLOT *slot);
+static void fn_stop_listening(AIO_SLOT *slot);
+static void fn_reconnect_close(AIO_SLOT *slot);
 
 /*
  * Function visible from outside
@@ -38,24 +43,30 @@ static void fn_reconnect_to_host(AIO_SLOT *slot);
 void set_control_signals(void)
 {
   signal(SIGHUP, sh_disconnect_clients);
-  signal(SIGUSR1, sh_reconnect_to_host);
-  signal(SIGUSR2, SIG_IGN);
+  signal(SIGUSR1, sh_reconnect_noclose);
+  signal(SIGUSR2, sh_reconnect_close);
 }
 
 /*
  * Signal handlers
  */
 
-static void sh_disconnect_clients (int signo)
+static void sh_disconnect_clients(int signo)
 {
   aio_call_func(safe_disconnect_clients, FUNC_CL_DISCONNECT);
   signal(signo, sh_disconnect_clients);
 }
 
-static void sh_reconnect_to_host (int signo)
+static void sh_reconnect_noclose(int signo)
 {
-  aio_call_func(safe_reconnect_to_host, FUNC_HOST_RECONNECT);
-  signal(signo, sh_reconnect_to_host);
+  aio_call_func(safe_reconnect_noclose, FUNC_HOST_RECONNECT);
+  signal(signo, sh_reconnect_noclose);
+}
+
+static void sh_reconnect_close(int signo)
+{
+  aio_call_func(safe_reconnect_close, FUNC_HOST_RECONNECT);
+  signal(signo, sh_reconnect_close);
 }
 
 /*
@@ -65,37 +76,74 @@ static void sh_reconnect_to_host (int signo)
 static void safe_disconnect_clients(void)
 {
   log_write(LL_WARN, "Caught SIGHUP signal, disconnecting all clients");
-  aio_walk_slots(fn_disconnect_client, TYPE_CL_SLOT);
+  aio_walk_slots(fn_close, TYPE_CL_SLOT);
 }
 
-static void fn_disconnect_client(AIO_SLOT *slot)
-{
-  AIO_SLOT *saved_slot = cur_slot;
+/*
+ * On SIGUSR1: re-connect and close current host connection only when
+ * new connection is successful. Note: socket listening for host
+ * connections would be closed anyway, otherwise bind(2) on the same
+ * port would fail. Also, all non-authenticated host connections
+ * would be closed as well.
+ */
 
-  cur_slot = slot;
-  aio_close(0);
-  cur_slot = saved_slot;
+static void safe_reconnect_noclose(void)
+{
+  log_write(LL_WARN, "Caught SIGUSR1 signal, trying to (re-)connect to host");
+
+  aio_walk_slots(fn_stop_listening, TYPE_HOST_LISTENING_SLOT);
+  aio_walk_slots(fn_close, TYPE_HOST_CONNECTING_SLOT);
+
+  connect_to_host(NULL, 0);
 }
 
-static void safe_reconnect_to_host(void)
+/*
+ * On SIGUSR2: close current host connection and try to re-connect.
+ */
+
+static void safe_reconnect_close(void)
 {
-  log_write(LL_WARN, "Caught SIGUSR1 signal, re-connecting");
+  log_write(LL_WARN, "Caught SIGUSR2 signal, (re-)connecting to host");
+
+  aio_walk_slots(fn_stop_listening, TYPE_HOST_LISTENING_SLOT);
+  aio_walk_slots(fn_close, TYPE_HOST_CONNECTING_SLOT);
 
   /* If host connection is active, aio_walk_slots would return 1 and
      we would request re-connect after current host connection is
      closed (fn_reconnect_to_host function). Otherwise (if there is no
      host connection), just connect immediately. */
 
-  if (aio_walk_slots(fn_reconnect_to_host, TYPE_HOST_SLOT) == 0)
+  if (aio_walk_slots(fn_reconnect_close, TYPE_HOST_ACTIVE_SLOT) == 0)
     connect_to_host(NULL, 0);
 }
 
-static void fn_reconnect_to_host(AIO_SLOT *slot)
-{
-  AIO_SLOT *saved_slot = cur_slot;
+/*
+ * Do nothing but close a slot
+ */
 
-  cur_slot = slot;
-  aio_close(0);
-  host_request_reconnect();
-  cur_slot = saved_slot;
+static void fn_close(AIO_SLOT *slot)
+{
+  aio_close_other(slot, 0);
 }
+
+/*
+ * Callback function to close an I/O slot for listening connection.
+ * Note that aio_close closes listening fd immediately.
+ */
+
+static void fn_stop_listening(AIO_SLOT *slot)
+{
+  log_write(LL_DETAIL, "Closing listening slot");
+  aio_close_other(slot, 0);
+}
+
+/*
+ * Callback function to close I/O slot and re-connect
+ */
+
+static void fn_reconnect_close(AIO_SLOT *slot)
+{
+  aio_close_other(slot, 0);
+  connect_to_host(NULL, 0);
+}
+

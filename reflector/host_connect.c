@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.16 2001/08/26 15:09:53 const Exp $
+ * $Id: host_connect.c,v 1.17 2001/08/28 17:28:47 const Exp $
  * Connecting to a VNC host
  */
 
@@ -28,6 +28,8 @@
 
 static int parse_host_info(void);
 static void host_init_hook(void);
+static void host_listen_init_hook(void);
+static void host_accept_hook(void);
 static void rf_host_ver(void);
 static void rf_host_auth(void);
 static void rf_host_conn_failed(void);
@@ -38,16 +40,12 @@ static void rf_host_initmsg(void);
 static void rf_host_set_formats(void);
 static int allocate_framebuffer(void);
 
-static int s_reconnect_f;
-
 static char *s_host_info_file;
 static int s_cl_listen_port;
 
 static char s_hostname[256];
 static int s_host_port;
 static unsigned char s_host_password[9];
-
-static CARD32 s_len;
 
 /* Connect to remote RFB host */
 int connect_to_host(char *host_info_file, int cl_listen_port)
@@ -66,48 +64,54 @@ int connect_to_host(char *host_info_file, int cl_listen_port)
   if (!parse_host_info())
     return 0;
 
-  log_write(LL_MSG, "Connecting to %s, port %d", s_hostname, s_host_port);
+  if (strcmp(s_hostname, "*") != 0) {
 
-  phe = gethostbyname(s_hostname);
-  if (phe == NULL) {
-    log_write(LL_ERROR, "Could not get host address: %s", strerror(errno));
-    return 0;
+    /* Forward reflector -> host connection */
+    log_write(LL_MSG, "Connecting to %s, port %d", s_hostname, s_host_port);
+
+    phe = gethostbyname(s_hostname);
+    if (phe == NULL) {
+      log_write(LL_ERROR, "Could not get host address: %s", strerror(errno));
+      return 0;
+    }
+
+    host_addr.sin_family = AF_INET;
+    memcpy(&host_addr.sin_addr.s_addr, phe->h_addr, phe->h_length);
+    host_addr.sin_port = htons((unsigned short)s_host_port);
+
+    host_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (host_fd == -1) {
+      log_write(LL_ERROR, "Could not create socket: %s", strerror(errno));
+      return 0;
+    }
+
+    if (connect(host_fd, (struct sockaddr *)&host_addr,
+                sizeof(host_addr)) != 0) {
+      log_write(LL_ERROR, "Could not connect: %s", strerror(errno));
+      close(host_fd);
+      return 0;
+    }
+
+    log_write(LL_MSG, "Connection established");
+
+    aio_add_slot(host_fd, NULL, host_init_hook, sizeof(HOST_SLOT));
+
+  } else {
+
+    /* Reversed host -> reflector connection, start listening */
+
+    if (!aio_listen(s_host_port, host_listen_init_hook, host_accept_hook,
+                   sizeof(HOST_SLOT))) {
+      log_write(LL_ERROR, "Error creating listening socket: %s",
+                strerror(errno));
+      return 0;
+    }
+
+    log_write(LL_MSG, "Listening for host connections on port %d",
+              s_host_port);
   }
 
-  host_addr.sin_family = AF_INET;
-  memcpy(&host_addr.sin_addr.s_addr, phe->h_addr, phe->h_length);
-  host_addr.sin_port = htons((unsigned short)s_host_port);
-
-  host_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (host_fd == -1) {
-    log_write(LL_ERROR, "Could not create socket: %s", strerror(errno));
-    return 0;
-  }
-
-  if (connect(host_fd, (struct sockaddr *)&host_addr,
-              sizeof(host_addr)) != 0) {
-    log_write(LL_ERROR, "Could not connect: %s", strerror(errno));
-    close(host_fd);
-    return 0;
-  }
-
-  log_write(LL_MSG, "Connection established");
-
-  aio_add_slot(host_fd, NULL, host_init_hook, sizeof(AIO_SLOT));
   return 1;
-}
-
-void host_request_reconnect(void)
-{
-  s_reconnect_f = 1;
-}
-
-void host_maybe_reconnect(void)
-{
-  if (s_reconnect_f) {
-    connect_to_host(NULL, 0);
-    s_reconnect_f = 0;
-  }
 }
 
 static int parse_host_info(void)
@@ -123,7 +127,7 @@ static int parse_host_info(void)
     return 0;
   }
 
-  /* Read the file into buffer first */
+  /* Read the file into a buffer first */
   len = fread(buf, 1, 255, fp);
   buf[len] = '\0';
   fclose(fp);
@@ -157,25 +161,41 @@ static int parse_host_info(void)
                 colon_pos + 1);
       return 0;
     }
-    s_host_port = 5900 + atoi(colon_pos + 1);
+    s_host_port = atoi(colon_pos + 1);
     *colon_pos = '\0';
   } else {
     log_write(LL_WARN, "Host display not specified, assuming display :0");
-    s_host_port = 5900;
+    s_host_port = 0;
   }
 
   strcpy(s_hostname, buf);
+  if (strcmp(s_hostname, "*") != 0) {
+    s_host_port += 5900;
+  } else {
+    if (s_host_port == 0)
+      s_host_port = 5500;
+  }
 
   return 1;
 }
 
 static void host_init_hook(void)
 {
-  s_reconnect_f = 0;
-
-  cur_slot->type = TYPE_HOST_SLOT;
+  cur_slot->type = TYPE_HOST_CONNECTING_SLOT;
   aio_setclose(host_close_hook);
   aio_setread(rf_host_ver, NULL, 12);
+}
+
+static void host_listen_init_hook(void)
+{
+  cur_slot->type = TYPE_HOST_LISTENING_SLOT;
+}
+
+static void host_accept_hook(void)
+{
+  log_write(LL_MSG, "Accepted host connection from %s", cur_slot->name);
+
+  host_init_hook();
 }
 
 static void rf_host_ver(void)
@@ -214,6 +234,7 @@ static void rf_host_ver(void)
 
 static void rf_host_auth(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   int success = 1;
   char *reason;
   CARD32 value32;
@@ -222,8 +243,8 @@ static void rf_host_auth(void)
 
   switch (value32) {
   case 0:
-    s_len = buf_get_CARD32(&cur_slot->readbuf[4]);
-    aio_setread(rf_host_conn_failed, NULL, s_len);
+    hs->temp_len = buf_get_CARD32(&cur_slot->readbuf[4]);
+    aio_setread(rf_host_conn_failed, NULL, hs->temp_len);
     break;
   case 1:
     log_write(LL_MSG, "No authentication required at host side");
@@ -242,8 +263,10 @@ static void rf_host_auth(void)
 
 static void rf_host_conn_failed(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
+
   log_write(LL_ERROR, "VNC connection failed: %.*s",
-            (int)s_len, cur_slot->readbuf);
+            (int)hs->temp_len, cur_slot->readbuf);
   aio_close(0);
 }
 
@@ -298,6 +321,7 @@ static void send_client_initmsg(void)
 
 static void rf_host_initmsg(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   CARD16 width, height;
 
   log_write(LL_DEBUG, "Receiving host desktop parameters");
@@ -310,12 +334,13 @@ static void rf_host_initmsg(void)
   g_screen_info.width = width;
   g_screen_info.height = height;
 
-  s_len = buf_get_CARD32(&cur_slot->readbuf[20]);
-  aio_setread(rf_host_set_formats, NULL, s_len);
+  hs->temp_len = buf_get_CARD32(&cur_slot->readbuf[20]);
+  aio_setread(rf_host_set_formats, NULL, hs->temp_len);
 }
 
 static void rf_host_set_formats(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   CARD8 *new_name;
   unsigned char setpixfmt_msg[4 + SZ_RFB_PIXEL_FORMAT];
   unsigned char setencodings_msg[] = {
@@ -327,18 +352,21 @@ static void rf_host_set_formats(void)
     0, 0, 0, 0                  /* Raw encoding */
   };
 
-  log_write(LL_INFO, "Remote desktop name: %.*s",
-            (int)s_len, cur_slot->readbuf);
+  /* FIXME: Don't change g_screen_info while there is active host
+     connection ? */
 
-  new_name = malloc((size_t)s_len + 1);
+  log_write(LL_INFO, "Remote desktop name: %.*s",
+            (int)hs->temp_len, cur_slot->readbuf);
+
+  new_name = malloc((size_t)hs->temp_len + 1);
   if (new_name != NULL) {
     if (g_screen_info.name != NULL)
       free(g_screen_info.name);
 
     g_screen_info.name = new_name;
-    g_screen_info.name_length = s_len;
-    memcpy(g_screen_info.name, cur_slot->readbuf, s_len);
-    g_screen_info.name[(int)s_len] = '\0';
+    g_screen_info.name_length = hs->temp_len;
+    memcpy(g_screen_info.name, cur_slot->readbuf, hs->temp_len);
+    g_screen_info.name[hs->temp_len] = '\0';
   }
 
   log_write(LL_DETAIL, "Setting up pixel format and encodings");
@@ -358,7 +386,8 @@ static void rf_host_set_formats(void)
       aio_close(1);
       return;
     }
-    if (!aio_listen(s_cl_listen_port, af_client_accept, sizeof(CL_SLOT))) {
+    if (!aio_listen(s_cl_listen_port, NULL, af_client_accept,
+                    sizeof(CL_SLOT))) {
       log_write(LL_ERROR, "Error creating listening socket: %s",
                 strerror(errno));
       aio_close(1);

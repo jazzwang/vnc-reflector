@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.24 2001/08/26 15:09:53 const Exp $
+ * $Id: host_io.c,v 1.25 2001/08/28 17:28:47 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -20,6 +20,8 @@
 #include "translate.h"
 #include "client_io.h"
 #include "host_io.h"
+
+static void host_really_activate(AIO_SLOT *slot);
 
 static void rf_host_msg(void);
 
@@ -47,6 +49,8 @@ static void fbs_close_file(void);
 static void hextile_fill_tile(void);
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim);
 static void hextile_next_tile(void);
+
+static void reset_framebuffer(void);
 static void fbupdate_rect_done(void);
 static void invalidate_cache(FB_RECT *r);
 static void request_update(int incr);
@@ -55,15 +59,15 @@ static void request_update(int incr);
  * Implementation
  */
 
+static AIO_SLOT *s_host_slot = NULL;
+static AIO_SLOT *s_new_slot = NULL;
+
 static char *s_fbs_prefix = NULL;
 static int s_fbs_idx = 0;
 static FILE *s_fbs_fp = NULL;
 static CARD8 *s_fbs_buffer, *s_fbs_buffer_ptr;
 static struct timeval s_fbs_start_time, s_fbs_time;
 static struct timezone s_fbs_timezone;
-
-static AIO_SLOT *host_slot;
-static int host_slot_active = 0;
 
 void host_set_fbs_prefix(char *fbs_prefix)
 {
@@ -74,31 +78,31 @@ void host_set_fbs_prefix(char *fbs_prefix)
 /* Prepare host I/O slot for operating in main protocol phase */
 void host_activate(void)
 {
-
-  host_slot = cur_slot;
-  host_slot_active = 1;
-
-  /* If requested, open file to save this session and write the header */
-  if (s_fbs_prefix != NULL) {
-    s_fbs_idx++;
-    fbs_open_file();
+  if (s_host_slot == NULL) {
+    /* Just activate */
+    host_really_activate(cur_slot);
+  } else {
+    /* Let close hook do the work */
+    s_new_slot = cur_slot;
+    aio_close_other(s_host_slot, 0);
   }
-
-  log_write(LL_DETAIL, "Requesting full framebuffer update");
-  request_update(0);
-
-  aio_setread(rf_host_msg, NULL, 1);
 }
 
 /* On-close hook */
 void host_close_hook(void)
 {
-  int i, fb_size, hints_size;
 
-  if (s_fbs_fp != NULL)
-    fbs_close_file();
+  if (cur_slot->type == TYPE_HOST_ACTIVE_SLOT) {
+    /* Close session file if open  */
+    if (s_fbs_fp != NULL)
+      fbs_close_file();
 
-  host_slot_active = 0;
+    /* Erase framebuffer contents, invalidate cache */
+    reset_framebuffer();
+
+    /* No active slot exist */
+    s_host_slot = NULL;
+  }
 
   if (cur_slot->errread_f) {
     if (cur_slot->io_errno) {
@@ -118,27 +122,45 @@ void host_close_hook(void)
     log_write(LL_ERROR, "Host I/O error");
   }
 
-  /* Close host connection, and exit if framebuffer was not allocated yet. */
-  log_write(LL_WARN, "Closing connection to host");
-  if (g_framebuffer == NULL) {
-    aio_close(1);
-    return;
+  if (s_new_slot == NULL) {
+    log_write(LL_WARN, "Closing connection to host");
+    /* Exit event loop if framebuffer does not exist yet. */
+    if (g_framebuffer == NULL)
+      aio_close(1);
+  } else {
+    log_write(LL_INFO, "Closing previous connection to host");
+    host_really_activate(s_new_slot);
+    s_new_slot = NULL;
   }
-  aio_close(0);
-
-  /* Erase framebuffer contents, invalidate cache */
-  fb_size = g_fb_width * g_fb_height;
-  for (i = 0; i < fb_size; i++)
-    g_framebuffer[i] = 0;
-  hints_size = ((g_fb_width + 15) / 16) * ((g_fb_height + 15) / 16);
-  for (i = 0; i < hints_size; i++)
-    g_hints[i].subenc8 = 0;
-
-  /* If we were asked to re-connect, let's do it */
-  host_maybe_reconnect();
 }
 
+static void host_really_activate(AIO_SLOT *slot)
+{
+  AIO_SLOT *saved_slot = cur_slot;
+
+  cur_slot = slot;
+
+  log_write(LL_MSG, "Activating new host connection");
+  cur_slot->type = TYPE_HOST_ACTIVE_SLOT;
+  s_host_slot = cur_slot;
+
+  /* If requested, open file to save this session and write the header */
+  if (s_fbs_prefix != NULL) {
+    s_fbs_idx++;
+    fbs_open_file();
+  }
+
+  log_write(LL_DETAIL, "Requesting full framebuffer update");
+  request_update(0);
+  aio_setread(rf_host_msg, NULL, 1);
+
+  cur_slot = saved_slot;
+}
+
+/***************************/
 /* Processing RFB messages */
+/***************************/
+
 static void rf_host_msg(void)
 {
   int msg_id;
@@ -547,8 +569,8 @@ void pass_msg_to_host(CARD8 *msg, size_t len)
 {
   AIO_SLOT *saved_slot = cur_slot;
 
-  if (host_slot_active) {
-    cur_slot = host_slot;
+  if (s_host_slot != NULL) {
+    cur_slot = s_host_slot;
     aio_write(NULL, msg, len);
     cur_slot = saved_slot;
   }
@@ -561,10 +583,10 @@ void pass_cuttext_to_host(CARD8 *text, size_t len)
     6, 0, 0, 0, 0, 0, 0, 0
   };
 
-  if (host_slot_active) {
+  if (s_host_slot != NULL) {
     buf_put_CARD32(&client_cuttext_hdr[4], (CARD32)len);
 
-    cur_slot = host_slot;
+    cur_slot = s_host_slot;
     aio_write(NULL, client_cuttext_hdr, sizeof(client_cuttext_hdr));
     aio_write(NULL, text, len);
     cur_slot = saved_slot;
@@ -748,6 +770,29 @@ static void hextile_next_tile(void)
     return;
   }
   aio_setread(rf_host_hextile_subenc, NULL, 1);
+}
+
+static void reset_framebuffer(void)
+{
+  int i, fb_size, hints_size;
+
+  log_write(LL_DETAIL, "Clearing framebuffer and cache");
+
+  fb_size = g_fb_width * g_fb_height;
+  for (i = 0; i < fb_size; i++)
+    g_framebuffer[i] = 0;
+
+  hints_size = ((g_fb_width + 15) / 16) * ((g_fb_height + 15) / 16);
+  for (i = 0; i < hints_size; i++)
+    g_hints[i].subenc8 = 0;
+
+  cur_rect.x = 0;
+  cur_rect.y = 0;
+  cur_rect.w = g_fb_width;
+  cur_rect.h = g_fb_height;
+
+  /* Queue changed rectangle (the whole screen) for each client */
+  aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
 }
 
 static void fbupdate_rect_done(void)

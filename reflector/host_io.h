@@ -1,14 +1,23 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.h,v 1.6 2001/08/23 21:19:44 const Exp $
+ * $Id: host_io.h,v 1.7 2001/08/28 17:28:47 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
 #ifndef _REFLIB_HOST_IO_H
 #define _REFLIB_HOST_IO_H
 
-#define TYPE_HOST_SLOT  2
+#define TYPE_HOST_LISTENING_SLOT   2
+#define TYPE_HOST_CONNECTING_SLOT  3
+#define TYPE_HOST_ACTIVE_SLOT      4
+
+/* Extension to AIO_SLOT structure to hold state for host connection */
+typedef struct _HOST_SLOT {
+  AIO_SLOT s;
+
+  CARD32 temp_len;
+} HOST_SLOT;
 
 void host_set_fbs_prefix(char *fbs_prefix);
 void host_activate(void);
