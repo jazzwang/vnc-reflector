@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.27 2001/08/26 13:34:37 const Exp $
+ * $Id: main.c,v 1.28 2001/08/26 13:46:23 const Exp $
  * Main module
  */
 
@@ -52,6 +52,7 @@ static char *opt_host_info_file;
 
 RFB_SCREEN_INFO g_screen_info;
 CARD32 *g_framebuffer;
+CARD16 g_fb_width, g_fb_height;
 TILE_HINTS *g_hints;
 CARD8 *g_cache8;
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.11 2001/08/26 13:34:37 const Exp $
+ * $Id: rfblib.h,v 1.12 2001/08/26 13:46:23 const Exp $
  * RFB protocol definitions
  */
 
@@ -52,9 +52,6 @@ typedef struct _RFB_PIXEL_FORMAT {
  * RFB_SCREEN_INFO structure describes dimensions and format of the
  * screen (framebuffer).
  */
-
-/* FIXME: Keep name separately. Do not keep format similar to
-   ServerInitialisation message. Make width, height of type int. */
 
 typedef struct _RFB_SCREEN_INFO {
   CARD16 width;

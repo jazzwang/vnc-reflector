@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.14 2001/08/26 13:34:37 const Exp $
+ * $Id: host_connect.c,v 1.15 2001/08/26 13:46:23 const Exp $
  * Connecting to a VNC host
  */
 
@@ -380,7 +380,10 @@ static int allocate_framebuffer(void)
 {
   int fb_size, tiles_x, tiles_y;
 
-  fb_size = (int)g_screen_info.width * (int)g_screen_info.height;
+  g_fb_width = g_screen_info.width;
+  g_fb_height = g_screen_info.height;
+
+  fb_size = (int)g_fb_width * (int)g_fb_height;
   g_framebuffer = malloc(fb_size * sizeof(CARD32));
   if (g_framebuffer == NULL) {
     log_write(LL_ERROR, "Error allocating framebuffer");
@@ -389,8 +392,8 @@ static int allocate_framebuffer(void)
   log_write(LL_INFO, "Allocated framebuffer, %d bytes",
             fb_size * sizeof(CARD32));
 
-  tiles_x = ((int)g_screen_info.width + 15) / 16;
-  tiles_y = ((int)g_screen_info.height + 15) / 16;
+  tiles_x = ((int)g_fb_width + 15) / 16;
+  tiles_y = ((int)g_fb_height + 15) / 16;
   g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
   if (g_hints == NULL) {
     log_write(LL_ERROR, "Error allocating memory for hextile hints");
