@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_cursor.c,v 1.4 2004/10/14 19:50:38 grolloj Exp $
+ * $Id: decode_cursor.c,v 1.5 2004/10/14 19:53:28 grolloj Exp $
  * Connecting to a VNC host
  */
 
@@ -41,6 +41,7 @@ static CARD16 s_curs_x = 0;
 static CARD16 s_curs_y = 0;
 static int s_type = 0;
 static int s_read_size = 0;
+static int s_has_pos = 0;
 
 
 /*
@@ -87,12 +88,29 @@ void setread_decode_pointerpos(FB_RECT *r)
   s_pos_rect = *r;
   s_curs_x = s_pos_rect.x;
   s_curs_y = s_pos_rect.y;
+  if (!s_has_pos)
+    s_has_pos = 1;
+  rf_host_pointerpos();
+}
+
+void set_pointerpos(CARD16 x, CARD16 y)
+{
+  SET_RECT(&s_pos_rect, x, y, 0, 0);  
+  s_curs_x = x;
+  s_curs_y = y;
+  if (!s_has_pos)
+    s_has_pos = 1;
   rf_host_pointerpos();
 }
 
 FB_RECT *crsr_get_rect(void)
 {
   return &s_curs_rect;
+}
+
+int crsr_has_pos_rect(void)
+{
+  return s_has_pos;
 }
 
 FB_RECT *crsr_get_pos_rect(void)

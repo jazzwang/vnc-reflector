@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.55 2004/08/08 15:23:35 const_k Exp $
+ * $Id: client_io.c,v 1.56 2004/10/14 19:53:28 grolloj Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -381,8 +381,10 @@ static void rf_client_encodings_data(void)
       log_write(LL_DETAIL, "Client %s supports Rich Cursor updates.",
 		cur_slot->name);
     } else if (enc == RFB_ENCODING_POINTERPOS) {
-      /* FIXME: anything to do here? */
-      log_write(LL_ERROR, "Client %s supports Pointer Position updates.",
+      /* If we have a pos, we'll send it */
+      if (crsr_has_pos_rect()) 
+	cl->pointerpos_pending = 1;
+      log_write(LL_DETAIL, "Client %s supports Pointer Position updates.",
 		cur_slot->name);
     }
   }
