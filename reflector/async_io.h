@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.8 2001/08/19 18:38:11 const Exp $
+ * $Id: async_io.h,v 1.9 2001/08/20 09:52:09 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -18,6 +18,7 @@ typedef void (*AIO_FUNCPTR)();
 /* This structure is used as a part of output queue */
 typedef struct _AIO_BLOCK {
   struct _AIO_BLOCK *next;      /* Next block or NULL for the last block   */
+  AIO_FUNCPTR func;             /* A function to call after sending block  */
   size_t data_size;             /* Data size in this block                 */
   unsigned char data[1];        /* Beginning of the data buffer            */
 } AIO_BLOCK;
@@ -40,8 +41,6 @@ typedef struct _AIO_SLOT {
   size_t bytes_ready;           /* Bytes ready in the input buffer         */
   unsigned char buf256[256];    /* Built-in input buffer                   */
 
-  AIO_FUNCPTR writefunc;        /* Function called after data is written,  */
-                                /*   to be set with aio_write()            */
   AIO_BLOCK *outqueue;          /* First block of the output queue or NULL */
   AIO_BLOCK *outqueue_last;     /* Last block of the output queue or NULL  */
   size_t bytes_written;         /* Number of bytes written from that block */

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.11 2001/08/19 18:41:30 const Exp $
+ * $Id: async_io.c,v 1.12 2001/08/20 09:52:09 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -397,8 +397,8 @@ void aio_write(AIO_FUNCPTR fn, void *outbuf, int bytes_to_write)
 void aio_write_nocopy(AIO_FUNCPTR fn, AIO_BLOCK *block)
 {
   if (block != NULL) {
-    /* By the way, writefunc may be NULL */
-    cur_slot->writefunc = fn;
+    /* By the way, fn may be NULL */
+    block->func = fn;
 
     if (cur_slot->outqueue == NULL) {
       /* Output queue was empty */
@@ -471,27 +471,26 @@ static void aio_process_output(AIO_SLOT *slot)
     if (bytes > 0) {
       slot->bytes_written += bytes;
       if (slot->bytes_written == slot->outqueue->data_size) {
+        /* Block sent, call hook function if set */
+        if (slot->outqueue->func != NULL) {
+          cur_slot = slot;
+          (*slot->outqueue->func)();
+        }
         next = slot->outqueue->next;
         if (next != NULL) {
-          /* Block sent, free it and go to the next block */
+          /* There are other blocks to send */
           free(slot->outqueue);
           slot->outqueue = next;
           slot->bytes_written = 0;
         } else {
-          /* Last block sent, free it and call writefunc */
+          /* Last block sent */
           free(slot->outqueue);
           slot->outqueue = NULL;
-
 #ifdef USE_POLL
           s_fd_array[slot->idx].events &= (short)~POLLOUT;
 #else
           FD_CLR(slot->fd, &s_fdset_write);
 #endif
-
-          if (slot->writefunc != NULL) {
-            cur_slot = slot;
-            (*slot->writefunc)();
-          }
         }
       }
     } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
