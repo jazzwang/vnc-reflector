@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.4 2001/08/02 19:50:23 const Exp $
+ * $Id: host_io.c,v 1.5 2001/08/03 06:52:54 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -36,7 +36,7 @@ static void request_update(int incr);
 /* This is the only function visible from outside */
 void init_host_io(int fd)
 {
-  aio_add_slot(fd, if_host, 0, sizeof(AIO_SLOT));
+  aio_add_slot(fd, NULL, if_host, sizeof(AIO_SLOT));
 }
 
 /* Initializing I/O slot */

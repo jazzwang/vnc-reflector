@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.12 2001/08/02 19:50:23 const Exp $
+ * $Id: main.c,v 1.13 2001/08/03 06:52:54 const Exp $
  * Main module
  */
 
@@ -92,8 +92,7 @@ int main(int argc, char **argv)
 
       aio_init();
 
-      if (!aio_listen(opt_listen_port, af_client_accept,
-                      1, sizeof(AIO_SLOT))) {
+      if (!aio_listen(opt_listen_port, af_client_accept, sizeof(AIO_SLOT))) {
         log_write(LL_ERROR, "Error creating listening socket: %s",
                   strerror(errno));
         close(host_fd);

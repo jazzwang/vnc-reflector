@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.4 2001/08/02 19:50:23 const Exp $
+ * $Id: async_io.c,v 1.5 2001/08/03 06:52:54 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <fcntl.h>
 
 #include "async_io.h"
@@ -36,7 +37,6 @@ static AIO_SLOT *s_last_slot;
 
 static int s_listen_fd;
 static AIO_FUNCPTR s_accept_func;
-static int s_new_slot_type;
 static size_t s_new_slot_size;
 
 static int s_close_f;
@@ -80,7 +80,7 @@ void aio_init(void)
  * should set some input handler using aio_setread() function.
  */
 
-void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
+void aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size)
 {
   size_t size;
   AIO_SLOT *slot, *saved_slot;
@@ -90,7 +90,7 @@ void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
   size = (slot_size > sizeof(AIO_SLOT)) ? slot_size : sizeof(AIO_SLOT);
   slot = calloc(1, size);
 
-  slot->type = type;
+  slot->type = 0;
   slot->fd = fd;
   slot->bytes_to_read = 0;
   slot->outqueue = NULL;
@@ -100,6 +100,12 @@ void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
   slot->errread_f = 0;
   slot->errwrite_f = 0;
   slot->next = NULL;
+
+  if (name != NULL) {
+    slot->name = strdup(name);
+  } else {
+    slot->name = strdup("[unknown]");
+  }
 
   if (s_last_slot == NULL) {
     /* This is the first slot */
@@ -134,7 +140,7 @@ void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
  * NOTE: only one listening socket is supported at this time.
  */
 
-int aio_listen(int port, AIO_FUNCPTR acceptfunc, int type, size_t slot_size)
+int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
 {
   struct sockaddr_in listen_addr;
   int optval = 1;
@@ -173,7 +179,6 @@ int aio_listen(int port, AIO_FUNCPTR acceptfunc, int type, size_t slot_size)
     s_max_fd = s_listen_fd;
 
   s_accept_func = acceptfunc;
-  s_new_slot_type = type;
   s_new_slot_size = slot_size;
 
   return 1;
@@ -385,7 +390,8 @@ static void aio_accept_connection(void)
   if (fd < 0)
     return;
 
-  aio_add_slot(fd, s_accept_func, s_new_slot_type, s_new_slot_size);
+  aio_add_slot(fd, inet_ntoa(client_addr.sin_addr), s_accept_func,
+               s_new_slot_size);
 }
 
 /*
@@ -433,6 +439,7 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
     free(block);
     block = next_block;
   }
+  free(slot->name);
   if (slot->alloc_f)
     free(slot->readbuf);
 
