@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.2 2002/09/04 02:09:51 const Exp $
+ * $Id: decode_tight.c,v 1.3 2002/09/04 02:12:43 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -164,7 +164,7 @@ static void rf_host_tight_palette(void)
   }
   row_size = (s_num_colors <= 2) ? (s_rect.w + 7) / 8 : s_rect.w;
   s_uncompressed_size = s_rect.h * row_size;
-  if (data_size < RFB_TIGHT_MIN_TO_COMPRESS) {
+  if (s_uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
     aio_setread(rf_host_tight_indexed, NULL, s_uncompressed_size);
   } else {
     aio_setread(rf_host_tight_len1, NULL, 1);
@@ -212,7 +212,6 @@ static void rf_host_tight_len3(void)
 static void rf_host_tight_compressed(void)
 {
   z_streamp zs;
-  int row_size, uncompressed_size;
   CARD8 *buf;
   int err;
 
@@ -250,7 +249,7 @@ static void rf_host_tight_compressed(void)
   zs->next_in = cur_slot->readbuf;
   zs->avail_in = s_compressed_size;
   zs->next_out = buf;
-  zs->avail_out = uncompressed_size;
+  zs->avail_out = s_uncompressed_size;
 
   err = inflate(zs, Z_SYNC_FLUSH);
   if (err != Z_OK && err != Z_STREAM_END) {
