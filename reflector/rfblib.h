@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001-2003 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.23 2003/01/11 09:14:50 const Exp $
+ * $Id: rfblib.h,v 1.24 2003/01/11 09:44:02 const Exp $
  * RFB protocol definitions
  */
 
