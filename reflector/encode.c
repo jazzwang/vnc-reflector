@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: encode.c,v 1.6 2001/08/26 13:34:37 const Exp $
+ * $Id: encode.c,v 1.7 2001/08/26 15:09:53 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -137,7 +137,7 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
   size_t data_size;
   int dst_bytes;
 
-  tiles_in_row = ((int)g_screen_info.width + 15) / 16;
+  tiles_in_row = ((int)g_fb_width + 15) / 16;
   tile_ord = (r->y / 16) * tiles_in_row + (r->x / 16);
   hints = &g_hints[tile_ord];
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: translate.c,v 1.3 2001/08/26 13:34:37 const Exp $
+ * $Id: translate.c,v 1.4 2001/08/26 15:09:53 const Exp $
  * Pixel format translation.
  */
 
@@ -88,11 +88,11 @@ void transfunc_null(void *dst_buf, FB_RECT *r, void *table)
   CARD32 *dst_ptr = (CARD32 *)dst_buf;
   int y;
 
-  fb_ptr = &g_framebuffer[r->y * g_screen_info.width + r->x];
+  fb_ptr = &g_framebuffer[r->y * g_fb_width + r->x];
 
   for (y = 0; y < r->h; y++) {
     memcpy(dst_ptr, fb_ptr, r->w * sizeof(CARD32));
-    fb_ptr += g_screen_info.width;
+    fb_ptr += g_fb_width;
     dst_ptr += r->w;
   }
 }
@@ -106,7 +106,7 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
   CARD##bpp *tbl_ptr = (CARD##bpp *)table;                              \
   int x, y;                                                             \
                                                                         \
-  fb_ptr = &g_framebuffer[r->y * g_screen_info.width + r->x];           \
+  fb_ptr = &g_framebuffer[r->y * g_fb_width + r->x];                    \
   for (y = 0; y < r->h; y++) {                                          \
     for (x = 0; x < r->w; x++) {                                        \
       *dst_ptr++ = (CARD##bpp)(tbl_ptr[*fb_ptr >> 16 & 0xFF] |          \
@@ -114,7 +114,7 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
                                tbl_ptr[512 + (*fb_ptr & 0xFF)]);        \
       fb_ptr++;                                                         \
     }                                                                   \
-    fb_ptr += (g_screen_info.width - r->w);                             \
+    fb_ptr += (g_fb_width - r->w);                                      \
   }                                                                     \
 }
 

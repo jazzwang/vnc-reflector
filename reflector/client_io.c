@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.31 2001/08/26 13:34:37 const Exp $
+ * $Id: client_io.c,v 1.32 2001/08/26 15:09:53 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -188,8 +188,8 @@ static void rf_client_initmsg(void)
   }
 
   /* Send ServerInitialisation message */
-  buf_put_CARD16(msg_server_init, g_screen_info.width);
-  buf_put_CARD16(msg_server_init + 2, g_screen_info.height);
+  buf_put_CARD16(msg_server_init, g_fb_width);
+  buf_put_CARD16(msg_server_init + 2, g_fb_height);
   buf_put_pixfmt(msg_server_init + 4, &g_screen_info.pixformat);
   buf_put_CARD32(msg_server_init + 20, g_screen_info.name_length);
   aio_write(NULL, msg_server_init, 24);

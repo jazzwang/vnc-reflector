@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.15 2001/08/26 13:46:23 const Exp $
+ * $Id: host_connect.c,v 1.16 2001/08/26 15:09:53 const Exp $
  * Connecting to a VNC host
  */
 
@@ -307,15 +307,8 @@ static void rf_host_initmsg(void)
   log_write(LL_MSG, "Remote desktop geometry is %dx%d",
             (int)width, (int)height);
 
-  if (g_screen_info.width == 0) {
-    g_screen_info.width = width;
-    g_screen_info.height = height;
-  } else if (g_screen_info.width != width ||
-             g_screen_info.height != height) {
-    log_write(LL_ERROR, "Incompatible geometry of remote desktop");
-    aio_close(0);
-    return;
-  }
+  g_screen_info.width = width;
+  g_screen_info.height = height;
 
   s_len = buf_get_CARD32(&cur_slot->readbuf[20]);
   aio_setread(rf_host_set_formats, NULL, s_len);

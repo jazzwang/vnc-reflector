@@ -1,17 +1,20 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: translate.h,v 1.2 2001/08/19 13:56:42 const Exp $
+ * $Id: translate.h,v 1.3 2001/08/26 15:09:53 const Exp $
  * Pixel format translation.
  */
 
 #ifndef _REFLIB_TRANSLATE_H
 #define _REFLIB_TRANSLATE_H
 
+/* Not used at this moment */
+/*
 #define TRANSLATE_PIXEL(pixel, table, bpp)              \
   ((CARD##bpp)(tbl_ptr[pixel >> 16 & 0xFF] |            \
                tbl_ptr[256 + (pixel >> 8 & 0xFF)] |     \
                tbl_ptr[512 + (pixel & 0xFF)]))
+*/
 
 typedef void (*TRANSFUNC_PTR)(void *dst_buf, FB_RECT *r, void *table);
 
