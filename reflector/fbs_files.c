@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: fbs_files.c,v 1.2 2002/09/09 07:35:31 const Exp $
+ * $Id: fbs_files.c,v 1.3 2002/09/18 11:01:05 const Exp $
  * Saving "framebuffer streams" in files.
  */
 
@@ -194,6 +194,12 @@ void fbs_write_data(void *buf, size_t len)
     log_write(LL_WARN, "Could not write FBS file data");
     fbs_close_file();
   }
+}
+
+void fbs_spool_byte(CARD8 b)
+{
+  if (s_fbs_fp != NULL)
+    *s_fbs_buffer_ptr++ = b;
 }
 
 void fbs_spool_data(void *buf, size_t len)

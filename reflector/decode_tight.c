@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.5 2002/09/09 07:35:31 const Exp $
+ * $Id: decode_tight.c,v 1.6 2002/09/18 11:01:05 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -69,7 +69,7 @@ static void rf_host_tight_compctl(void)
   CARD8 comp_ctl;
   int stream_id;
 
-  fbs_spool_data(cur_slot->readbuf, 1);
+  fbs_spool_byte(cur_slot->readbuf[0]);
 
   /* Compression control byte */
   comp_ctl = cur_slot->readbuf[0];
@@ -88,7 +88,7 @@ static void rf_host_tight_compctl(void)
       s_zstream_active[stream_id] = 0;
     }
   }
-  comp_ctl &= 0xF0;             /* unset bits 3..0 */
+  comp_ctl &= 0xF0;             /* clear bits 3..0 */
 
   if (comp_ctl == RFB_TIGHT_FILL) {
     aio_setread(rf_host_tight_fill, NULL, 3);
@@ -123,6 +123,8 @@ static void rf_host_tight_fill(void)
 {
   CARD32 color;
 
+  fbs_spool_data(cur_slot->readbuf, 3);
+
   /* Note: cur_slot->readbuf is unsigned char[]. */
   color = (cur_slot->readbuf[0] << 16 |
            cur_slot->readbuf[1] << 8 |
@@ -134,6 +136,8 @@ static void rf_host_tight_fill(void)
 
 static void rf_host_tight_filter(void)
 {
+  fbs_spool_byte(cur_slot->readbuf[0]);
+
   s_filter_id = cur_slot->readbuf[0];
   if (s_filter_id == RFB_TIGHT_FILTER_PALETTE) {
     aio_setread(rf_host_tight_numcolors, NULL, 1);
@@ -155,6 +159,8 @@ static void rf_host_tight_filter(void)
 
 static void rf_host_tight_numcolors(void)
 {
+  fbs_spool_data(cur_slot->readbuf, 1);
+
   s_num_colors = cur_slot->readbuf[0] + 1;
   aio_setread(rf_host_tight_palette, NULL, s_num_colors * 3);
 }
@@ -162,6 +168,8 @@ static void rf_host_tight_numcolors(void)
 static void rf_host_tight_palette(void)
 {
   int i, row_size;
+
+  fbs_spool_data(cur_slot->readbuf, s_num_colors * 3);
 
   for (i = 0; i < s_num_colors; i++) {
     s_palette[i] = (cur_slot->readbuf[i*3] << 16 |
@@ -179,18 +187,24 @@ static void rf_host_tight_palette(void)
 
 static void rf_host_tight_raw(void)
 {
+  fbs_spool_data(cur_slot->readbuf, s_uncompressed_size);
+
   tight_draw_truecolor_data(cur_slot->readbuf);
   fbupdate_rect_done();
 }
 
 static void rf_host_tight_indexed(void)
 {
+  fbs_spool_data(cur_slot->readbuf, s_uncompressed_size);
+
   tight_draw_indexed_data(cur_slot->readbuf);
   fbupdate_rect_done();
 }
 
 static void rf_host_tight_len1(void)
 {
+  fbs_spool_byte(cur_slot->readbuf[0]);
+
   s_compressed_size = cur_slot->readbuf[0] & 0x7F;
   if (cur_slot->readbuf[0] & 0x80) {
     aio_setread(rf_host_tight_len2, NULL, 1);
@@ -201,6 +215,8 @@ static void rf_host_tight_len1(void)
 
 static void rf_host_tight_len2(void)
 {
+  fbs_spool_byte(cur_slot->readbuf[0]);
+
   s_compressed_size |= (cur_slot->readbuf[0] & 0x7F) << 7;
   if (cur_slot->readbuf[0] & 0x80) {
     aio_setread(rf_host_tight_len3, NULL, 1);
@@ -211,6 +227,8 @@ static void rf_host_tight_len2(void)
 
 static void rf_host_tight_len3(void)
 {
+  fbs_spool_byte(cur_slot->readbuf[0]);
+
   s_compressed_size |= (cur_slot->readbuf[0] & 0x7F) << 14;
   aio_setread(rf_host_tight_compressed, NULL, s_compressed_size);
 }
@@ -220,6 +238,8 @@ static void rf_host_tight_compressed(void)
   z_streamp zs;
   CARD8 *buf;
   int err;
+
+  fbs_spool_data(cur_slot->readbuf, s_compressed_size);
 
   /* Initialize compression stream if needed */
 

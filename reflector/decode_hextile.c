@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_hextile.c,v 1.3 2002/09/09 07:35:31 const Exp $
+ * $Id: decode_hextile.c,v 1.4 2002/09/18 11:01:05 const Exp $
  * Decoding Hextile-encoded rectangles.
  */
 
@@ -59,7 +59,7 @@ static void rf_host_hextile_subenc(void)
   int data_size;
 
   /* Copy data for saving in a file if necessary */
-  fbs_spool_data(cur_slot->readbuf, 1);
+  fbs_spool_byte(cur_slot->readbuf[0]);
 
   s_subenc = cur_slot->readbuf[0];
   if (s_subenc & RFB_HEXTILE_RAW) {
