@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.1 2001/08/01 04:58:39 const Exp $
+ * $Id: rfblib.h,v 1.2 2001/08/01 11:29:36 const Exp $
  * RFB protocol definitions
  */
 
@@ -22,6 +22,7 @@
 typedef struct _RFB_DESKTOP_INFO {
   int width;
   int height;
+  int bytes_row;
   char *name;
 } RFB_DESKTOP_INFO;
 
