@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.37 2001/12/02 08:30:07 const Exp $
+ * $Id: client_io.c,v 1.38 2001/12/06 18:01:47 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -499,8 +499,12 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
     if (rect->w != cl->fb_width || rect->h != cl->fb_height) {
       cl->fb_width = rect->w;
       cl->fb_height = rect->h;
-      if (cl->enable_newfbsize)
+      if (cl->enable_newfbsize) {
         rlist_push_rect(&cl->pending_rects, rect);
+        /* FIXME: The line below is a HACK!
+           This update_rect stuff should be redesigned. */
+        cl->update_rect = *rect;
+      }
     }
   } else {
     rlist_add_clipped_rect(&cl->pending_rects, rect, &cl->update_rect,
