@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.16 2001/08/08 11:17:21 const Exp $
+ * $Id: client_io.c,v 1.17 2001/08/08 12:34:01 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -359,11 +359,20 @@ static void rf_client_ptrevent(void)
 
 static void rf_client_cuttext_hdr(void)
 {
-  aio_setread(rf_client_cuttext_data, NULL, 1);
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+
+  log_write(LL_DEBUG, "Receiving ClientCutText message from %s",
+            cur_slot->name);
+
+  cl->cut_len = (int)buf_get_CARD32(&cur_slot->readbuf[3]);
+  aio_setread(rf_client_cuttext_data, NULL, cl->cut_len);
 }
 
 static void rf_client_cuttext_data(void)
 {
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+
+  pass_cuttext_to_host(cur_slot->readbuf, cl->cut_len);
   aio_setread(rf_client_msg, NULL, 1);
 }
 
@@ -395,7 +404,7 @@ void fn_client_send_rects(AIO_SLOT *slot)
   }
 }
 
-void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, CARD32 len)
+void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, size_t len)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
   AIO_SLOT *saved_slot = cur_slot;
@@ -403,10 +412,10 @@ void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, CARD32 len)
     3, 0, 0, 0, 0, 0, 0, 0
   };
 
-  if (cl->connected && (int)len == len) {
+  if (cl->connected) {
     cur_slot = slot;
     log_write(LL_DEBUG, "Sending ServerCutText message to %s", cur_slot->name);
-    buf_put_CARD32(&svr_cuttext_hdr[4], len);
+    buf_put_CARD32(&svr_cuttext_hdr[4], (CARD32)len);
     aio_write(NULL, svr_cuttext_hdr, 8);
     aio_write(NULL, text, (size_t)len);
     cur_slot = saved_slot;

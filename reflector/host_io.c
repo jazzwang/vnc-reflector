@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.11 2001/08/08 09:36:19 const Exp $
+ * $Id: host_io.c,v 1.12 2001/08/08 12:34:01 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -339,33 +339,23 @@ static void rf_host_colormap_data(void)
 /***********************************/
 
 /* FIXME: Add state variables to the AIO_SLOT structure clone. */
-static CARD32 cut_len;
+static size_t cut_len;
 static CARD8 *cut_text;
 
 static void rf_host_cuttext_hdr(void)
 {
-  cut_len = buf_get_CARD32(&cur_slot->readbuf[3]);
-
   log_write(LL_DETAIL,
             "Receiving ServerCutText message from host, %lu byte(s)",
             (unsigned long)cut_len);
 
-  aio_setread(rf_host_cuttext_data, NULL, (size_t)cut_len);
+  cut_len = (size_t)buf_get_CARD32(&cur_slot->readbuf[3]);
+  aio_setread(rf_host_cuttext_data, NULL, cut_len);
 }
 
 static void rf_host_cuttext_data(void)
 {
-  if (cut_len <= 46) {
-    log_write(LL_DEBUG, "Cut text: \"%.*s\"",
-              (int)cut_len, cur_slot->readbuf);
-  } else {
-    log_write(LL_DEBUG, "Cut text: \"%.34s\" (truncated)",
-              cur_slot->readbuf);
-  }
-
   cut_text = cur_slot->readbuf;
   aio_walk_slots(fn_host_pass_cuttext, TYPE_CL_SLOT);
-
   aio_setread(rf_host_msg, NULL, 1);
 }
 
@@ -378,11 +368,29 @@ static void fn_host_pass_cuttext(AIO_SLOT *slot)
 /* Functions called from client_io.c */
 /*************************************/
 
+/* FIXME: Function naming. Have to invent consistent naming rules. */
+
 void pass_msg_to_host(CARD8 *msg, size_t len)
 {
   AIO_SLOT *saved_slot = cur_slot;
+
   cur_slot = host_slot;
   aio_write(NULL, msg, len);
+  cur_slot = saved_slot;
+}
+
+void pass_cuttext_to_host(CARD8 *text, size_t len)
+{
+  AIO_SLOT *saved_slot = cur_slot;
+  CARD8 client_cuttext_hdr[8] = {
+    6, 0, 0, 0, 0, 0, 0, 0
+  };
+
+  buf_put_CARD32(&client_cuttext_hdr[4], (CARD32)len);
+
+  cur_slot = host_slot;
+  aio_write(NULL, client_cuttext_hdr, sizeof(client_cuttext_hdr));
+  aio_write(NULL, text, len);
   cur_slot = saved_slot;
 }
 
