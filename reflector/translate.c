@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: translate.c,v 1.6 2001/10/05 10:36:19 const Exp $
+ * $Id: translate.c,v 1.7 2001/10/11 12:20:20 const Exp $
  * Pixel format translation.
  */
 
@@ -108,6 +108,13 @@ void transfunc_null(void *dst_buf, FB_RECT *r, void *table)
   }
 }
 
+/*
+ * Straghtforward implementation of pixel translation function.
+ * Its performance does not depend on pixel data and is always
+ * proportional to the amount of pixel data to translate. This
+ * function is currently not used.
+ */
+
 #define DEFINE_TRANSFUNC(bpp)                                           \
                                                                         \
 void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
@@ -129,7 +136,48 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
   }                                                                     \
 }
 
-DEFINE_TRANSFUNC(8)
-DEFINE_TRANSFUNC(16)
-DEFINE_TRANSFUNC(32)
+/*
+ * Alternative implementation of pixel translation function. This
+ * function is more efficient when there are many neighbouring pixels
+ * of the same color (quite common situation). Otherwise, it's a bit
+ * slower than its straightforward equivalent.
+ */
+
+#define DEFINE_TRANSFUNC_ALT(bpp)                                       \
+                                                                        \
+void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
+{                                                                       \
+  CARD32 *fb_ptr;                                                       \
+  CARD32 fb_pixel;                                                      \
+  CARD##bpp *dst_ptr = (CARD##bpp *)dst_buf;                            \
+  CARD##bpp *tbl_r = (CARD##bpp *)table;                                \
+  CARD##bpp *tbl_g = tbl_r + 256;                                       \
+  CARD##bpp *tbl_b = tbl_g + 256;                                       \
+  CARD##bpp pixel = 0;                                                  \
+  int x, y, w, h;                                                       \
+                                                                        \
+  fb_ptr = &g_framebuffer[r->y * g_fb_width + r->x];                    \
+  w = r->w;                                                             \
+  h = r->h;                                                             \
+                                                                        \
+  /* Make sure fb_pixel != *fb_ptr */                                   \
+  fb_pixel = ~(*fb_ptr);                                                \
+                                                                        \
+  for (y = 0; y < h; y++) {                                             \
+    for (x = 0; x < w; x++) {                                           \
+      if (fb_pixel != *fb_ptr++) {                                      \
+        fb_pixel = *(fb_ptr - 1);                                       \
+        pixel = (CARD##bpp)(tbl_r[fb_pixel >> 16 & 0xFF] |              \
+                            tbl_g[fb_pixel >> 8 & 0xFF] |               \
+                            tbl_b[fb_pixel & 0xFF]);                    \
+      }                                                                 \
+      *dst_ptr++ = pixel;                                               \
+    }                                                                   \
+    fb_ptr += (g_fb_width - w);                                         \
+  }                                                                     \
+}
+
+DEFINE_TRANSFUNC_ALT(8)
+DEFINE_TRANSFUNC_ALT(16)
+DEFINE_TRANSFUNC_ALT(32)
 
