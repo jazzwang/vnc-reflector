@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.12 2001/08/07 14:00:43 const Exp $
+ * $Id: client_io.c,v 1.13 2001/08/08 09:36:19 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -104,16 +104,25 @@ static void rf_client_ver(void)
 
   log_write(LL_DETAIL, "Client supports %.11s", cur_slot->readbuf);
 
-  /* Request VNC authentication */
-  buf_put_CARD32(cl->msg_buf, 2);
+  if (s_password[0]) {
+    /* Request VNC authentication */
+    buf_put_CARD32(cl->msg_buf, 2);
 
-  /* Prepare "random" challenge */
-  srandom((unsigned int)time(NULL));
-  for (i = 0; i < 16; i++)
-    cl->msg_buf[i + 4] = (unsigned char)random();
+    /* Prepare "random" challenge */
+    srandom((unsigned int)time(NULL));
+    for (i = 0; i < 16; i++)
+      cl->msg_buf[i + 4] = (unsigned char)random();
 
-  aio_write(NULL, cl->msg_buf, 20);
-  aio_setread(rf_client_auth, NULL, 16);
+    /* Send both auth ID and challenge */
+    aio_write(NULL, cl->msg_buf, 20);
+    aio_setread(rf_client_auth, NULL, 16);
+  } else {
+    log_write(LL_WARN, "Not requesting authentication from %s",
+              cur_slot->name);
+    buf_put_CARD32(cl->msg_buf, 1);
+    aio_write(NULL, cl->msg_buf, 4);
+    aio_setread(rf_client_initmsg, NULL, 1);
+  }
 }
 
 static void rf_client_auth(void)
@@ -369,6 +378,24 @@ void fn_client_send_rects(AIO_SLOT *slot)
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
+    cur_slot = saved_slot;
+  }
+}
+
+void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, CARD32 len)
+{
+  CL_SLOT *cl = (CL_SLOT *)slot;
+  AIO_SLOT *saved_slot = cur_slot;
+  CARD8 svr_cuttext_hdr[8] = {
+    3, 0, 0, 0, 0, 0, 0, 0
+  };
+
+  if (cl->connected && (int)len == len) {
+    cur_slot = slot;
+    log_write(LL_DEBUG, "Sending ServerCutText message to %s", cur_slot->name);
+    buf_put_CARD32(&svr_cuttext_hdr[4], len);
+    aio_write(NULL, svr_cuttext_hdr, 8);
+    aio_write(NULL, text, (size_t)len);
     cur_slot = saved_slot;
   }
 }

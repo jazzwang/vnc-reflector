@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.16 2001/08/04 21:58:57 const Exp $
+ * $Id: main.c,v 1.17 2001/08/08 09:36:19 const Exp $
  * Main module
  */
 
@@ -256,7 +256,8 @@ static int read_pasword_file(void)
 
   passwd_fp = fopen(opt_passwd_filename, "r");
   if (passwd_fp == NULL) {
-    log_write(LL_WARN, "Cannot open password file, assuming empty password");
+    log_write(LL_WARN,
+              "Cannot open password file, assuming no authentication");
     return 1;
   }
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.10 2001/08/06 23:30:31 const Exp $
+ * $Id: host_io.c,v 1.11 2001/08/08 09:36:19 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -33,8 +33,10 @@ static void fn_host_add_client_rect(AIO_SLOT *slot);
 
 static void rf_host_colormap_hdr(void);
 static void rf_host_colormap_data(void);
+
 static void rf_host_cuttext_hdr(void);
 static void rf_host_cuttext_data(void);
+static void fn_host_pass_cuttext(AIO_SLOT *slot);
 
 static void hextile_fill_tile(void);
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim);
@@ -211,10 +213,6 @@ static void rf_host_hextile_subenc(void)
 {
   int data_size;
 
-  log_write(LL_DEBUG, "Hextile rect %dx%d at %d,%d",
-            (int)hextile_rect.w, (int)hextile_rect.h,
-            (int)hextile_rect.x, (int)hextile_rect.y);
-
   hextile_subenc = cur_slot->readbuf[0];
   if (hextile_subenc & HEXTILE_RAW) {
     data_size = hextile_rect.w * hextile_rect.h * sizeof(CARD32);
@@ -342,6 +340,7 @@ static void rf_host_colormap_data(void)
 
 /* FIXME: Add state variables to the AIO_SLOT structure clone. */
 static CARD32 cut_len;
+static CARD8 *cut_text;
 
 static void rf_host_cuttext_hdr(void)
 {
@@ -363,7 +362,16 @@ static void rf_host_cuttext_data(void)
     log_write(LL_DEBUG, "Cut text: \"%.34s\" (truncated)",
               cur_slot->readbuf);
   }
+
+  cut_text = cur_slot->readbuf;
+  aio_walk_slots(fn_host_pass_cuttext, TYPE_CL_SLOT);
+
   aio_setread(rf_host_msg, NULL, 1);
+}
+
+static void fn_host_pass_cuttext(AIO_SLOT *slot)
+{
+  fn_client_send_cuttext(slot, cut_text, cut_len);
 }
 
 /*************************************/

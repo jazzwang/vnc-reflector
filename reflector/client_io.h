@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.h,v 1.7 2001/08/04 22:06:17 const Exp $
+ * $Id: client_io.h,v 1.8 2001/08/08 09:36:19 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -32,5 +32,6 @@ void af_client_accept(void);
 /* Functions called from host_io.c */
 void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect);
 void fn_client_send_rects(AIO_SLOT *slot);
+void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, CARD32 len);
 
 #endif /* _REFLIB_CLIENT_IO_H */
