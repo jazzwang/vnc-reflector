@@ -10,16 +10,16 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.35 2003/04/09 18:44:43 const Exp $
+# $Id: Makefile,v 1.36 2003/04/16 17:32:42 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
 IFLAGS =	-I.
 
 # Production
-#CFLAGS =	-O2 $(IFLAGS)
+CFLAGS =	-O2 $(IFLAGS)
 # Debug (strict)
-CFLAGS =	-g -pedantic -Wall $(IFLAGS)
+#CFLAGS =	-g -pedantic -Wall $(IFLAGS)
 # Debug (profiling)
 #CFLAGS =	-g -pg $(IFLAGS)
 # Debug (normal)
