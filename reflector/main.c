@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.1 2001/08/01 04:58:39 const Exp $
+ * $Id: main.c,v 1.2 2001/08/01 11:32:48 const Exp $
  * Main module
  */
 
@@ -16,15 +16,17 @@
 #include "hostconnect.h"
 
 /* Configuration options */
-int   opt_listen_port;
-char *opt_log_filename;
-char *opt_passwd_filename;
-int   opt_foreground;
-char  opt_hostname[256];
-int   opt_hostport;
-char  opt_password[9];
+static int   opt_listen_port;
+static char *opt_log_filename;
+static char *opt_passwd_filename;
+static int   opt_foreground;
+static char  opt_hostname[256];
+static int   opt_hostport;
+static char  opt_password[9];
 
-RFB_DESKTOP_INFO desktop_info;
+/* Framebuffer */
+static RFB_DESKTOP_INFO desktop_info;
+static CARD32 *framebuffer;
 
 /* Functions local to this file */
 static void parse_args(int argc, char **argv);
@@ -52,14 +54,23 @@ int main(int argc, char **argv)
   /* Connect to host machine */
   host_fd = connect_to_host(opt_hostname, opt_hostport);
   if (host_fd != -1 && setup_session(host_fd, opt_password, &desktop_info)) {
+    framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
+    if (framebuffer) {
+      desktop_info.bytes_row = desktop_info.width * 4;
+      log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
+                desktop_info.width * desktop_info.height * 4);
 
     /* ... */
 
+    } else {
+      log_write(LL_ERROR, "Error allocating framebuffer");
+    }
+    free(framebuffer);
     free(desktop_info.name);
   }
 
   /* Close logs */
-  if (!log_close()) {
+  if (!log_close() && opt_foreground) {
     fprintf(stderr, "%s: error closing log file (ignoring this error)\n",
             argv[0]);
   }
@@ -182,7 +193,7 @@ static int read_pasword_file(void)
   passwd_fp = fopen(opt_passwd_filename, "r");
   if (passwd_fp == NULL) {
     log_write(LL_WARN, "Cannot open password file, assuming empty password");
-    return 0;
+    return 1;
   }
 
   len = fread(buf, 1, 8, passwd_fp);
@@ -197,5 +208,6 @@ static int read_pasword_file(void)
     log_write(LL_DETAIL, "Got the password");
 
   fclose(passwd_fp);
+  return 1;
 }
 
