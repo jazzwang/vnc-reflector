@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight8.c,v 1.2 2001/10/11 08:58:12 const Exp $
+ * $Id: encode_tight8.c,v 1.3 2001/12/02 08:30:07 const Exp $
  * Tight encoder.
  */
 
@@ -140,7 +140,7 @@ static AIO_BLOCK *encode_tight8_block(CL_SLOT *cl, FB_RECT *r)
   (*cl->trans_func)(&s_buf_pixels, r, cl->trans_table);
 
   /* Prepare RFB rectangle header. */
-  block->data_size = put_rect_header(block->data, r, RFB_ENCODING_TIGHT);
+  block->data_size = put_rect_header(block->data, r);
 
   /* Get number of colors in this rectangle. */
   detect_colors(s_buf_pixels, &s_pal, r);

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.36 2001/10/05 10:36:19 const Exp $
+ * $Id: client_io.c,v 1.37 2001/12/02 08:30:07 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -207,9 +207,14 @@ static void rf_client_initmsg(void)
     aio_close(0);
   }
 
+  /* Save initial desktop geometry for this client */
+  cl->fb_width = g_screen_info.width;
+  cl->fb_height = g_screen_info.height;
+  cl->enable_newfbsize = 0;
+
   /* Send ServerInitialisation message */
-  buf_put_CARD16(msg_server_init, g_fb_width);
-  buf_put_CARD16(msg_server_init + 2, g_fb_height);
+  buf_put_CARD16(msg_server_init, cl->fb_width);
+  buf_put_CARD16(msg_server_init + 2, cl->fb_height);
   buf_put_pixfmt(msg_server_init + 4, &g_screen_info.pixformat);
   buf_put_CARD32(msg_server_init + 20, g_screen_info.name_length);
   aio_write(NULL, msg_server_init, 24);
@@ -317,6 +322,7 @@ static void rf_client_encodings_data(void)
   cl->enc_prefer = RFB_ENCODING_RAW;
   cl->compress_level = -1;
   cl->enable_lastrect = 0;
+  cl->enable_newfbsize = 0;
   for (i = 1; i < NUM_ENCODINGS; i++)
     cl->enc_enable[i] = 0;
 
@@ -341,6 +347,11 @@ static void rf_client_encodings_data(void)
                 cl->compress_level, cur_slot->name);
     } else if (enc == RFB_ENCODING_LASTRECT) {
       cl->enable_lastrect = 1;
+    } else if (enc == RFB_ENCODING_NEWFBSIZE) {
+      /* FIXME: Handle NewFBRect on->off _correctly_. */
+      cl->enable_newfbsize = 1;
+      log_write(LL_DETAIL, "Client %s supports desktop geometry changes",
+                cur_slot->name);
     }
   }
   if (cl->compress_level < 0)
@@ -369,8 +380,9 @@ static void rf_client_updatereq(void)
   rect.y = buf_get_CARD16(&cur_slot->readbuf[3]);
   rect.w = buf_get_CARD16(&cur_slot->readbuf[5]);
   rect.h = buf_get_CARD16(&cur_slot->readbuf[7]);
-  rect.src_x = 0xFFFF;
-  rect.src_y = 0xFFFF;
+
+  /* Not CopyRect or NewFBSize. */
+  rect.enc = 0;
 
   if (!cur_slot->readbuf[0]) {
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
@@ -480,9 +492,20 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
 
-  if (cl->connected)
+  if (!cl->connected)
+    return;
+
+  if (rect->enc == RFB_ENCODING_NEWFBSIZE) {
+    if (rect->w != cl->fb_width || rect->h != cl->fb_height) {
+      cl->fb_width = rect->w;
+      cl->fb_height = rect->h;
+      if (cl->enable_newfbsize)
+        rlist_push_rect(&cl->pending_rects, rect);
+    }
+  } else {
     rlist_add_clipped_rect(&cl->pending_rects, rect, &cl->update_rect,
                            cl->bgr233_f);
+  }
 }
 
 void fn_client_send_rects(AIO_SLOT *slot)
@@ -586,7 +609,7 @@ static void send_update(void)
   AIO_FUNCPTR fn = NULL;
   int raw_bytes = 0, hextile_bytes = 0;
 
-  log_write(LL_DEBUG, "Sending framebuffer update (%d rects) to %s",
+  log_write(LL_DEBUG, "Sending framebuffer update (%d rects max) to %s",
             cl->pending_rects.num_rects, cur_slot->name);
 
   /* Prepare and send FramebufferUpdate message header */
@@ -605,16 +628,24 @@ static void send_update(void)
               (int)rect.w, (int)rect.h, (int)rect.x, (int)rect.y,
               cur_slot->name);
 
-    if (rect.src_x != 0xFFFF && cl->enc_enable[RFB_ENCODING_COPYRECT]) {
+    if (rect.enc == RFB_ENCODING_NEWFBSIZE) {
+      /* NewFBSize (cl->enable_newfbsize assumed to be not 0) */
+      put_rect_header(rect_hdr, &rect);
+      aio_write(wf_client_update_finished, rect_hdr, 12);
+      return;                   /* Important! */
+    } else if ( rect.enc == RFB_ENCODING_COPYRECT &&
+                cl->enc_enable[RFB_ENCODING_COPYRECT] ) {
       /* CopyRect */
       block = rfb_encode_copyrect_block(cl, &rect);
     } else if (use_tight_f) {
       /* Use Tight encoding */
+      rect.enc = RFB_ENCODING_TIGHT;
       rfb_encode_tight8(cl, &rect);
       continue;                 /* Important! */
     } else if ( cl->enc_prefer != RFB_ENCODING_RAW &&
                 cl->enc_enable[RFB_ENCODING_HEXTILE] ) {
       /* Use Hextile encoding */
+      rect.enc = RFB_ENCODING_HEXTILE;
       block = rfb_encode_hextile_block(cl, &rect);
       if (block != NULL) {
         hextile_bytes += block->data_size;
@@ -622,6 +653,7 @@ static void send_update(void)
       }
     } else {
       /* Use Raw encoding */
+      rect.enc = RFB_ENCODING_RAW;
       block = rfb_encode_raw_block(cl, &rect);
     }
 
@@ -640,13 +672,9 @@ static void send_update(void)
   /* Send LastRect marker. */
   if (use_tight_f) {
     rect.x = rect.y = rect.w = rect.h = 0;
-    put_rect_header(rect_hdr, &rect, RFB_ENCODING_LASTRECT);
+    rect.enc = RFB_ENCODING_LASTRECT;
+    put_rect_header(rect_hdr, &rect);
     aio_write(wf_client_update_finished, rect_hdr, 12);
-  }
-
-  if (hextile_bytes) {
-    log_write(LL_DEBUG, "Hextile stats for %s: %d(raw) -> %d(hextile)",
-              cur_slot->name, raw_bytes, hextile_bytes);
   }
 }
 

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.h,v 1.11 2001/10/11 08:56:30 const Exp $
+ * $Id: encode.h,v 1.12 2001/12/02 08:30:07 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -66,7 +66,7 @@ int sizeof_enc_cache(void);
 void invalidate_enc_cache(FB_RECT *r);
 void free_enc_cache(void);
 
-int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc);
+int put_rect_header(CARD8 *buf, FB_RECT *r);
 void get_hextile_caching_stats(long *hits, long *misses);
 
 AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r);

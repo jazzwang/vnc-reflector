@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.21 2001/10/11 08:56:30 const Exp $
+ * $Id: host_connect.c,v 1.22 2001/12/02 08:30:07 const Exp $
  * Connecting to a VNC host
  */
 
@@ -49,7 +49,6 @@ static void rf_host_auth_done(void);
 static void send_client_initmsg(void);
 static void rf_host_initmsg(void);
 static void rf_host_set_formats(void);
-static int allocate_framebuffer(void);
 
 static char *s_host_info_file;
 static int s_cl_listen_port;
@@ -333,15 +332,13 @@ static void rf_host_initmsg(void)
   HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   CARD16 width, height;
 
-  log_write(LL_DEBUG, "Receiving host desktop parameters");
-
   width = buf_get_CARD16(cur_slot->readbuf);
   height = buf_get_CARD16(&cur_slot->readbuf[2]);
   log_write(LL_MSG, "Remote desktop geometry is %dx%d",
             (int)width, (int)height);
 
-  g_screen_info.width = width;
-  g_screen_info.height = height;
+  hs->fb_width = width;
+  hs->fb_height = height;
 
   hs->temp_len = buf_get_CARD32(&cur_slot->readbuf[20]);
   aio_setread(rf_host_set_formats, NULL, hs->temp_len);
@@ -355,14 +352,15 @@ static void rf_host_set_formats(void)
   unsigned char setencodings_msg[] = {
     2,                          /* Message id */
     0,                          /* Padding -- not used */
-    0, 3,                       /* Number of encodings */
+    0, 4,                       /* Number of encodings */
     0, 0, 0, 5,                 /* Hextile encoding */
     0, 0, 0, 1,                 /* CopyRect encoding */
+    0xFF, 0xFF, 0xFF, 0x21,     /* NewFBSize "encoding" */
     0, 0, 0, 0                  /* Raw encoding */
   };
 
-  /* FIXME: Don't change g_screen_info while there is active host
-     connection ? */
+  /* FIXME: Don't change g_screen_info while there is an active host
+     connection! */
 
   log_write(LL_INFO, "Remote desktop name: %.*s",
             (int)hs->temp_len, cur_slot->readbuf);
@@ -388,13 +386,9 @@ static void rf_host_set_formats(void)
   log_write(LL_DEBUG, "Sending SetEncodings message");
   aio_write(NULL, setencodings_msg, sizeof(setencodings_msg));
 
-  /* If there is no local framebuffer yet, allocate it and start
-     listening for client connections. */
+  /* If there was no local framebuffer yet, start listening for client
+     connections, assuming we are mostly ready to serve clients. */
   if (g_framebuffer == NULL) {
-    if (!allocate_framebuffer()) {
-      aio_close(1);
-      return;
-    }
     if (!aio_listen(s_cl_listen_port, NULL, af_client_accept,
                     sizeof(CL_SLOT))) {
       log_write(LL_ERROR, "Error creating listening socket: %s",
@@ -407,12 +401,38 @@ static void rf_host_set_formats(void)
   host_activate();
 }
 
-static int allocate_framebuffer(void)
+/*
+ * Allocate the framebuffer, or extend its size if it exists already.
+ */
+
+int alloc_framebuffer(int w, int h)
 {
   int fb_size;
 
-  g_fb_width = g_screen_info.width;
-  g_fb_height = g_screen_info.height;
+  if (g_framebuffer == NULL) {
+
+    /* Just set initial dimentions of the framebuffer. */
+    g_fb_width = w;
+    g_fb_height = h;
+
+  } else {
+
+    /* Nothing to do if neither width nor height was increased. */
+    if (w <= g_fb_width && h <= g_fb_height) {
+      log_write(LL_DETAIL, "No need to reallocate framebuffer and cache");
+      return 1;
+    }
+
+    /* If framebuffer exists, free it's memory first. */
+    /* FIXME: Maybe preserve framebuffer contents? */
+    log_write(LL_DETAIL, "Freeing the framebuffer");
+    free(g_framebuffer);
+
+    /* Framebuffer dimentions may not be decreased. */
+    g_fb_width = (w > g_fb_width) ? w : g_fb_width;
+    g_fb_height = (h > g_fb_height) ? h : g_fb_height;
+
+  }
 
   fb_size = (int)g_fb_width * (int)g_fb_height;
   g_framebuffer = malloc(fb_size * sizeof(CARD32));
@@ -420,17 +440,18 @@ static int allocate_framebuffer(void)
     log_write(LL_ERROR, "Error allocating framebuffer");
     return 0;
   }
-  log_write(LL_INFO, "Allocated framebuffer, %d bytes",
+  log_write(LL_DETAIL, "(Re)allocated framebuffer, %d bytes",
             fb_size * sizeof(CARD32));
 
-  /* FIXME: Allocate cache in encoder on demand. */
+  /* Note: If the cache is already allocated, allocate_enc_cache()
+     function frees the cache memory first. */
   if (!allocate_enc_cache()) {
     free(g_framebuffer);
     g_framebuffer = NULL;
     log_write(LL_ERROR, "Error allocating cache for encoded data");
     return 0;
   }
-  log_write(LL_INFO, "Allocated cache for encoded data, %d bytes",
+  log_write(LL_DETAIL, "(Re)allocated cache for encoded data, %d bytes",
             sizeof_enc_cache());
 
   return 1;

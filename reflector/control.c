@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: control.c,v 1.5 2001/10/05 10:36:19 const Exp $
+ * $Id: control.c,v 1.6 2001/12/02 08:30:07 const Exp $
  * Processing signals to control reflector
  */
 
@@ -90,7 +90,7 @@ static void safe_disconnect_clients(void)
 }
 
 /*
- * On SIGUSR1: re-connect and close current host connection only when
+ * On SIGUSR1: reconnect and close current host connection only when
  * new connection is successful. Note: socket listening for host
  * connections would be closed anyway, otherwise bind(2) on the same
  * port would fail. Also, all non-authenticated host connections
@@ -99,7 +99,7 @@ static void safe_disconnect_clients(void)
 
 static void safe_reconnect_noclose(void)
 {
-  log_write(LL_WARN, "Caught SIGUSR1 signal, trying to (re-)connect to host");
+  log_write(LL_WARN, "Caught SIGUSR1 signal, trying to (re)connect to host");
 
   aio_walk_slots(fn_stop_listening, TYPE_HOST_LISTENING_SLOT);
   aio_walk_slots(fn_close, TYPE_HOST_CONNECTING_SLOT);
@@ -108,18 +108,18 @@ static void safe_reconnect_noclose(void)
 }
 
 /*
- * On SIGUSR2: close current host connection and try to re-connect.
+ * On SIGUSR2: close current host connection and try to reconnect.
  */
 
 static void safe_reconnect_close(void)
 {
-  log_write(LL_WARN, "Caught SIGUSR2 signal, (re-)connecting to host");
+  log_write(LL_WARN, "Caught SIGUSR2 signal, (re)connecting to host");
 
   aio_walk_slots(fn_stop_listening, TYPE_HOST_LISTENING_SLOT);
   aio_walk_slots(fn_close, TYPE_HOST_CONNECTING_SLOT);
 
   /* If host connection is active, aio_walk_slots would return 1 and
-     we would request re-connect after current host connection is
+     we would request reconnect after current host connection is
      closed (fn_reconnect_to_host function). Otherwise (if there is no
      host connection), just connect immediately. */
 
@@ -148,7 +148,7 @@ static void fn_stop_listening(AIO_SLOT *slot)
 }
 
 /*
- * Callback function to close I/O slot and re-connect
+ * Callback function to close I/O slot and reconnect
  */
 
 static void fn_reconnect_close(AIO_SLOT *slot)

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.h,v 1.7 2001/10/02 09:03:45 const Exp $
+ * $Id: host_connect.h,v 1.8 2001/12/02 08:30:07 const Exp $
  * Connecting to a VNC host
  */
 
@@ -18,5 +18,8 @@
 #define _REFLIB_HOSTCONNECT_H
 
 int connect_to_host(char *host_info_file, int cl_listen_port);
+
+/* FIXME: Move this stuff to another file. */
+int alloc_framebuffer(int w, int h);
 
 #endif /* _REFLIB_HOSTCONNECT_H */

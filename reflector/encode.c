@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.19 2001/10/11 09:27:31 const Exp $
+ * $Id: encode.c,v 1.20 2001/12/02 08:30:07 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -39,12 +39,14 @@ CARD8 *g_cache8 = NULL;
 
 static int s_cache_size;
 
-/* FIXME: Allocate cache on demand. */
+/* FIXME: Allocate cache on demand? */
 /* FIXME: Bad function naming. */
 
 int allocate_enc_cache(void)
 {
   int tiles_x, tiles_y;
+
+  free_enc_cache();
 
   tiles_x = (int)g_fb_width / 16;
   tiles_y = (int)g_fb_height / 16;
@@ -94,10 +96,15 @@ void invalidate_enc_cache(FB_RECT *r)
 
 void free_enc_cache(void)
 {
-  if (g_hints != NULL)
+  if (g_hints != NULL) {
     free(g_hints);
-  if (g_cache8 != NULL)
+    g_hints = NULL;
+  }
+  if (g_cache8 != NULL) {
     free(g_cache8);
+    g_cache8 = NULL;
+  }
+  s_cache_size = 0;
 }
 
 /********************************************************************/
@@ -115,7 +122,7 @@ AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r)
   block = malloc(sizeof(AIO_BLOCK) + 12 +
                  r->w * r->h * (cl->format.bits_pixel / 8));
   if (block) {
-    put_rect_header(block->data, r, RFB_ENCODING_RAW);
+    put_rect_header(block->data, r);
     (*cl->trans_func)(&block->data[12], r, cl->trans_table);
     block->data_size = 12 + r->w * r->h * (cl->format.bits_pixel / 8);
   }
@@ -133,7 +140,7 @@ AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r)
 
   block = malloc(sizeof(AIO_BLOCK) + 12 + 4);
   if (block) {
-    put_rect_header(block->data, r, RFB_ENCODING_COPYRECT);
+    put_rect_header(block->data, r);
     buf_put_CARD16(&block->data[12], r->src_x);
     buf_put_CARD16(&block->data[14], r->src_y);
     block->data_size = 12 + 4;
@@ -146,14 +153,14 @@ AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r)
  * Tiny function to fill in rectangle header in an RFB update
  */
 
-int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc)
+int put_rect_header(CARD8 *buf, FB_RECT *r)
 {
 
   buf_put_CARD16(buf, r->x);
   buf_put_CARD16(&buf[2], r->y);
   buf_put_CARD16(&buf[4], r->w);
   buf_put_CARD16(&buf[6], r->h);
-  buf_put_CARD32(&buf[8], enc);
+  buf_put_CARD32(&buf[8], r->enc);
 
   return 12;                    /* 12 bytes written */
 }
@@ -218,7 +225,7 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
   if (block == NULL)
     return NULL;
 
-  put_rect_header(block->data, r, RFB_ENCODING_HEXTILE);
+  put_rect_header(block->data, r);
 
   prev_bg_set = 0;
   data_ptr = (CARD8 *)&block->data[12];

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rect.h,v 1.5 2001/10/02 09:03:45 const Exp $
+ * $Id: rect.h,v 1.6 2001/12/02 08:30:07 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -22,8 +22,9 @@ typedef struct _FB_RECT {
   CARD16 y;
   CARD16 w;
   CARD16 h;
-  CARD16 src_x;                 /* These fields make sense only for        */
-  CARD16 src_y;                 /*   CopyRect-encoded framebuffer updates. */
+  CARD32 enc;                   /* Encoding type. */
+  CARD16 src_x;                 /* CopyRect X source position. */
+  CARD16 src_y;                 /* CopyRect Y source position. */
 } FB_RECT;
 
 typedef struct _FB_RECT_NODE {

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.36 2001/10/11 08:56:30 const Exp $
+ * $Id: main.c,v 1.37 2001/12/02 08:30:07 const Exp $
  * Main module
  */
 
@@ -411,9 +411,7 @@ static int init_screen_info(void)
     CARD8 test;
   } little_endian;
 
-  /* Zero screen dimensions, set initial desktop name */
-  g_screen_info.width = 0;
-  g_screen_info.height = 0;
+  /* Set initial desktop name */
   g_screen_info.name_length = 1;
   g_screen_info.name = malloc(2);
   if (g_screen_info.name == NULL) {

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rect.c,v 1.7 2001/10/02 09:03:45 const Exp $
+ * $Id: rect.c,v 1.8 2001/12/02 08:30:07 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -88,13 +88,13 @@ void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
   CARD16 x_aligned, y_aligned;
   FB_RECT temp;
 
-  if (rect->src_x == 0xFFFF && rect->w * rect->h > 256) {
+  if (rect->enc != RFB_ENCODING_COPYRECT && rect->w * rect->h > 256) {
     x_aligned = (rect->x + 15) & 0xFFF0;
     y_aligned = (rect->y + 15) & 0xFFF0;
 
     if ( rect->w - (x_aligned - rect->x) >= 16 &&
          rect->h - (y_aligned - rect->y) >= 16 ) {
-      temp.src_x = temp.src_y = 0xFFFF;
+      temp.enc = rect->enc;
       if (y_aligned != rect->y) {
         temp.x = rect->x;
         temp.y = rect->y;
@@ -136,7 +136,7 @@ void rlist_add_clipped_rect(FB_RECT_LIST *rlist, FB_RECT *rect,
   temp = *rect;
   rects_intersect(&temp, clip);
 
-  if (rect->src_x == 0xFFFF) {
+  if (rect->enc != RFB_ENCODING_COPYRECT) {
     if (temp.w * temp.h) {
       if (split_f)
         rlist_add_rect(rlist, &temp);

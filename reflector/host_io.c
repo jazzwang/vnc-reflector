@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.33 2001/10/11 14:31:15 const Exp $
+ * $Id: host_io.c,v 1.34 2001/12/02 08:30:07 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -29,10 +29,12 @@
 #include "rect.h"
 #include "translate.h"
 #include "client_io.h"
+#include "host_connect.h"
 #include "host_io.h"
 #include "encode.h"
 
 static void host_really_activate(AIO_SLOT *slot);
+static void fn_host_pass_newfbsize(AIO_SLOT *slot);
 
 static void rf_host_msg(void);
 
@@ -53,7 +55,7 @@ static void rf_host_cuttext_hdr(void);
 static void rf_host_cuttext_data(void);
 static void fn_host_pass_cuttext(AIO_SLOT *slot);
 
-static void fbs_open_file(void);
+static void fbs_open_file(HOST_SLOT *hs);
 static void fbs_write_data(void *buf, size_t len);
 static void fbs_close_file(void);
 
@@ -108,6 +110,8 @@ void host_close_hook(void)
       fbs_close_file();
 
     /* Erase framebuffer contents, invalidate cache */
+    /* FIXME: Don't reset if there is a new connection, so the
+       framebuffer (of its new size) would be changed anyway? */
     reset_framebuffer();
 
     /* No active slot exist */
@@ -147,24 +151,55 @@ void host_close_hook(void)
 static void host_really_activate(AIO_SLOT *slot)
 {
   AIO_SLOT *saved_slot = cur_slot;
-
-  cur_slot = slot;
+  HOST_SLOT *hs = (HOST_SLOT *)slot;
 
   log_write(LL_MSG, "Activating new host connection");
-  cur_slot->type = TYPE_HOST_ACTIVE_SLOT;
-  s_host_slot = cur_slot;
+  slot->type = TYPE_HOST_ACTIVE_SLOT;
+  s_host_slot = slot;
+
+  /* Allocate the framebuffer or extend its dimensions if necessary */
+  if (!alloc_framebuffer(hs->fb_width, hs->fb_height)) {
+    aio_close(1);
+    return;
+  }
+
+  /* Set default desktop geometry for new client connections */
+  g_screen_info.width = hs->fb_width;
+  g_screen_info.height = hs->fb_height;
 
   /* If requested, open file to save this session and write the header */
   if (s_fbs_prefix != NULL) {
     s_fbs_idx++;
-    fbs_open_file();
+    fbs_open_file(hs);
   }
 
+  cur_slot = slot;
+
+  /* Request initial screen contents */
   log_write(LL_DETAIL, "Requesting full framebuffer update");
   request_update(0);
   aio_setread(rf_host_msg, NULL, 1);
 
+  /* Notify clients about desktop geometry change */
+  aio_walk_slots(fn_host_pass_newfbsize, TYPE_CL_SLOT);
+
   cur_slot = saved_slot;
+}
+
+/*
+ * Inform a client about new desktop geometry.
+ */
+
+static void fn_host_pass_newfbsize(AIO_SLOT *slot)
+{
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
+  FB_RECT r;
+
+  r.enc = RFB_ENCODING_NEWFBSIZE;
+  r.x = r.y = 0;
+  r.w = hs->fb_width;
+  r.h = hs->fb_height;
+  fn_client_add_rect(slot, &r);
 }
 
 /***************************/
@@ -207,7 +242,6 @@ static void rf_host_msg(void)
 
 static CARD16 rect_count;
 static FB_RECT cur_rect;
-static CARD32 rect_enc;
 static CARD16 rect_cur_row;
 
 static CARD8 hextile_subenc;
@@ -238,19 +272,24 @@ static void rf_host_fbupdate_hdr(void)
     fbs_write_data(hdr_buf, 4);
   }
 
-  aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
+  if (rect_count) {
+    aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
+  } else {
+    log_write(LL_DEBUG, "Requesting incremental framebuffer update");
+    request_update(1);
+    aio_setread(rf_host_msg, NULL, 1);
+  }
 }
 
 static void rf_host_fbupdate_recthdr(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
 
   cur_rect.x = buf_get_CARD16(cur_slot->readbuf);
   cur_rect.y = buf_get_CARD16(&cur_slot->readbuf[2]);
   cur_rect.w = buf_get_CARD16(&cur_slot->readbuf[4]);
   cur_rect.h = buf_get_CARD16(&cur_slot->readbuf[6]);
-  cur_rect.src_x = 0xFFFF;
-  cur_rect.src_y = 0xFFFF;
-  rect_enc = buf_get_CARD32(&cur_slot->readbuf[8]);
+  cur_rect.enc = buf_get_CARD32(&cur_slot->readbuf[8]);
 
   /* Copy data for saving in a file if necessary */
   if (s_fbs_fp != NULL) {
@@ -266,10 +305,33 @@ static void rf_host_fbupdate_recthdr(void)
     if (s_fbs_fp != NULL) {
       fbs_write_data(s_fbs_buffer, s_fbs_buffer_ptr - s_fbs_buffer);
     }
-    aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
+    fbupdate_rect_done();
     return;
   }
 
+  /* Handle NewFBSize "encoding" first, as a special case */
+  if (cur_rect.enc == RFB_ENCODING_NEWFBSIZE) {
+    log_write(LL_INFO, "New host desktop geometry: %dx%d",
+              (int)cur_rect.w, (int)cur_rect.h);
+    g_screen_info.width = hs->fb_width = cur_rect.w;
+    g_screen_info.height = hs->fb_height = cur_rect.h;
+
+    /* Reallocate the framebuffer if necessary */
+    if (!alloc_framebuffer(hs->fb_width, hs->fb_height)) {
+      aio_close(1);
+      return;
+    }
+
+    /* Respect the specification */
+    cur_rect.x = cur_rect.y = 0;
+
+    /* NewFBSize is always the last rectangle regardless of rect_count */
+    rect_count = 1;
+    fbupdate_rect_done();
+    return;
+  }
+
+  /* Prevent overflow of the framebuffer */
   if (cur_rect.x >= g_fb_width || cur_rect.x + cur_rect.w > g_fb_width ||
       cur_rect.y >= g_fb_height || cur_rect.y + cur_rect.h > g_fb_height) {
     log_write(LL_ERROR, "Rectangle out of framebuffer bounds: %dx%d at %d,%d",
@@ -279,11 +341,12 @@ static void rf_host_fbupdate_recthdr(void)
     return;
   }
 
+  /* Ok, now the rectangle seems correct */
   log_write(LL_DEBUG, "Receiving rectangle %dx%d at %d,%d",
             (int)cur_rect.w, (int)cur_rect.h,
             (int)cur_rect.x, (int)cur_rect.y);
 
-  switch(rect_enc) {
+  switch(cur_rect.enc) {
   case RFB_ENCODING_RAW:
     log_write(LL_DEBUG, "Receiving raw data, expecting %d byte(s)",
               cur_rect.w * cur_rect.h * sizeof(CARD32));
@@ -306,7 +369,8 @@ static void rf_host_fbupdate_recthdr(void)
     aio_setread(rf_host_copyrect, NULL, 4);
     break;
   default:
-    log_write(LL_ERROR, "Unknown encoding: 0x%08lX", (unsigned long)rect_enc);
+    log_write(LL_ERROR, "Unknown encoding: 0x%08lX",
+              (unsigned long)cur_rect.enc);
     aio_close(0);
   }
 }
@@ -353,7 +417,7 @@ static void rf_host_copyrect(void)
        cur_rect.src_y >= g_fb_height ||
        cur_rect.src_y + cur_rect.h > g_fb_height ) {
     log_write(LL_WARN,
-              "CopyRect from outside of framebuffer: %dx%d from %d,%d",
+              "CopyRect from outside of the framebuffer: %dx%d from %d,%d",
               (int)cur_rect.w, (int)cur_rect.h,
               (int)cur_rect.src_x, (int)cur_rect.src_y);
     return;
@@ -615,7 +679,7 @@ void pass_cuttext_to_host(CARD8 *text, size_t len)
 /* Saving "framebuffer streams" in files */
 /*****************************************/
 
-static void fbs_open_file(void)
+static void fbs_open_file(HOST_SLOT *hs)
 {
   int max_rect_size, w, h;
   char fname[256];
@@ -657,8 +721,8 @@ static void fbs_open_file(void)
   /* Prepare stream header data */
   memcpy(fbs_header, "RFB 003.003\n", 12);
   buf_put_CARD32(&fbs_header[12], 1);
-  buf_put_CARD16(&fbs_header[16], g_screen_info.width);
-  buf_put_CARD16(&fbs_header[18], g_screen_info.height);
+  buf_put_CARD16(&fbs_header[16], hs->fb_width);
+  buf_put_CARD16(&fbs_header[18], hs->fb_height);
   buf_put_pixfmt(&fbs_header[20], &g_screen_info.pixformat);
   len = g_screen_info.name_length;
   if (len > 192)
@@ -671,8 +735,8 @@ static void fbs_open_file(void)
 
   /* Allocate memory to hold one rectangle of maximum size */
   if (s_fbs_fp != NULL) {
-    w = (int)g_screen_info.width;
-    h = (int)g_screen_info.height;
+    w = (int)hs->fb_width;
+    h = (int)hs->fb_height;
     max_rect_size = 12 + (w * h * 4) + ((w + 15) / 16) * ((h + 15) / 16);
     s_fbs_buffer = malloc(max_rect_size);
     if (s_fbs_buffer == NULL) {
@@ -800,34 +864,39 @@ static void hextile_next_tile(void)
 
 static void reset_framebuffer(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
+  FB_RECT r;
 
   log_write(LL_DETAIL, "Clearing framebuffer and cache");
   memset(g_framebuffer, 0, g_fb_width * g_fb_height * sizeof(CARD32));
 
-  cur_rect.x = 0;
-  cur_rect.y = 0;
-  cur_rect.w = g_fb_width;
-  cur_rect.h = g_fb_height;
+  r.x = r.y = 0;
+  r.w = g_fb_width;
+  r.h = g_fb_height;
 
-  invalidate_enc_cache(&cur_rect);
+  invalidate_enc_cache(&r);
 
-  /* Queue changed rectangle (the whole screen) for each client */
-  aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
+  /* Queue changed rectangle (the whole host screen) for each client */
+  r.w = hs->fb_width;
+  r.h = hs->fb_height;
+   aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
 }
 
 static void fbupdate_rect_done(void)
 {
-  log_write(LL_DEBUG, "Received rectangle ok");
+  if (cur_rect.w != 0 && cur_rect.h != 0) {
+    log_write(LL_DEBUG, "Received rectangle ok");
 
-  /* Cached data for this rectangle is not valid any more */
-  invalidate_enc_cache(&cur_rect);
+    /* Cached data for this rectangle is not valid any more */
+    invalidate_enc_cache(&cur_rect);
 
-  /* Save data in a file if necessary */
-  if (s_fbs_fp != NULL)
-    fbs_write_data(s_fbs_buffer, s_fbs_buffer_ptr - s_fbs_buffer);
+    /* Save data in a file if necessary */
+    if (s_fbs_fp != NULL)
+      fbs_write_data(s_fbs_buffer, s_fbs_buffer_ptr - s_fbs_buffer);
 
-  /* Queue this rectangle for each client */
-  aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
+    /* Queue this rectangle for each client */
+    aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
+  }
 
   if (--rect_count) {
     aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
@@ -846,7 +915,7 @@ static void fbupdate_rect_done(void)
 
 static void request_update(int incr)
 {
-  CARD16 w, h;
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   unsigned char fbupdatereq_msg[] = {
     3,                          /* Message id */
     0,                          /* Incremental if 1 */
@@ -854,14 +923,9 @@ static void request_update(int incr)
     0, 0, 0, 0                  /* Width, height */
   };
 
-  w = (g_screen_info.width < g_fb_width) ?
-    g_screen_info.width : g_fb_width;
-  h = (g_screen_info.height < g_fb_height) ?
-    g_screen_info.height : g_fb_height;
-
   fbupdatereq_msg[1] = (incr) ? 1 : 0;
-  buf_put_CARD16(&fbupdatereq_msg[6], w);
-  buf_put_CARD16(&fbupdatereq_msg[8], h);
+  buf_put_CARD16(&fbupdatereq_msg[6], hs->fb_width);
+  buf_put_CARD16(&fbupdatereq_msg[8], hs->fb_height);
 
   log_write(LL_DEBUG, "Sending FramebufferUpdateRequest message");
   aio_write(NULL, fbupdatereq_msg, sizeof(fbupdatereq_msg));

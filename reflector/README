@@ -1,5 +1,5 @@
 ===========================================================================
-                            VNC Reflector 1.1.5
+                            VNC Reflector 1.1.6
                   Copyright (C) 2001 HorizonLive.com, Inc.
 ===========================================================================
 
@@ -16,10 +16,15 @@ supported too but performance may be worse if there are many such
 clients.
 
 VNC Reflector can switch between different host connections on the
-fly, supports reverse host connections and hosts with different screen
-size. It supports full-control and read-only client connections
+fly, supports reverse host connections and hosts with variable desktop
+geometries. It supports full-control and read-only client connections
 depending on which of two passwords was used to initiate a client
 session.
+
+Raw, Hextile and CopyRect encodings are suported both at the host side
+and at the client side. Additionally, Tight encoding is supported on
+the client side, but its current implementation is limited (supports
+only BGR233 pixel format) and inefficient (lacks caching capability).
 
 Please note that documentation is incomplete.
 
@@ -102,13 +107,13 @@ Control signals
   * SIGHUP signal causes VNC Reflector to disconnect all connected clients.
 
   * SIGUSR1 signal tells VNC Reflector that it should re-read
-    HOST_INFO_FILE and to re-connect to host specified there (or to start
+    HOST_INFO_FILE and to reconnect to host specified there (or to start
     listening for reversed host connections). Host connection would be
     closed when new host connection is established successfully (auth is ok
     etc.). Client connections would be preserved.
 
   * SIGUSR2 signal tells VNC Reflector that it should close current host
-    connection, then re-read HOST_INFO_FILE and to re-connect to host
+    connection, then re-read HOST_INFO_FILE and to reconnect to host
     specified there (or to start listening for reversed host connections). 
     Client connections would be preserved.
 
