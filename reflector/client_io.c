@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.2 2001/08/02 16:47:45 const Exp $
+ * $Id: client_io.c,v 1.3 2001/08/02 19:50:23 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -18,6 +18,7 @@ static unsigned char s_buf[20];
 static unsigned char s_crypted[16];
 static unsigned char *s_password;
 
+static void cf_client(void);
 static void rf_client_ver(void);
 static void rf_client_auth(void);
 static void rf_client_initmsg(void);
@@ -33,12 +34,25 @@ void set_client_password(unsigned char *password)
 
 void af_client_accept(void)
 {
+  /* FIXME: Function naming is bad (client_accept_hook?). */
   /* FIXME: Store client address in an AIO_SLOT structure clone */
+
+  aio_setclose(cf_client);
 
   log_write(LL_MSG, "Accepted connection from [unknown address]");
 
   aio_write(NULL, "RFB 003.003\n", 12);
   aio_setread(rf_client_ver, NULL, 12);
+}
+
+static void cf_client(void)
+{
+  if (cur_slot->errread_f) {
+    log_write(LL_WARN, "Error reading data from [unknown address]");
+  } else if (cur_slot->errwrite_f) {
+    log_write(LL_WARN, "Error sending data to [unknown address]");
+  }
+  log_write(LL_MSG, "Closing client connection [unknown address]");
 }
 
 static void rf_client_ver(void)
@@ -82,8 +96,7 @@ static void rf_client_auth(void)
     /* FIXME: Implement "too many tries" functionality some day */
     buf_put_CARD32(s_buf, (CARD32)1);
     aio_write(NULL, s_buf, 4);
-    /* FIXME: Disconnect the client */
-    aio_setread(rf_client_ver, NULL, 16);
+    aio_close(0);
   } else {
     log_write(LL_MSG, "Authentication passed by [unknown address]");
     buf_put_CARD32(s_buf, (CARD32)0);
@@ -96,8 +109,7 @@ static void rf_client_initmsg(void)
 {
   if (cur_slot->readbuf[0] == 0) {
     log_write(LL_WARN, "Non-shared session requested by [unknown address]");
-    /* FIXME: Disconnect the client, we accept only shared sessions. */
-    aio_setread(rf_client_initmsg, NULL, 1);
+    aio_close(0);
   }
 
   /* FIXME: Send ServerInitialisation message and so on... */

@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.11 2001/08/02 16:50:51 const Exp $
+ * $Id: main.c,v 1.12 2001/08/02 19:50:23 const Exp $
  * Main module
  */
 
@@ -73,12 +73,17 @@ int main(int argc, char **argv)
 
   read_pasword_file();
 
+  /* FIXME: The code is ugly. */
+
   host_fd = connect_to_host(opt_hostname, opt_hostport);
   if (host_fd != -1 && setup_session(host_fd, opt_password, &desktop_info)) {
     /* Allocate framebuffer */
     framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
     if (framebuffer == NULL) {
       log_write(LL_ERROR, "Error allocating framebuffer");
+      /* FIXME: Make function in host_connect.c to close fd,
+         report into logs on closing connection. */
+      close(host_fd);
     } else {
       log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
                 desktop_info.width * desktop_info.height * 4);
@@ -91,14 +96,18 @@ int main(int argc, char **argv)
                       1, sizeof(AIO_SLOT))) {
         log_write(LL_ERROR, "Error creating listening socket: %s",
                   strerror(errno));
+        close(host_fd);
       } else {
         init_host_io(host_fd);
         aio_mainloop();
       }
+      log_write(LL_DEBUG, "Freeing framebuffer");
       free(framebuffer);
     }
     free(desktop_info.name);
   }
+
+  log_write(LL_MSG, "Terminating");
 
   /* Close logs */
   if (!log_close() && opt_foreground) {

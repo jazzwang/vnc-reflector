@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.3 2001/08/02 13:37:25 const Exp $
+ * $Id: host_io.c,v 1.4 2001/08/02 19:50:23 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -15,7 +15,8 @@
 #include "logging.h"
 #include "host_io.h"
 
-static void if_host_io(void);
+static void if_host(void);      /* Init hook */
+static void cf_host(void);      /* Close hook */
 
 static void rf_host_msg(void);
 static void rf_host_fbupdate_hdr(void);
@@ -35,16 +36,30 @@ static void request_update(int incr);
 /* This is the only function visible from outside */
 void init_host_io(int fd)
 {
-  aio_add_slot(fd, if_host_io, 0, sizeof(AIO_SLOT));
+  aio_add_slot(fd, if_host, 0, sizeof(AIO_SLOT));
 }
 
 /* Initializing I/O slot */
-static void if_host_io(void)
+static void if_host(void)
 {
+  aio_setclose(cf_host);
+
   log_write(LL_DETAIL, "Requesting full framebuffer update");
   request_update(0);
 
   aio_setread(rf_host_msg, NULL, 1);
+}
+
+/* On-close hook */
+static void cf_host(void)
+{
+  if (cur_slot->errread_f) {
+    log_write(LL_ERROR, "Error reading data from host");
+  } else if (cur_slot->errwrite_f) {
+    log_write(LL_ERROR, "Error sending data to host");
+  }
+  log_write(LL_WARN, "Closing connection to host");
+  aio_close(1);
 }
 
 /* Processing RFB messages */
@@ -69,7 +84,7 @@ static void rf_host_msg(void)
     break;
   default:
     log_write(LL_ERROR, "Unknown server message type: %d", msg_id);
-    aio_setread(rf_host_msg, NULL, 1);
+    aio_close(0);
   }
 }
 
@@ -126,7 +141,7 @@ static void rf_host_fbupdate_recthdr(void)
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX", (unsigned long)rect_enc);
-    aio_setread(rf_host_msg, NULL, 1);
+    aio_close(0);
   }
 }
 
