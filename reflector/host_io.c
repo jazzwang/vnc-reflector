@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.15 2001/08/19 18:38:11 const Exp $
+ * $Id: host_io.c,v 1.16 2001/08/20 11:58:48 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -161,6 +161,8 @@ static void rf_host_fbupdate_recthdr(void)
   cur_rect.y = buf_get_CARD16(&cur_slot->readbuf[2]);
   cur_rect.w = buf_get_CARD16(&cur_slot->readbuf[4]);
   cur_rect.h = buf_get_CARD16(&cur_slot->readbuf[6]);
+  cur_rect.src_x = 0xFFFF;
+  cur_rect.src_y = 0xFFFF;
   rect_enc = buf_get_CARD32(&cur_slot->readbuf[8]);
 
   if (!cur_rect.h || !cur_rect.w) {
@@ -220,18 +222,17 @@ static void rf_host_fbupdate_raw(void)
 
 static void rf_host_copyrect(void)
 {
-  CARD16 src_x, src_y;
   CARD32 *src_ptr;
   CARD32 *dst_ptr;
   int width = (int)g_screen_info->width;
   int row;
 
-  src_x = buf_get_CARD16(cur_slot->readbuf);
-  src_y = buf_get_CARD16(&cur_slot->readbuf[2]);
+  cur_rect.src_x = buf_get_CARD16(cur_slot->readbuf);
+  cur_rect.src_y = buf_get_CARD16(&cur_slot->readbuf[2]);
 
-  if (src_y > cur_rect.y) {
+  if (cur_rect.src_y > cur_rect.y) {
     /* Copy rows starting from top */
-    src_ptr = &g_framebuffer[src_y * width + src_x];
+    src_ptr = &g_framebuffer[cur_rect.src_y * width + cur_rect.src_x];
     dst_ptr = &g_framebuffer[cur_rect.y * width + cur_rect.x];
     for (row = 0; row < cur_rect.h; row++) {
       memmove(dst_ptr, src_ptr, cur_rect.w * sizeof(CARD32));
@@ -240,8 +241,8 @@ static void rf_host_copyrect(void)
     }
   } else {
     /* Copy rows starting from bottom */
-    src_ptr = &g_framebuffer[(src_y + cur_rect.h - 1) * width +
-                             src_x];
+    src_ptr = &g_framebuffer[(cur_rect.src_y + cur_rect.h - 1) * width +
+                             cur_rect.src_x];
     dst_ptr = &g_framebuffer[(cur_rect.y + cur_rect.h - 1) * width +
                              cur_rect.x];
     for (row = 0; row < cur_rect.h; row++) {

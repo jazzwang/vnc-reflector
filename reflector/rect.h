@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.h,v 1.2 2001/08/08 12:56:51 const Exp $
+ * $Id: rect.h,v 1.3 2001/08/20 11:58:48 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -13,6 +13,8 @@ typedef struct _FB_RECT {
   CARD16 y;
   CARD16 w;
   CARD16 h;
+  CARD16 src_x;                 /* These fields make sense only for        */
+  CARD16 src_y;                 /*   CopyRect-encoded framebuffer updates. */
 } FB_RECT;
 
 typedef struct _FB_RECT_NODE {

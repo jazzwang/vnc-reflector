@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.c,v 1.2 2001/08/08 12:56:51 const Exp $
+ * $Id: rect.c,v 1.3 2001/08/20 11:58:48 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -105,7 +105,8 @@ int rlist_pick_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
 /*
  * Combine two rectangles into bigger one covering both.
  * Returns difference between the size of resulting rectangle
- * and sum of sizes of those two ones.
+ * and sum of sizes of those two ones. This function does not respect
+   CopyRect-related fields of source FB_RECT structures.
  */
 
 int rects_combine(FB_RECT *one, FB_RECT *another)
@@ -119,6 +120,7 @@ int rects_combine(FB_RECT *one, FB_RECT *another)
   overhead = w * h - one->w * one->h - another->w * another->h;
 
   one->x = x, one->y = y, one->w = w, one->h = h;
+  one->src_x = 0xFFFF; one->src_y = 0xFFFF;
 
   return overhead;
 }

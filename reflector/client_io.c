@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.24 2001/08/20 09:05:44 const Exp $
+ * $Id: client_io.c,v 1.25 2001/08/20 11:58:48 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -223,6 +223,8 @@ static void rf_client_initmsg(void)
   rect.y = 0;
   rect.w = g_screen_info->width;
   rect.h = g_screen_info->height;
+  rect.src_x = 0xFFFF;
+  rect.src_y = 0xFFFF;
   rlist_init(&cl->pending_rects);
   rlist_push_rect(&cl->pending_rects, &rect);
 
@@ -344,6 +346,8 @@ static void rf_client_updatereq(void)
   rect.y = buf_get_CARD16(&cur_slot->readbuf[3]);
   rect.w = buf_get_CARD16(&cur_slot->readbuf[5]);
   rect.h = buf_get_CARD16(&cur_slot->readbuf[7]);
+  rect.src_x = 0xFFFF;
+  rect.src_y = 0xFFFF;
 
   if (!cur_slot->readbuf[0]) {
     rlist_add_rect(&cl->pending_rects, &rect);
@@ -527,45 +531,70 @@ static void send_update(void)
   CARD8 msg_hdr[4] = {
     0, 0, 0, 1
   };
-  CARD8 rect_hdr[12] = {
+  CARD8 rect_hdr[16] = {
     0, 0, 0, 0,
     0, 0, 0, 0,
-    0, 0, 0, 0
+    0, 0, 0, 0,
+    0, 0, 0, 0                  /* Last four bytes -- only for CopyRect */
   };
   FB_RECT rect;
   AIO_BLOCK *block;
+  CARD32 encoding = RFB_ENCODING_RAW;
+  AIO_FUNCPTR fn = NULL;
   int raw_bytes = 0, hextile_bytes = 0;
 
   log_write(LL_DEBUG, "Sending framebuffer update (%d rects) to %s",
             cl->pending_rects.num_rects, cur_slot->name);
 
+  /* Prepare and send FramebufferUpdate message header */
   buf_put_CARD16(&msg_hdr[2], cl->pending_rects.num_rects);
   aio_write(NULL, msg_hdr, 4);
 
+  /* For each pending rectangle: */
   while (rlist_pick_rect(&cl->pending_rects, &rect)) {
+
+    /* Prepare rectangle header */
     buf_put_CARD16(rect_hdr, rect.x);
     buf_put_CARD16(&rect_hdr[2], rect.y);
     buf_put_CARD16(&rect_hdr[4], rect.w);
     buf_put_CARD16(&rect_hdr[6], rect.h);
-    if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
-      buf_put_CARD32(&rect_hdr[8], RFB_ENCODING_HEXTILE);
+    if (rect.src_x != 0xFFFF && cl->enc_enable[RFB_ENCODING_COPYRECT]) {
+      encoding = RFB_ENCODING_COPYRECT;
+    } else if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
+      encoding = RFB_ENCODING_HEXTILE;
     }
-    aio_write(NULL, rect_hdr, 12);
-    if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
+    buf_put_CARD32(&rect_hdr[8], encoding);
+
+    /* If it's the last rectangle, install hook function which would
+       be called after all data has been sent. */
+    if (!cl->pending_rects.num_rects)
+      fn = wf_client_update_finished;
+
+    /* Send rectangle header, prepare and send rectangle data */
+    switch (encoding) {
+    case RFB_ENCODING_COPYRECT:
+      buf_put_CARD16(&rect_hdr[12], rect.src_x);
+      buf_put_CARD16(&rect_hdr[14], rect.src_y);
+      aio_write(fn, rect_hdr, 16);
+      break;
+    case RFB_ENCODING_HEXTILE:
+      aio_write(NULL, rect_hdr, 12);
       block = rfb_encode_hextile_block(cl, &rect);
       if (block != NULL) {
         hextile_bytes += block->data_size;
         raw_bytes += rect.w * rect.h * (cl->format.bits_pixel / 8);
       }
-      aio_write_nocopy(wf_client_update_finished, block);
-    } else {
-      aio_write_nocopy(wf_client_update_finished,
-                       rfb_encode_raw_block(cl, &rect));
+      aio_write_nocopy(fn, block);
+      break;
+    default: /* RFB_ENCODING_RAW */
+      aio_write(NULL, rect_hdr, 12);
+      aio_write_nocopy(fn, rfb_encode_raw_block(cl, &rect));
     }
   }
 
-  if (hextile_bytes)
+  if (hextile_bytes) {
     log_write(LL_DEBUG, "Hextile stats for %s: %d(raw) -> %d(hextile)",
               cur_slot->name, raw_bytes, hextile_bytes);
+  }
 }
 
