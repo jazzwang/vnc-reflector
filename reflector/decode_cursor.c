@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_cursor.c,v 1.2 2004/08/08 08:05:16 const_k Exp $
+ * $Id: decode_cursor.c,v 1.3 2004/08/11 22:08:25 grolloj Exp $
  * Connecting to a VNC host
  */
 
@@ -86,7 +86,6 @@ void setread_decode_pointerpos(FB_RECT *r)
   s_curs_x = s_pos_rect.x;
   s_curs_y = s_pos_rect.y;
   rf_host_pointerpos();
-  fbupdate_rect_done(); 
 }
 
 FB_RECT *crsr_get_rect(void)
@@ -121,7 +120,6 @@ int crsr_get_type(void)
 
 static void rf_host_xcursor_color(void)
 {
-  CARD8 *col_ptr = s_xcursor_colors;
   CARD32 size;
 
   /* calculate size of two cursor bitmaps to follow */
