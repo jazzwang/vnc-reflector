@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.h,v 1.8 2001/08/08 09:36:19 const Exp $
+ * $Id: client_io.h,v 1.9 2001/08/08 11:17:21 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -18,7 +18,7 @@ typedef struct _CL_SLOT {
 
   RFB_PIXEL_FORMAT format;
   FB_RECT_LIST pending_rects;
-  CARD16 enc_count;
+  CARD16 temp_count;
   unsigned char enc_enable[NUM_ENCODINGS];
   unsigned char msg_buf[20];
   unsigned int connected          :1;

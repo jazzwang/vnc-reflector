@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.15 2001/08/08 11:04:27 const Exp $
+ * $Id: client_io.c,v 1.16 2001/08/08 11:17:21 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -245,13 +245,18 @@ static void rf_client_pixfmt(void)
 
 static void rf_client_colormap_hdr(void)
 {
-  /* FIXME: Skip FixColourMapEntries properly. */
-  aio_setread(rf_client_colormap_data, NULL, 1);
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+
+  log_write(LL_WARN, "Ignoring FixColourMapEntries message from %s",
+            cur_slot->name);
+
+  cl->temp_count = buf_get_CARD16(&cur_slot->readbuf[3]);
+  aio_setread(rf_client_colormap_data, NULL, cl->temp_count * 6);
 }
 
 static void rf_client_colormap_data(void)
 {
-  /* FIXME: Skip FixColourMapEntries properly. */
+  /* Nothing to do with FixColourMapEntries */
   aio_setread(rf_client_msg, NULL, 1);
 }
 
@@ -259,8 +264,8 @@ static void rf_client_encodings_hdr(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
 
-  cl->enc_count = buf_get_CARD16(&cur_slot->readbuf[1]);
-  aio_setread(rf_client_encodings_data, NULL, cl->enc_count * sizeof(CARD32));
+  cl->temp_count = buf_get_CARD16(&cur_slot->readbuf[1]);
+  aio_setread(rf_client_encodings_data, NULL, cl->temp_count * sizeof(CARD32));
 }
 
 static void rf_client_encodings_data(void)
@@ -276,7 +281,7 @@ static void rf_client_encodings_data(void)
   }
 
   /* Read and store encoding list supplied by the client */
-  for (i = 0; i < (int)cl->enc_count; i++) {
+  for (i = 0; i < (int)cl->temp_count; i++) {
     enc = buf_get_CARD32(&cur_slot->readbuf[i * sizeof(CARD32)]);
     if (enc >= 0 && enc < NUM_ENCODINGS) {
       cl->enc_enable[enc] = 1;
