@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: hostconnect.c,v 1.2 2001/08/01 16:06:07 const Exp $
+ * $Id: hostconnect.c,v 1.3 2001/08/02 11:13:38 const Exp $
  * Connecting to a VNC host
  */
 
@@ -23,7 +23,6 @@
 static int negotiate_ver(int fd, int major, int minor);
 static int vnc_authenticate(int fd, char *password);
 static int set_data_formats(int fd);
-static int request_full_update(int fd, int fb_width, int fb_height);
 
 static int recv_data(int fd, void *buf, size_t len);
 static int send_data(int fd, void *buf, size_t len);
@@ -129,12 +128,6 @@ int setup_session(int host_fd, char *password, RFB_DESKTOP_INFO *di)
   if (success) {
     log_write(LL_DEBUG, "Setting up pixel format and encodings");
     if (!set_data_formats(host_fd))
-      success = 0;
-  }
-
-  if (success) {
-    log_write(LL_DEBUG, "Requesting full framebuffer update");
-    if (!request_full_update(host_fd, di->width, di->height))
       success = 0;
   }
 
@@ -265,25 +258,6 @@ static int set_data_formats(int fd)
 
   log_write(LL_DEBUG, "Sending SetEncodings message");
   if (!send_data(fd, setencodings_msg, sizeof(setencodings_msg)))
-    return 0;
-
-  return 1;
-}
-
-static int request_full_update(int fd, int fb_width, int fb_height)
-{
-  unsigned char fbupdatereq_msg[] = {
-    3,                          /* Message id */
-    0,                          /* Incremental if 1 */
-    0, 0, 0, 0,                 /* X position, Y position */
-    0, 0, 0, 0                  /* Width, height */
-  };
-
-  buf_put_CARD16(&fbupdatereq_msg[6], (CARD16)fb_width);
-  buf_put_CARD16(&fbupdatereq_msg[8], (CARD16)fb_height);
-
-  log_write(LL_DEBUG, "Sending FramebufferUpdateRequest message");
-  if (!send_data(fd, fbupdatereq_msg, sizeof(fbupdatereq_msg)))
     return 0;
 
   return 1;

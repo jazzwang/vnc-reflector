@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.3 2001/08/01 11:49:39 const Exp $
+ * $Id: main.c,v 1.4 2001/08/02 11:13:38 const Exp $
  * Main module
  */
 
@@ -11,10 +11,11 @@
 #include <string.h>
 
 #include "rfblib.h"
-#include "reflector.h"
+#include "async_io.h"
 #include "logging.h"
+#include "reflector.h"
 #include "hostconnect.h"
-#include "dispatch.h"
+#include "host_io.h"
 
 /* Configuration options */
 static int   opt_listen_port;
@@ -52,13 +53,19 @@ int main(int argc, char **argv)
 
   host_fd = connect_to_host(opt_hostname, opt_hostport);
   if (host_fd != -1 && setup_session(host_fd, opt_password, &desktop_info)) {
+    /* Allocate framebuffer */
     framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
     if (framebuffer) {
       desktop_info.bytes_row = desktop_info.width * 4;
       log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
                 desktop_info.width * desktop_info.height * 4);
-      /* Main event loop */
-      mainloop(host_fd, opt_listen_port);
+
+      /* Let I/O subsystem know about host connection */
+      init_host_io(host_fd);
+
+      /* Start async I/O loop */
+      aio_mainloop();
+
     } else {
       log_write(LL_ERROR, "Error allocating framebuffer");
     }

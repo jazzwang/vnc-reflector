@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.1 2001/08/01 19:55:58 const Exp $
+ * $Id: async_io.h,v 1.2 2001/08/02 11:13:38 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -35,7 +35,7 @@ typedef struct _AIO_SLOT {
   size_t bytes_to_read;         /* Bytes to read into the input buffer     */
                                 /*   to be set with aio_setread()          */
   size_t bytes_ready;           /* Bytes ready in the input buffer         */
-  unsigned char buf[256];       /* Built-in input buffer                   */
+  unsigned char buf256[256];    /* Built-in input buffer                   */
 
   AIO_FUNCPTR writefunc;        /* Function called after data is written,  */
                                 /*   to be set with aio_write()            */
@@ -63,6 +63,9 @@ extern AIO_SLOT *cur_slot;
  * Public functions
  */
 
+void aio_init(void);
+void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size);
+void aio_mainloop(void);
 void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read);
 void aio_write(AIO_FUNCPTR fn, void *outbuf, int bytes_to_write);
 

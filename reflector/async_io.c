@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.1 2001/08/01 19:55:58 const Exp $
+ * $Id: async_io.c,v 1.2 2001/08/02 11:13:38 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -59,8 +59,9 @@ void aio_init(void)
 void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
 {
   size_t size;
-  AIO_SLOT *slot;
+  AIO_SLOT *slot, *saved_slot;
 
+  /* NOTE: initfunc must set input handler using aio_setread(). */
   /* FIXME: Check return value after calloc(). */
 
   size = (slot_size > sizeof(AIO_SLOT)) ? size : sizeof(AIO_SLOT);
@@ -84,12 +85,45 @@ void aio_add_slot(int fd, AIO_FUNCPTR initfunc, int type, size_t slot_size)
   }
   s_last_slot = slot;
 
+  /* Put fd into non-blocking mode */
+  /* FIXME: check return value? */
+  fcntl (fd, F_SETFL, O_NONBLOCK);
+
   FD_SET(fd, &s_fdset_read);
   if (fd > s_max_fd)
     s_max_fd = fd;
 
+  /* Saving cur_slot value, calling initfunc with different cur_slot */
+  saved_slot = cur_slot;
   cur_slot = slot;
   (*initfunc)();
+  cur_slot = saved_slot;
+}
+
+void aio_mainloop(void)
+{
+  fd_set fdset_r, fdset_w;
+  struct timeval timeout;
+  AIO_SLOT *slot;
+
+  while (1) {
+    memcpy(&fdset_r, &s_fdset_read, sizeof(fd_set));
+    memcpy(&fdset_w, &s_fdset_write, sizeof(fd_set));
+    timeout.tv_sec = 10;        /* Ten seconds timeout */
+    timeout.tv_usec = 0;
+    if (select (s_max_fd + 1, &fdset_r, &fdset_w, NULL, &timeout) > 0) {
+      for (slot = s_first_slot; slot != NULL; slot = slot->next) {
+        if (FD_ISSET(slot->fd, &fdset_w))
+          aio_process_output(slot);
+        if (FD_ISSET(slot->fd, &fdset_r))
+          aio_process_input(slot);
+      }
+    } else {
+      /* Do something in idle periods */
+      if (s_idle_func != NULL)
+        (*s_idle_func)();
+    }
+  }
 }
 
 void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read)
@@ -106,8 +140,8 @@ void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read)
   if (inbuf != NULL) {
     cur_slot->readbuf = inbuf;
   } else {
-    if (bytes_to_read <= sizeof(cur_slot->buf)) {
-      cur_slot->readbuf = cur_slot->buf;
+    if (bytes_to_read <= sizeof(cur_slot->buf256)) {
+      cur_slot->readbuf = cur_slot->buf256;
     } else {
       cur_slot->readbuf = malloc(bytes_to_read);
       if (cur_slot->readbuf != NULL) {
@@ -194,7 +228,7 @@ static void aio_process_output(AIO_SLOT *slot)
         /* Last block sent, free it and call writefunc */
         free(slot->outqueue);
         slot->outqueue = NULL;
-        FD_CLEAR(slot->fd, &s_fdset_write);
+        FD_CLR(slot->fd, &s_fdset_write);
         if (slot->writefunc != NULL) {
           cur_slot = slot;
           (*slot->writefunc)();
