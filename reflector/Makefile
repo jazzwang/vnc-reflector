@@ -10,7 +10,7 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.27 2002/07/25 16:59:48 const Exp $
+# $Id: Makefile,v 1.28 2002/07/30 07:11:00 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
@@ -47,7 +47,7 @@ MAKEDEPEND = gccmakedep
 default: $(PROG)
 
 $(PROG): $(OBJS)
-	$(CC) $(CFLAGS) -o $(PROG) $(LDFLAGS) $(OBJS)
+	$(CC) $(CFLAGS) -o $(PROG) $(OBJS) $(LDFLAGS)
 
 clean: 
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
@@ -60,7 +60,7 @@ depend: $(SRCS)
 
 
 # DO NOT DELETE
-main.o: main.c rfblib.h async_io.h logging.h active.h reflector.h \
+main.o: main.c rfblib.h async_io.h logging.h active.h actions.h reflector.h \
   host_connect.h control.h rect.h translate.h host_io.h client_io.h encode.h
 logging.o: logging.c logging.h
 active.o: active.c active.h logging.h
