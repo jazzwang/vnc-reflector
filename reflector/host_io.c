@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.31 2001/10/11 08:56:30 const Exp $
+ * $Id: host_io.c,v 1.32 2001/10/11 12:48:58 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -734,12 +734,13 @@ static void hextile_fill_tile(void)
 
   fb_ptr = &g_framebuffer[hextile_rect.y * (int)g_fb_width + hextile_rect.x];
 
-  for (y = 0; y < hextile_rect.h; y++) {
-    for (x = 0; x < hextile_rect.w; x++) {
-      *fb_ptr++ = hextile_bg;
-    }
-    fb_ptr += g_fb_width - hextile_rect.w;
-  }
+  /* Fill first row */
+  for (x = 0; x < hextile_rect.w; x++)
+    fb_ptr[x] = hextile_bg;
+
+  /* Copy first row into other rows */
+  for (y = 1; y < hextile_rect.h; y++)
+    memcpy(&fb_ptr[y * g_fb_width], fb_ptr, hextile_rect.w * sizeof(CARD32));
 }
 
 /* FIXME: Not as efficient as it could be. */
