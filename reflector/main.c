@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.48 2003/05/29 08:17:01 const_k Exp $
+ * $Id: main.c,v 1.49 2003/05/29 16:16:45 const_k Exp $
  * Main module
  */
 
@@ -54,6 +54,7 @@ static int   opt_join_sessions;
 static char *opt_bind_ip;
 static int   opt_request_tight;
 static int   opt_request_copyrect;
+static int   opt_convert_copyrect;
 static int   opt_tight_level;
 
 static unsigned char opt_client_password[9];
@@ -132,7 +133,7 @@ int main(int argc, char **argv)
   /* Initialization */
   if (init_screen_info()) {
     read_password_file();
-    set_host_encodings(opt_request_copyrect,
+    set_host_encodings(opt_request_copyrect, opt_convert_copyrect,
                        opt_request_tight, opt_tight_level);
     set_client_passwords(opt_client_password, opt_client_ro_password);
     fbs_set_prefix(opt_fbs_prefix, opt_join_sessions);
@@ -210,10 +211,11 @@ static void parse_args(int argc, char **argv)
   opt_bind_ip = NULL;
   opt_request_tight = 0;
   opt_request_copyrect = 1;
+  opt_convert_copyrect = 0;
   opt_tight_level = -1;
 
   while (!err &&
-         (c = getopt(argc, argv, "hqjrv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
+         (c = getopt(argc, argv, "hqjrRv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -289,7 +291,13 @@ static void parse_args(int argc, char **argv)
         opt_bind_ip = optarg;
       break;
     case 'r':
-      if (!opt_request_copyrect)
+      if (!opt_request_copyrect || opt_convert_copyrect)
+        err = 1;
+      else
+        opt_convert_copyrect = 1;
+      break;
+    case 'R':
+      if (!opt_request_copyrect || opt_convert_copyrect)
         err = 1;
       else
         opt_request_copyrect = 0;
@@ -380,8 +388,12 @@ static void report_usage(char *program_name)
           " if possible\n"
           "  -T COMPR_LEVEL  - like -t, but use the specified compression"
           " level (1..9)\n"
-          "  -r              - disable CopyRect encoding, e.g. for debugging"
-          " purposes\n");
+          "  -r              - convert CopyRect updates received from host"
+          " to \"normal\"\n"
+          "                    rectangles, so clients will never receive"
+          " CopyRects\n"
+          "  -R              - disable CopyRect completely on both host"
+          " and client sides\n");
   fprintf(stderr,
           "  -g LOG_FILE     - write logs to the specified file"
           " [default: reflector.log]\n"

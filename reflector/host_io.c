@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.46 2003/04/21 17:20:35 const Exp $
+ * $Id: host_io.c,v 1.47 2003/05/29 16:16:45 const_k Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -358,6 +358,7 @@ static void rf_host_fbupdate_raw(void)
 
 static void rf_host_copyrect(void)
 {
+  HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   CARD32 *src_ptr;
   CARD32 *dst_ptr;
   int width = (int)g_fb_width;
@@ -401,6 +402,10 @@ static void rf_host_copyrect(void)
       dst_ptr -= width;
     }
   }
+
+  /* Convert CopyRect rectangle if necessary. */
+  if (hs->convert_copyrect)
+    cur_rect.enc = RFB_ENCODING_RAW;
 
   fbupdate_rect_done();
 }

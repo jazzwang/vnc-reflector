@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.33 2003/05/29 08:16:59 const_k Exp $
+ * $Id: host_connect.c,v 1.34 2003/05/29 16:16:45 const_k Exp $
  * Connecting to a VNC host
  */
 
@@ -50,6 +50,7 @@ static void rf_host_initmsg(void);
 static void rf_host_set_formats(void);
 
 static int s_request_copyrect;
+static int s_convert_copyrect;
 static int s_request_tight;
 static int s_tight_level;
 
@@ -65,10 +66,11 @@ static unsigned char s_host_password[9];
  * for the Tight encoding.
  */
 
-void set_host_encodings(int request_copyrect,
+void set_host_encodings(int request_copyrect, int convert_copyrect,
                         int request_tight, int tight_level)
 {
   s_request_copyrect = request_copyrect;
+  s_convert_copyrect = convert_copyrect;
   s_request_tight = request_tight;
   s_tight_level = tight_level;
 }
@@ -437,6 +439,9 @@ static void rf_host_set_formats(void)
 
   log_write(LL_DEBUG, "Sending SetEncodings message");
   aio_write(NULL, setenc_msg, 4 + num_enc * 4);
+
+  /* Set CopyRect handling mode. */
+  hs->convert_copyrect = s_convert_copyrect;
 
   /* If there was no local framebuffer yet, start listening for client
      connections, assuming we are mostly ready to serve clients. */
