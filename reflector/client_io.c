@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.14 2001/08/08 09:52:28 const Exp $
+ * $Id: client_io.c,v 1.15 2001/08/08 11:04:27 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -178,6 +178,9 @@ static void rf_client_initmsg(void)
   aio_write(NULL, msg_server_init, 24);
   aio_write(NULL, g_screen_info->name, g_screen_info->name_length);
   aio_setread(rf_client_msg, NULL, 1);
+
+  /* Set up initial pixel format */
+  memcpy(&cl->format, &g_screen_info->pixformat, sizeof(RFB_PIXEL_FORMAT));
 
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
