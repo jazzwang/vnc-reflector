@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight.c,v 1.4 2002/09/21 12:43:01 const Exp $
+ * $Id: encode_tight.c,v 1.5 2003/04/16 17:31:47 const Exp $
  * Tight encoder.
  */
 
@@ -420,12 +420,16 @@ CheckSolidTile(FB_RECT *r, CARD32 *colorPtr, int needSameColor)
   if (needSameColor && colorValue != *colorPtr)
     return 0;
 
-  for (dy = 0; dy < r->h; dy++) {
-    for (dx = 0; dx < r->w; dx++) {
-      if (colorValue != fb_ptr[dx])
-        return 0;
-    }
-    fb_ptr += g_fb_width;
+  /* Check the first row. */
+  for (dx = 0; dx < r->w; dx++) {
+    if (colorValue != fb_ptr[dx])
+      return 0;
+  }
+
+  /* Check other rows -- memcmp() does it faster. */
+  for (dy = 1; dy < r->h; dy++) {
+    if (memcmp(fb_ptr, &fb_ptr[dy * g_fb_width], r->w * sizeof(CARD32)) != 0)
+      return 0;
   }
 
   *colorPtr = colorValue;
