@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.29 2001/08/24 07:57:40 const Exp $
+ * $Id: client_io.c,v 1.30 2001/08/24 09:15:12 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -335,7 +335,7 @@ static void rf_client_updatereq(void)
     else
       rlist_push_rect(&cl->pending_rects, &rect);
   } else {
-    memcpy(&cl->update_rect, &rect, sizeof(FB_RECT));
+    cl->update_rect = rect;
     log_write(LL_DEBUG, "Received framebuffer update request from %s",
               cur_slot->name);
   }
