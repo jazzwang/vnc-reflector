@@ -10,8 +10,8 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_hextile.c,v 1.1 2002/09/03 13:16:58 const Exp $
- * Decoding hextile-encoded rectangles.
+ * $Id: decode_hextile.c,v 1.2 2002/09/03 19:57:28 const Exp $
+ * Decoding Hextile-encoded rectangles.
  */
 
 #include <stdio.h>
@@ -27,18 +27,16 @@
 #include "rect.h"
 #include "host_io.h"
 
-static CARD8 hextile_subenc;
-static CARD8 hextile_num_subrects;
-static CARD32 hextile_bg;
-static CARD32 hextile_fg;
-static FB_RECT hextile_rect, hextile_tile;
+static CARD8 s_subenc;
+static CARD8 s_num_subrects;
+static CARD32 s_bg, s_fg;
+static FB_RECT s_rect, s_tile;
 
 static void rf_host_hextile_subenc(void);
 static void rf_host_hextile_raw(void);
 static void rf_host_hextile_hex(void);
 static void rf_host_hextile_subrects(void);
 
-static void hextile_fill_tile(void);
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim);
 static void hextile_next_tile(void);
 
@@ -47,12 +45,12 @@ static CARD32 hextile_buf[256 + 2];
 
 void setread_decode_hextile(FB_RECT *r)
 {
-  hextile_rect = *r;
+  s_rect = *r;
 
-  hextile_tile.x = hextile_rect.x;
-  hextile_tile.y = hextile_rect.y;
-  hextile_tile.w = (hextile_rect.w < 16) ? hextile_rect.w : 16;
-  hextile_tile.h = (hextile_rect.h < 16) ? hextile_rect.h : 16;
+  s_tile.x = s_rect.x;
+  s_tile.y = s_rect.y;
+  s_tile.w = (s_rect.w < 16) ? s_rect.w : 16;
+  s_tile.h = (s_rect.h < 16) ? s_rect.h : 16;
   aio_setread(rf_host_hextile_subenc, NULL, sizeof(CARD8));
 }
 
@@ -63,21 +61,21 @@ static void rf_host_hextile_subenc(void)
   /* Copy data for saving in a file if necessary */
   fbs_spool_data(cur_slot->readbuf, 1);
 
-  hextile_subenc = cur_slot->readbuf[0];
-  if (hextile_subenc & RFB_HEXTILE_RAW) {
-    data_size = hextile_tile.w * hextile_tile.h * sizeof(CARD32);
+  s_subenc = cur_slot->readbuf[0];
+  if (s_subenc & RFB_HEXTILE_RAW) {
+    data_size = s_tile.w * s_tile.h * sizeof(CARD32);
     aio_setread(rf_host_hextile_raw, hextile_buf, data_size);
     return;
   }
   data_size = 0;
-  if (hextile_subenc & RFB_HEXTILE_BG_SPECIFIED) {
+  if (s_subenc & RFB_HEXTILE_BG_SPECIFIED) {
     data_size += sizeof(CARD32);
   } else {
-    hextile_fill_tile();
+    fill_fb_rect(&s_tile, s_bg);
   }
-  if (hextile_subenc & RFB_HEXTILE_FG_SPECIFIED)
+  if (s_subenc & RFB_HEXTILE_FG_SPECIFIED)
     data_size += sizeof(CARD32);
-  if (hextile_subenc & RFB_HEXTILE_ANY_SUBRECTS)
+  if (s_subenc & RFB_HEXTILE_ANY_SUBRECTS)
     data_size += sizeof(CARD8);
   if (data_size) {
     aio_setread(rf_host_hextile_hex, hextile_buf, data_size);
@@ -92,15 +90,15 @@ static void rf_host_hextile_raw(void)
   CARD32 *from_ptr;
   CARD32 *fb_ptr;
 
-  fbs_spool_data(hextile_buf, hextile_tile.w * hextile_tile.h * sizeof(CARD32));
+  fbs_spool_data(hextile_buf, s_tile.w * s_tile.h * sizeof(CARD32));
 
   from_ptr = hextile_buf;
-  fb_ptr = &g_framebuffer[hextile_tile.y * (int)g_fb_width + hextile_tile.x];
+  fb_ptr = &g_framebuffer[s_tile.y * (int)g_fb_width + s_tile.x];
 
   /* Just copy raw data into the framebuffer */
-  for (row = 0; row < hextile_tile.h; row++) {
-    memcpy(fb_ptr, from_ptr, hextile_tile.w * sizeof(CARD32));
-    from_ptr += hextile_tile.w;
+  for (row = 0; row < s_tile.h; row++) {
+    memcpy(fb_ptr, from_ptr, s_tile.w * sizeof(CARD32));
+    from_ptr += s_tile.w;
     fb_ptr += g_fb_width;
   }
 
@@ -113,21 +111,21 @@ static void rf_host_hextile_hex(void)
   int data_size;
 
   /* Get background and foreground colors */
-  if (hextile_subenc & RFB_HEXTILE_BG_SPECIFIED) {
-    hextile_bg = *from_ptr++;
-    hextile_fill_tile();
+  if (s_subenc & RFB_HEXTILE_BG_SPECIFIED) {
+    s_bg = *from_ptr++;
+    fill_fb_rect(&s_tile, s_bg);
   }
-  if (hextile_subenc & RFB_HEXTILE_FG_SPECIFIED) {
-    hextile_fg = *from_ptr++;
+  if (s_subenc & RFB_HEXTILE_FG_SPECIFIED) {
+    s_fg = *from_ptr++;
   }
 
-  if (hextile_subenc & RFB_HEXTILE_ANY_SUBRECTS) {
+  if (s_subenc & RFB_HEXTILE_ANY_SUBRECTS) {
     fbs_spool_data(hextile_buf, (from_ptr - hextile_buf) * sizeof(CARD32) + 1);
-    hextile_num_subrects = *((CARD8 *)from_ptr);
-    if (hextile_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {
-      data_size = 6 * (unsigned int)hextile_num_subrects;
+    s_num_subrects = *((CARD8 *)from_ptr);
+    if (s_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {
+      data_size = 6 * (unsigned int)s_num_subrects;
     } else {
-      data_size = 2 * (unsigned int)hextile_num_subrects;
+      data_size = 2 * (unsigned int)s_num_subrects;
     }
     if (data_size > 0) {
       aio_setread(rf_host_hextile_subrects, NULL, data_size);
@@ -149,18 +147,18 @@ static void rf_host_hextile_subrects(void)
 
   ptr = cur_slot->readbuf;
 
-  if (hextile_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {
-    fbs_spool_data(ptr, hextile_num_subrects * 6);
-    for (i = 0; i < (int)hextile_num_subrects; i++) {
-      memcpy(&hextile_fg, ptr, sizeof(hextile_fg));
-      ptr += sizeof(hextile_fg);
+  if (s_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {
+    fbs_spool_data(ptr, s_num_subrects * 6);
+    for (i = 0; i < (int)s_num_subrects; i++) {
+      memcpy(&s_fg, ptr, sizeof(s_fg));
+      ptr += sizeof(s_fg);
       pos = *ptr++;
       dim = *ptr++;
       hextile_fill_subrect(pos, dim);
     }
   } else {
-    fbs_spool_data(ptr, hextile_num_subrects * 2);
-    for (i = 0; i < (int)hextile_num_subrects; i++) {
+    fbs_spool_data(ptr, s_num_subrects * 2);
+    for (i = 0; i < (int)s_num_subrects; i++) {
       pos = *ptr++;
       dim = *ptr++;
       hextile_fill_subrect(pos, dim);
@@ -174,22 +172,6 @@ static void rf_host_hextile_subrects(void)
 /* Helper functions */
 /********************/
 
-static void hextile_fill_tile(void)
-{
-  int x, y;
-  CARD32 *fb_ptr;
-
-  fb_ptr = &g_framebuffer[hextile_tile.y * (int)g_fb_width + hextile_tile.x];
-
-  /* Fill first row */
-  for (x = 0; x < hextile_tile.w; x++)
-    fb_ptr[x] = hextile_bg;
-
-  /* Copy first row into other rows */
-  for (y = 1; y < hextile_tile.h; y++)
-    memcpy(&fb_ptr[y * g_fb_width], fb_ptr, hextile_tile.w * sizeof(CARD32));
-}
-
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim)
 {
   int pos_x, pos_y, dim_w, dim_h;
@@ -198,12 +180,12 @@ static void hextile_fill_subrect(CARD8 pos, CARD8 dim)
 
   pos_x = pos >> 4 & 0x0F;
   pos_y = pos & 0x0F;
-  fb_ptr = &g_framebuffer[(hextile_tile.y + pos_y) * (int)g_fb_width +
-                          (hextile_tile.x + pos_x)];
+  fb_ptr = &g_framebuffer[(s_tile.y + pos_y) * (int)g_fb_width +
+                          (s_tile.x + pos_x)];
 
   /* Optimization for 1x1 subrects */
   if (dim == 0) {
-    *fb_ptr = hextile_fg;
+    *fb_ptr = s_fg;
     return;
   }
 
@@ -214,7 +196,7 @@ static void hextile_fill_subrect(CARD8 pos, CARD8 dim)
 
   for (y = 0; y <= dim_h; y++) {
     for (x = 0; x <= dim_w; x++) {
-      *fb_ptr++ = hextile_fg;
+      *fb_ptr++ = s_fg;
     }
     fb_ptr += skip;
   }
@@ -222,22 +204,22 @@ static void hextile_fill_subrect(CARD8 pos, CARD8 dim)
 
 static void hextile_next_tile(void)
 {
-  if (hextile_tile.x + 16 < hextile_rect.x + hextile_rect.w) {
+  if (s_tile.x + 16 < s_rect.x + s_rect.w) {
     /* Next tile in the same row */
-    hextile_tile.x += 16;
-    if (hextile_tile.x + 16 < hextile_rect.x + hextile_rect.w)
-      hextile_tile.w = 16;
+    s_tile.x += 16;
+    if (s_tile.x + 16 < s_rect.x + s_rect.w)
+      s_tile.w = 16;
     else
-      hextile_tile.w = hextile_rect.x + hextile_rect.w - hextile_tile.x;
-  } else if (hextile_tile.y + 16 < hextile_rect.y + hextile_rect.h) {
+      s_tile.w = s_rect.x + s_rect.w - s_tile.x;
+  } else if (s_tile.y + 16 < s_rect.y + s_rect.h) {
     /* First tile in the next row */
-    hextile_tile.x = hextile_rect.x;
-    hextile_tile.w = (hextile_rect.w < 16) ? hextile_rect.w : 16;
-    hextile_tile.y += 16;
-    if (hextile_tile.y + 16 < hextile_rect.y + hextile_rect.h)
-      hextile_tile.h = 16;
+    s_tile.x = s_rect.x;
+    s_tile.w = (s_rect.w < 16) ? s_rect.w : 16;
+    s_tile.y += 16;
+    if (s_tile.y + 16 < s_rect.y + s_rect.h)
+      s_tile.h = 16;
     else
-      hextile_tile.h = hextile_rect.y + hextile_rect.h - hextile_tile.y;
+      s_tile.h = s_rect.y + s_rect.h - s_tile.y;
   } else {
     fbupdate_rect_done();       /* No more tiles */
     return;

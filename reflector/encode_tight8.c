@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight8.c,v 1.4 2001/12/05 20:18:47 const Exp $
+ * $Id: encode_tight8.c,v 1.5 2002/09/03 19:57:28 const Exp $
  * Tight encoder.
  */
 
@@ -28,9 +28,6 @@
 #include "translate.h"
 #include "client_io.h"
 #include "encode.h"
-
-/* Note: The following constant should not be changed. */
-#define TIGHT_MIN_TO_COMPRESS 12
 
 /* Compression level stuff. The following array contains various
    encoder parameters for each of 10 compression levels (0..9).
@@ -240,7 +237,7 @@ static int compress_data(CARD8 *buf, CL_SLOT *cl,
   int old_avail_out, compressed_len, size_field_len;
 
   /* Don't try to compress small data chunks */
-  if (data_len < TIGHT_MIN_TO_COMPRESS) {
+  if (data_len < RFB_TIGHT_MIN_TO_COMPRESS) {
     memcpy(buf, s_buf_pixels, data_len);
     return data_len;
   }

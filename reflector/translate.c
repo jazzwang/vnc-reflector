@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: translate.c,v 1.8 2001/10/11 16:50:18 const Exp $
+ * $Id: translate.c,v 1.9 2002/09/03 19:57:28 const Exp $
  * Pixel format translation.
  */
 
@@ -170,8 +170,6 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)     \
  * slower than its straightforward equivalent.
  */
 
-
-
 #define DEFINE_TRANSFUNC_ALT(bpp)                               \
                                                                 \
 void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)     \
@@ -180,8 +178,8 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)     \
   CARD32 fb_pixel;                                              \
   CARD##bpp *dst_ptr = (CARD##bpp *)dst_buf;                    \
   CARD##bpp *tbl_r = (CARD##bpp *)table;                        \
-/*  CARD##bpp *tbl_g = tbl_r + 256; */                              \
-/*  CARD##bpp *tbl_b = tbl_g + 256; */                              \
+/*  CARD##bpp *tbl_g = tbl_r + 256; */                          \
+/*  CARD##bpp *tbl_b = tbl_g + 256; */                          \
   CARD##bpp pixel = 0;                                          \
   int x, y, w, h;                                               \
                                                                 \
@@ -197,8 +195,8 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)     \
       if (fb_pixel != *fb_ptr++) {                              \
         fb_pixel = *(fb_ptr - 1);                               \
         pixel = (tbl_r[fb_pixel >> 16 & 0xFF] |                 \
-                 tbl_r[256 + (fb_pixel >> 8 & 0xFF)] |                  \
-                 tbl_r[512 + (fb_pixel & 0xFF)]);                       \
+                 tbl_r[256 + (fb_pixel >> 8 & 0xFF)] |          \
+                 tbl_r[512 + (fb_pixel & 0xFF)]);               \
       }                                                         \
       *dst_ptr++ = pixel;                                       \
     }                                                           \

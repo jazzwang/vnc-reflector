@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.40 2002/09/03 13:16:58 const Exp $
+ * $Id: host_io.c,v 1.41 2002/09/03 19:57:28 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -255,7 +255,8 @@ static void rf_host_fbupdate_recthdr(void)
   fbs_spool_data(cur_slot->readbuf, 12);
 
   /* Handle LastRect "encoding" first */
-  if (cur_rect.enc == RFB_ENCODING_NEWFBSIZE) {
+  if (cur_rect.enc == RFB_ENCODING_LASTRECT) {
+    log_write(LL_DEBUG, "LastRect marker received from the host");
     cur_rect.x = cur_rect.y = 0;
     rect_count = 1;
     fbupdate_rect_done();
@@ -317,13 +318,17 @@ static void rf_host_fbupdate_recthdr(void)
                                cur_rect.x],
                 cur_rect.w * sizeof(CARD32));
     break;
+  case RFB_ENCODING_COPYRECT:
+    log_write(LL_DEBUG, "Receiving CopyRect instruction");
+    aio_setread(rf_host_copyrect, NULL, 4);
+    break;
   case RFB_ENCODING_HEXTILE:
     log_write(LL_DEBUG, "Receiving Hextile-encoded data");
     setread_decode_hextile(&cur_rect);
     break;
-  case RFB_ENCODING_COPYRECT:
-    log_write(LL_DEBUG, "Receiving CopyRect instruction");
-    aio_setread(rf_host_copyrect, NULL, 4);
+  case RFB_ENCODING_TIGHT:
+    log_write(LL_DEBUG, "Receiving Tight-encoded data");
+    setread_decode_tight(&cur_rect);
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX",
@@ -397,8 +402,32 @@ static void rf_host_copyrect(void)
   fbupdate_rect_done();
 }
 
+/********************************/
+/* Functions called by decoders */
+/********************************/
+
 /*
- * This function is used by decoders to tell that the whole rectangle
+ * In the framebuffer, fill a rectangle with a specified color.
+ */
+
+void fill_fb_rect(FB_RECT *r, CARD32 color)
+{
+  int x, y;
+  CARD32 *fb_ptr;
+
+  fb_ptr = &g_framebuffer[r->y * (int)g_fb_width + r->x];
+
+  /* Fill the first row */
+  for (x = 0; x < r->w; x++)
+    fb_ptr[x] = color;
+
+  /* Copy the first row into all other rows */
+  for (y = 1; y < r->h; y++)
+    memcpy(&fb_ptr[y * g_fb_width], fb_ptr, r->w * sizeof(CARD32));
+}
+
+/*
+ * This function is called by decoders after the whole rectangle
  * has been successfully decoded.
  */
 
@@ -526,6 +555,10 @@ void pass_cuttext_to_host(CARD8 *text, size_t len)
 /********************/
 /* Helper functions */
 /********************/
+
+/*
+ * Clear the framebuffer, invalidate hextile cache.
+ */
 
 static void reset_framebuffer(void)
 {

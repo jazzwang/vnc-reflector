@@ -10,7 +10,7 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.30 2002/09/03 13:16:58 const Exp $
+# $Id: Makefile,v 1.31 2002/09/03 19:57:28 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
@@ -35,11 +35,11 @@ PROG = 	vncreflector
 
 OBJS = 	main.o logging.o active.o actions.o host_connect.o d3des.o rfblib.o \
 	async_io.o host_io.o client_io.o encode.o rect.o translate.o \
-	control.o encode_tight8.o decode_hextile.o fbs_files.o
+	control.o encode_tight8.o decode_hextile.o decode_tight.o fbs_files.o
 
 SRCS =	main.c logging.c active.c actions.c host_connect.c d3des.c rfblib.c \
 	async_io.c host_io.c client_io.c encode.c rect.c translate.c \
-	control.c encode_tight8.c decode_hextile.c fbs_files.c
+	control.c encode_tight8.c decode_hextile.c decode_tight.c fbs_files.c
 
 CC = gcc
 MAKEDEPEND = gccmakedep
@@ -84,5 +84,7 @@ control.o: control.c rfblib.h async_io.h logging.h reflector.h rect.h \
 encode_tight8.o: encode_tight8.c rfblib.h reflector.h async_io.h rect.h \
   translate.h client_io.h encode.h
 decode_hextile.o: decode_hextile.c rfblib.h reflector.h async_io.h logging.h \
+  rect.h host_io.h
+decode_tight.o: decode_tight.c rfblib.h reflector.h async_io.h logging.h \
   rect.h host_io.h
 fbs_files.o: fbs_files.c rfblib.h reflector.h logging.h

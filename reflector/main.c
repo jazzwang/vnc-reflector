@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.43 2002/09/03 13:16:58 const Exp $
+ * $Id: main.c,v 1.44 2002/09/03 19:57:28 const Exp $
  * Main module
  */
 
@@ -444,7 +444,7 @@ static int init_screen_info(void)
     CARD8 test;
   } little_endian;
 
-  /* Set initial desktop name */
+  /* Set the initial desktop name */
   g_screen_info.name_length = 1;
   g_screen_info.name = malloc(2);
   if (g_screen_info.name == NULL) {
@@ -453,7 +453,7 @@ static int init_screen_info(void)
   }
   memcpy(g_screen_info.name, "?", 2);
 
-  /* Fill in PIXEL_FORMAT structure */
+  /* Fill in the PIXEL_FORMAT structure */
   g_screen_info.pixformat.bits_pixel = 32;
   g_screen_info.pixformat.color_depth = 24;
   g_screen_info.pixformat.true_color = 1;
@@ -468,12 +468,13 @@ static int init_screen_info(void)
   little_endian.value32 = 1;
   if (little_endian.test) {
     log_write(LL_DEBUG, "Our machine is little endian");
+    g_screen_info.pixformat.big_endian = 0;
   } else {
     log_write(LL_DEBUG, "Our machine is big endian");
     g_screen_info.pixformat.big_endian = 1;
   }
 
-  /* Make sure we would not try to free framebuffer */
+  /* Make sure we would not try to free the framebuffer */
   g_framebuffer = NULL;
 
   return 1;

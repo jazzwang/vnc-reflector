@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.26 2002/09/03 13:16:58 const Exp $
+ * $Id: host_connect.c,v 1.27 2002/09/03 19:57:28 const Exp $
  * Connecting to a VNC host
  */
 
@@ -355,7 +355,8 @@ static void rf_host_set_formats(void)
   unsigned char setencodings_msg[] = {
     2,                          /* Message id */
     0,                          /* Padding -- not used */
-    0, 5,                       /* Number of encodings */
+    0, 6,                       /* Number of encodings */
+    0, 0, 0, 7,                 /* Tight encoding */
     0, 0, 0, 5,                 /* Hextile encoding */
     0, 0, 0, 1,                 /* CopyRect encoding */
     0, 0, 0, 0,                 /* Raw encoding */
