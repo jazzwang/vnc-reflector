@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.30 2001/10/02 09:03:45 const Exp $
+ * $Id: main.c,v 1.31 2001/10/02 09:43:55 const Exp $
  * Main module
  */
 
@@ -39,6 +39,7 @@
  * Configuration options
  */
 
+static int   opt_no_banner;
 static int   opt_cl_listen_port;
 static char *opt_log_filename;
 static char *opt_passwd_filename;
@@ -88,11 +89,21 @@ int main(int argc, char **argv)
   /* Parse command line, exit on error */
   parse_args(argc, argv);
 
+  if (!opt_no_banner) {
+    fprintf(stderr,
+"VNC Reflector %s.  Copyright (C) 2001 HorizonLive.com, Inc.\n\n"
+"HorizonLive provides e-Learning and collaborative synchronous presentation\n"
+"solutions in a totally Web-based environment.  For more information about\n"
+"HorizonLive, please see our website at http://www.horizonlive.com/ .\n\n",
+            VERSION);
+  }
+
   if (!log_open(opt_log_filename, opt_file_loglevel,
                 (opt_foreground) ? opt_stderr_loglevel : -1)) {
     fprintf(stderr, "%s: error opening log file (ignoring this error)\n",
             argv[0]);
   }
+
   log_write(LL_MSG, "Starting VNC Reflector %s", VERSION);
 
   /* Fork the process to the background if necessary */
@@ -175,6 +186,7 @@ static void parse_args(int argc, char **argv)
   char *temp_pid_file = NULL;
   char temp_buf[32];            /* 32 bytes should be more than enough */
 
+  opt_no_banner = 0;
   opt_foreground = 0;
   opt_stderr_loglevel = -1;
   opt_file_loglevel = -1;
@@ -185,10 +197,13 @@ static void parse_args(int argc, char **argv)
   opt_fbs_prefix = NULL;
   opt_bind_ip = NULL;
 
-  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:i:s:b:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hqv:f:p:g:l:i:s:b:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
+      break;
+    case 'q':
+      opt_no_banner = 1;
       break;
     case 'v':
       if (opt_file_loglevel != -1)
@@ -276,7 +291,11 @@ static void parse_args(int argc, char **argv)
 
 static void report_usage(char *program_name)
 {
-  fprintf(stderr, "\nUsage: %s [OPTIONS...] HOST_INFO_FILE\n\n",
+  fprintf(stderr,
+          "VNC Reflector %s.  Copyright (C) 2001 HorizonLive.com, Inc.\n\n",
+          VERSION);
+
+  fprintf(stderr, "Usage: %s [OPTIONS...] HOST_INFO_FILE\n\n",
           program_name);
 
   fprintf(stderr,
@@ -303,13 +322,15 @@ static void report_usage(char *program_name)
           " at specified\n"
           "                    verbosity level (0..%d) [note: use %d for"
           " normal output]\n"
-          "  -h              - print this help message\n"
-          "\n"
+          "  -q              - suppress printing copyright banner at startup\n"
+          "  -h              - print this help message\n\n",
+          LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
+
+  fprintf(stderr,
           "Please refer to the README file for description of file formats"
           " for\n"
-          "  files HOST_INFO_FILE and PASSWD_FILE mentioned above in the help"
-          " text.\n\n",
-          LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
+          "  HOST_INFO_FILE and PASSWD_FILE files mentioned above in the help"
+          " text.\n\n");
 }
 
 static int read_password_file(void)

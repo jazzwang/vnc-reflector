@@ -13,9 +13,9 @@ All rights reserved.
 This software is released under the terms specified in the file LICENSE,
 included.  HorizonLive provides e-Learning and collaborative synchronous
 presentation solutions in a totally Web-based environment.  For more
-information about HorizonLive, please see our website at
+information about HorizonLive, please see our website:
 
-  http://www.horizonlive.com .
+  http://www.horizonlive.com/
 
 This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 and sponsored by HorizonLive.com, Inc.
@@ -38,6 +38,7 @@ Options:
   -v LOG_LEVEL    - set verbosity level for log file (0..6) [default: 4]
   -f LOG_LEVEL    - run in foreground, show logs on stderr at specified
                     verbosity level (0..6) [note: use 3 for normal output]
+  -q              - suppress printing copyright banner at startup
   -h              - print this help message
 
 
