@@ -10,7 +10,7 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.38 2004/08/08 08:05:16 const_k Exp $
+# $Id: Makefile,v 1.39 2004/08/08 08:18:26 const_k Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
@@ -89,6 +89,6 @@ encode_tight.o: region.h encode.h
 decode_hextile.o: rfblib.h reflector.h async_io.h logging.h host_io.h
 decode_tight.o: rfblib.h reflector.h async_io.h logging.h host_io.h
 decode_cursor.o: rfblib.h logging.h async_io.h translate.h client_io.h
-decode_cursor.o: region.h
+decode_cursor.o: region.h host_io.h reflector.h
 fbs_files.o: rfblib.h reflector.h logging.h
 region_more.o: rfblib.h region.h logging.h
