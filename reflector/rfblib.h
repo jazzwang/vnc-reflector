@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.6 2001/08/04 17:29:34 const Exp $
+ * $Id: rfblib.h,v 1.7 2001/08/06 23:30:31 const Exp $
  * RFB protocol definitions
  */
 
@@ -63,6 +63,23 @@ typedef struct _RFB_SCREEN_INFO {
   CARD32 name_length;
   CARD8 name[1];
 } RFB_SCREEN_INFO;
+
+/*
+ * Encodings
+ */
+
+#define RFB_ENCODING_RAW      0
+#define RFB_ENCODING_HEXTILE  5
+
+/*
+ * Hextile encoding
+ */
+
+#define HEXTILE_RAW                 1
+#define HEXTILE_BG_SPECIFIED        2
+#define HEXTILE_FG_SPECIFIED        4
+#define HEXTILE_ANY_SUBRECTS        8
+#define HEXTILE_SUBRECTS_COLOURED  16
 
 /*
  * Functions to compose/decompose bigger values from/into byte arrays.
