@@ -1,16 +1,25 @@
 # VNC Reflector
-# Copyright (C) 2001 Const Kaplinsky
+# Copyright (C) 2001 HorizonLive.com, Inc.  All rights reserved.
 #
-# $Id: Makefile,v 1.24 2001/08/24 05:55:50 const Exp $
+# This software is released under the terms specified in the file LICENSE,
+# included.  HorizonLive provides e-Learning and collaborative synchronous
+# presentation solutions in a totally Web-based environment.  For more
+# information about HorizonLive, please see our website at
+# http://www.horizonlive.com.
 #
-# Variables you might want to edit: CFLAGS, CONFFLAGS.
+# This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
+# and sponsored by HorizonLive.com, Inc.
+#
+# $Id: Makefile,v 1.25 2001/10/05 10:36:19 const Exp $
+#
+# Variables you might want to edit: CFLAGS, CONFFLAGS
 
 IFLAGS =	-I.
 
 # Production
 #CFLAGS =	-O2 $(IFLAGS)
 # Debug (strict)
-CFLAGS =	-g -pedantic $(IFLAGS)
+CFLAGS =	-g -pedantic -Wall $(IFLAGS)
 # Debug (profiling)
 #CFLAGS =	-g -pg $(IFLAGS)
 # Debug (normal)
@@ -19,15 +28,18 @@ CFLAGS =	-g -pedantic $(IFLAGS)
 # Use poll(2) syscall in async I/O instead of select(2)
 CONFFLAGS =	-DUSE_POLL
 
-LDFLAGS =
+# Link with zlib library
+LDFLAGS =	-lz
 
 PROG = 	vncreflector
 
 OBJS = 	main.o logging.o host_connect.o d3des.o rfblib.o async_io.o \
-	host_io.o client_io.o encode.o rect.o translate.o control.o
+	host_io.o client_io.o encode.o rect.o translate.o control.o \
+	encode_tight8.o
 
 SRCS =	main.c logging.c host_connect.c d3des.c rfblib.c async_io.c \
-	host_io.c client_io.c encode.c rect.c translate.c control.c
+	host_io.c client_io.c encode.c rect.c translate.c control.c \
+	encode_tight8.c
 
 CC = gcc
 MAKEDEPEND = gccmakedep
@@ -35,7 +47,7 @@ MAKEDEPEND = gccmakedep
 default: $(PROG)
 
 $(PROG): $(OBJS)
-	$(CC) $(CFLAGS) -o $(PROG) $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(PROG) $(LDFLAGS) $(OBJS)
 
 clean: 
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
@@ -49,7 +61,7 @@ depend: $(SRCS)
 
 # DO NOT DELETE
 main.o: main.c rfblib.h async_io.h logging.h reflector.h host_connect.h \
-  control.h rect.h translate.h client_io.h encode.h
+  control.h rect.h translate.h host_io.h client_io.h encode.h
 logging.o: logging.c logging.h
 host_connect.o: host_connect.c rfblib.h reflector.h logging.h async_io.h \
   host_io.h rect.h translate.h client_io.h encode.h host_connect.h
@@ -67,3 +79,5 @@ translate.o: translate.c rfblib.h reflector.h rect.h async_io.h translate.h \
   client_io.h
 control.o: control.c rfblib.h async_io.h logging.h reflector.h \
   host_connect.h host_io.h rect.h translate.h client_io.h control.h
+encode_tight8.o: encode_tight8.c rfblib.h reflector.h async_io.h rect.h \
+  translate.h client_io.h encode.h

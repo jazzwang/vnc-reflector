@@ -10,12 +10,13 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.18 2001/10/02 09:03:45 const Exp $
+ * $Id: host_connect.c,v 1.19 2001/10/05 10:36:19 const Exp $
  * Connecting to a VNC host
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -23,6 +24,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <ctype.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "reflector.h"
@@ -244,8 +246,6 @@ static void rf_host_ver(void)
 static void rf_host_auth(void)
 {
   HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
-  int success = 1;
-  char *reason;
   CARD32 value32;
 
   value32 = buf_get_CARD32(cur_slot->readbuf);

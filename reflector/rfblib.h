@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.14 2001/10/02 14:23:36 const Exp $
+ * $Id: rfblib.h,v 1.15 2001/10/05 10:36:19 const Exp $
  * RFB protocol definitions
  */
 
@@ -86,15 +86,30 @@ typedef struct _RFB_SCREEN_INFO {
 #define RFB_ENCODING_COMPESSLEVEL0  0xFFFFFF00
 #define RFB_ENCODING_COMPESSLEVEL9  0xFFFFFF09
 
+#define RFB_ENCODING_LASTRECT       0xFFFFFF20
+
 /*
  * Hextile encoding
  */
 
-#define HEXTILE_RAW                 1
-#define HEXTILE_BG_SPECIFIED        2
-#define HEXTILE_FG_SPECIFIED        4
-#define HEXTILE_ANY_SUBRECTS        8
-#define HEXTILE_SUBRECTS_COLOURED  16
+#define RFB_HEXTILE_RAW                   0x01
+#define RFB_HEXTILE_BG_SPECIFIED          0x02
+#define RFB_HEXTILE_FG_SPECIFIED          0x04
+#define RFB_HEXTILE_ANY_SUBRECTS          0x08
+#define RFB_HEXTILE_SUBRECTS_COLOURED     0x10
+
+/*
+ * Tight encoding
+ */
+
+#define RFB_TIGHT_EXPLICIT_FILTER         0x40
+#define RFB_TIGHT_FILL                    0x80
+#define RFB_TIGHT_JPEG                    0x09
+#define RFB_TIGHT_MAX_SUBENCODING         0x09
+
+#define RFB_TIGHT_FILTER_COPY             0x00
+#define RFB_TIGHT_FILTER_PALETTE          0x01
+#define RFB_TIGHT_FILTER_GRADIENT         0x02
 
 /*
  * Macros and functions to compose/decompose bigger values from/into

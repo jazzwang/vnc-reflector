@@ -10,13 +10,15 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: translate.c,v 1.5 2001/10/02 09:03:45 const Exp $
+ * $Id: translate.c,v 1.6 2001/10/05 10:36:19 const Exp $
  * Pixel format translation.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "reflector.h"

@@ -10,13 +10,15 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.8 2001/10/02 09:03:45 const Exp $
+ * $Id: encode.c,v 1.9 2001/10/05 10:36:19 const Exp $
  * Encoding screen rectangles.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "reflector.h"
@@ -27,6 +29,22 @@
 #include "encode.h"
 
 /*
+ * Tiny function to fill in rectangle header in an RFB update
+ */
+
+int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc)
+{
+
+  buf_put_CARD16(buf, r->x);
+  buf_put_CARD16(&buf[2], r->y);
+  buf_put_CARD16(&buf[4], r->w);
+  buf_put_CARD16(&buf[6], r->h);
+  buf_put_CARD32(&buf[8], enc);
+
+  return 12;                    /* 12 bytes written */
+}
+
+/*
  * Raw encoder
  */
 
@@ -34,11 +52,31 @@ AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r)
 {
   AIO_BLOCK *block;
 
-  block = malloc(sizeof(AIO_BLOCK) +
+  block = malloc(sizeof(AIO_BLOCK) + 12 +
                  r->w * r->h * (cl->format.bits_pixel / 8));
   if (block) {
-    (*cl->trans_func)(&block->data, r, cl->trans_table);
-    block->data_size = r->w * r->h * (cl->format.bits_pixel / 8);
+    put_rect_header(block->data, r, RFB_ENCODING_RAW);
+    (*cl->trans_func)(&block->data[12], r, cl->trans_table);
+    block->data_size = 12 + r->w * r->h * (cl->format.bits_pixel / 8);
+  }
+
+  return block;
+}
+
+/*
+ * CopyRect "encoder" :-)
+ */
+
+AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r)
+{
+  AIO_BLOCK *block;
+
+  block = malloc(sizeof(AIO_BLOCK) + 12 + 4);
+  if (block) {
+    put_rect_header(block->data, r, RFB_ENCODING_COPYRECT);
+    buf_put_CARD16(&block->data[12], r->src_x);
+    buf_put_CARD16(&block->data[14], r->src_y);
+    block->data_size = 12 + 4;
   }
 
   return block;
@@ -80,14 +118,16 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
   aligned_f = (r->x & 0x0F) == 0 && (r->y & 0x0F) == 0;
 
   /* Allocate a memory block of maximum possible size */
-  block = malloc(sizeof(AIO_BLOCK) +
+  block = malloc(sizeof(AIO_BLOCK) + 12 +
                  r->w * r->h * (cl->format.bits_pixel / 8) +
                  num_tiles);
   if (block == NULL)
     return NULL;
 
+  put_rect_header(block->data, r, RFB_ENCODING_HEXTILE);
+
   prev_bg_set = 0;
-  data_ptr = (CARD8 *)block->data;
+  data_ptr = (CARD8 *)&block->data[12];
   rx1 = r->x + r->w;
   ry1 = r->y + r->h;
   tile_r.h = 16;
@@ -154,7 +194,7 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
     s_cache_hits++;
 
     *dst++ = hints->subenc8;
-    if (hints->subenc8 & HEXTILE_RAW) {
+    if (hints->subenc8 & RFB_HEXTILE_RAW) {
         prev_bg_set = 0;
         memcpy(dst, &g_cache8[tile_ord * 256], 256);
         dst += 256;
@@ -163,13 +203,13 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
       if (prev_bg != bg || !prev_bg_set) {
         *dst++ = hints->bg8;
       } else {
-        *dst_buf &= ~HEXTILE_BG_SPECIFIED;
+        *dst_buf &= ~RFB_HEXTILE_BG_SPECIFIED;
       }
-      prev_bg = bg;                                                         \
-      prev_bg_set = 1;                                                      \
-      if (hints->subenc8 & HEXTILE_FG_SPECIFIED)
+      prev_bg = bg;
+      prev_bg_set = 1;
+      if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
         *dst++ = hints->fg8;
-      if (hints->subenc8 & HEXTILE_ANY_SUBRECTS) {
+      if (hints->subenc8 & RFB_HEXTILE_ANY_SUBRECTS) {
         data_size = (size_t)hints->datasize8 + 1;
         memcpy(dst, &g_cache8[tile_ord * 256], data_size);
         dst += data_size;
@@ -183,18 +223,18 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
     dst_bytes = encode_tile8(dst_buf, cl, r);
 
     hints->subenc8 = *dst++;
-    if (hints->subenc8 & HEXTILE_RAW) {
+    if (hints->subenc8 & RFB_HEXTILE_RAW) {
       memcpy(&g_cache8[tile_ord * 256], dst, 256);
     } else {
-      if (hints->subenc8 & HEXTILE_BG_SPECIFIED) {
+      if (hints->subenc8 & RFB_HEXTILE_BG_SPECIFIED) {
         hints->bg8 = *dst++;
       } else {
         hints->bg8 = (CARD8)bg;
-        hints->subenc8 |= HEXTILE_BG_SPECIFIED;
+        hints->subenc8 |= RFB_HEXTILE_BG_SPECIFIED;
       }
-      if (hints->subenc8 & HEXTILE_FG_SPECIFIED)
+      if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
         hints->fg8 = *dst++;
-      if (hints->subenc8 & HEXTILE_ANY_SUBRECTS) {
+      if (hints->subenc8 & RFB_HEXTILE_ANY_SUBRECTS) {
         data_size = (dst_buf + dst_bytes) - dst;
         hints->datasize8 = (CARD8)(data_size - 1);
         memcpy(&g_cache8[tile_ord * 256], dst, data_size);
@@ -232,30 +272,30 @@ static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
                                                                         \
   /* Set appropriate sub-encoding flags */                              \
   if (prev_bg != bg || !prev_bg_set) {                                  \
-    subenc |= HEXTILE_BG_SPECIFIED;                                     \
+    subenc |= RFB_HEXTILE_BG_SPECIFIED;                                 \
   }                                                                     \
   if (num_colors != 1) {                                                \
-    subenc |= HEXTILE_ANY_SUBRECTS;                                     \
+    subenc |= RFB_HEXTILE_ANY_SUBRECTS;                                 \
     if (num_colors == 0)                                                \
-      subenc |= HEXTILE_SUBRECTS_COLOURED;                              \
+      subenc |= RFB_HEXTILE_SUBRECTS_COLOURED;                          \
     else                                                                \
-      subenc |= HEXTILE_FG_SPECIFIED;                                   \
+      subenc |= RFB_HEXTILE_FG_SPECIFIED;                               \
   }                                                                     \
   *dst++ = subenc;                                                      \
   prev_bg = bg;                                                         \
   prev_bg_set = 1;                                                      \
                                                                         \
   /* Write subencoding-dependent heading data */                        \
-  if (subenc & HEXTILE_BG_SPECIFIED) {                                  \
+  if (subenc & RFB_HEXTILE_BG_SPECIFIED) {                              \
     BUF_PUT_PIXEL##bpp(dst, bg_color);                                  \
     dst += sizeof(CARD##bpp);                                           \
   }                                                                     \
-  if (subenc & HEXTILE_FG_SPECIFIED) {                                  \
+  if (subenc & RFB_HEXTILE_FG_SPECIFIED) {                              \
     color = (CARD##bpp)fg;                                              \
     BUF_PUT_PIXEL##bpp(dst, color);                                     \
     dst += sizeof(CARD##bpp);                                           \
   }                                                                     \
-  if (subenc & HEXTILE_ANY_SUBRECTS) {                                  \
+  if (subenc & RFB_HEXTILE_ANY_SUBRECTS) {                              \
       dst_num_subrects = dst;                                           \
       *dst++ = 0;                                                       \
   }                                                                     \
@@ -294,7 +334,7 @@ static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
         }                                                               \
       }                                                                 \
       /* Encode subrect of size (best_w * best_h) */                    \
-      if (subenc & HEXTILE_SUBRECTS_COLOURED) {                         \
+      if (subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {                     \
         if (dst + sizeof(CARD##bpp) + 2 >= dst_limit)                   \
           return encode_tile_raw##bpp(dst_buf, cl, r);                  \
                                                                         \
@@ -337,7 +377,7 @@ static int encode_tile_raw##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r) \
                                                                          \
   (*cl->trans_func)(raw_data, r, cl->trans_table);                       \
                                                                          \
-  *dst_buf++ = HEXTILE_RAW;                                              \
+  *dst_buf++ = RFB_HEXTILE_RAW;                                          \
   memcpy(dst_buf, raw_data, r->w * r->h * sizeof(CARD##bpp));            \
   prev_bg_set = 0;                                                       \
                                                                          \

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.32 2001/10/02 12:25:51 const Exp $
+ * $Id: main.c,v 1.33 2001/10/05 10:36:19 const Exp $
  * Main module
  */
 
@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "async_io.h"
@@ -32,6 +33,7 @@
 #include "control.h"
 #include "rect.h"
 #include "translate.h"
+#include "host_io.h"
 #include "client_io.h"
 #include "encode.h"
 
@@ -46,8 +48,6 @@ static char *opt_passwd_filename;
 static int   opt_foreground;
 static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
-static char  opt_hostname[256];
-static int   opt_hostport;
 static char  opt_pid_file[256];
 static char *opt_fbs_prefix;
 static char *opt_bind_ip;
@@ -186,8 +186,7 @@ int main(int argc, char **argv)
 static void parse_args(int argc, char **argv)
 {
   int err = 0;
-  int c, len;
-  char *pos;
+  int c;
   char *temp_pid_file = NULL;
   char temp_buf[32];            /* 32 bytes should be more than enough */
 
@@ -286,7 +285,7 @@ static void parse_args(int argc, char **argv)
   /* Append listening port number to pid filename */
   if (temp_pid_file != NULL) {
     sprintf(temp_buf, "%d", opt_cl_listen_port);
-    sprintf(opt_pid_file, "%.*s.%s", 255 - strlen(temp_buf) - 1,
+    sprintf(opt_pid_file, "%.*s.%s", (int)(255 - strlen(temp_buf) - 1),
             temp_pid_file, temp_buf);
   }
 
@@ -481,13 +480,14 @@ static int write_pid_file(void)
 
 static int remove_pid_file(void)
 {
-  if (opt_pid_file[0] == '\0')
-    return 1;
-
-  if (unlink(opt_pid_file) == 0) {
-    log_write(LL_DEBUG, "Removed pid file", opt_pid_file);
-  } else {
-    log_write(LL_WARN, "Error removing pid file: %s", opt_pid_file);
+  if (opt_pid_file[0] != '\0') {
+    if (unlink(opt_pid_file) == 0) {
+      log_write(LL_DEBUG, "Removed pid file", opt_pid_file);
+    } else {
+      log_write(LL_WARN, "Error removing pid file: %s", opt_pid_file);
+      return 0;
+    }
   }
+  return 1;
 }
 

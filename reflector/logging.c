@@ -10,13 +10,14 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: logging.c,v 1.2 2001/10/02 09:03:45 const Exp $
+ * $Id: logging.c,v 1.3 2001/10/05 10:36:19 const Exp $
  * Logging implementation
  */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <stdarg.h>
 
 #include "logging.h"

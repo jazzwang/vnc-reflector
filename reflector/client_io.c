@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.35 2001/10/02 14:23:36 const Exp $
+ * $Id: client_io.c,v 1.36 2001/10/05 10:36:19 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "logging.h"
@@ -70,6 +71,7 @@ void set_client_passwords(unsigned char *password, unsigned char *password_ro)
 void af_client_accept(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  int i;
 
   /* FIXME: Function naming is bad (client_accept_hook?). */
 
@@ -77,6 +79,9 @@ void af_client_accept(void)
   cl->connected = 0;
   cl->trans_table = NULL;
   aio_setclose(cf_client);
+
+  for (i = 0; i < 4; i++)
+    cl->zs_active[i] = 0;
 
   log_write(LL_MSG, "Accepted connection from %s", cur_slot->name);
 
@@ -87,6 +92,7 @@ void af_client_accept(void)
 static void cf_client(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  int i;
 
   if (cur_slot->errread_f) {
     if (cur_slot->io_errno) {
@@ -107,7 +113,14 @@ static void cf_client(void)
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
 
-  /* Free dynamically allocated memory */
+  /* Free zlib streams.
+     FIXME: Maybe put cleanup function in encoder. */
+  for (i = 0; i < 4; i++) {
+    if (cl->zs_active[i])
+      deflateEnd(&cl->zs_struct[i]);
+  }
+
+  /* Free dynamically allocated memory. */
   if (cl->trans_table != NULL)
     free(cl->trans_table);
 }
@@ -149,7 +162,6 @@ static void rf_client_ver(void)
 static void rf_client_auth(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
-  unsigned char key[8];
   unsigned char resp_rw[16];
   unsigned char resp_ro[16];
   unsigned char msg[4];
@@ -188,7 +200,6 @@ static void wf_client_auth_failed(void)
 static void rf_client_initmsg(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
-  FB_RECT rect;
   unsigned char msg_server_init[24];
 
   if (cur_slot->readbuf[0] == 0) {
@@ -305,6 +316,7 @@ static void rf_client_encodings_data(void)
   cl->enc_enable[RFB_ENCODING_RAW] = 1;
   cl->enc_prefer = RFB_ENCODING_RAW;
   cl->compress_level = -1;
+  cl->enable_lastrect = 0;
   for (i = 1; i < NUM_ENCODINGS; i++)
     cl->enc_enable[i] = 0;
 
@@ -327,10 +339,12 @@ static void rf_client_encodings_data(void)
       cl->compress_level = (int)(enc - RFB_ENCODING_COMPESSLEVEL0);
       log_write(LL_DETAIL, "Compression level %d requested by client %s",
                 cl->compress_level, cur_slot->name);
+    } else if (enc == RFB_ENCODING_LASTRECT) {
+      cl->enable_lastrect = 1;
     }
-    if (cl->compress_level < 0)
-      cl->compress_level = 6;   /* Default compression level */
   }
+  if (cl->compress_level < 0)
+    cl->compress_level = 6;   /* Default compression level */
 
   log_write(LL_DEBUG, "Encoding list set by %s", cur_slot->name);
   if (cl->enc_prefer == RFB_ENCODING_RAW) {
@@ -565,15 +579,10 @@ static void send_update(void)
   CARD8 msg_hdr[4] = {
     0, 0, 0, 1
   };
-  CARD8 rect_hdr[16] = {
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0                  /* Last four bytes -- only for CopyRect */
-  };
+  CARD8 rect_hdr[12];
   FB_RECT rect;
   AIO_BLOCK *block;
-  CARD32 encoding = RFB_ENCODING_RAW;
+  int use_tight_f = 0;
   AIO_FUNCPTR fn = NULL;
   int raw_bytes = 0, hextile_bytes = 0;
 
@@ -581,7 +590,13 @@ static void send_update(void)
             cl->pending_rects.num_rects, cur_slot->name);
 
   /* Prepare and send FramebufferUpdate message header */
-  buf_put_CARD16(&msg_hdr[2], cl->pending_rects.num_rects);
+  if ( cl->enc_prefer == RFB_ENCODING_TIGHT &&
+       cl->enable_lastrect && cl->bgr233_f ) {
+    buf_put_CARD16(&msg_hdr[2], 0xFFFF);
+    use_tight_f = 1;
+  } else {
+    buf_put_CARD16(&msg_hdr[2], cl->pending_rects.num_rects);
+  }
   aio_write(NULL, msg_hdr, 4);
 
   /* For each pending rectangle: */
@@ -590,43 +605,43 @@ static void send_update(void)
               (int)rect.w, (int)rect.h, (int)rect.x, (int)rect.y,
               cur_slot->name);
 
-    /* Prepare rectangle header */
-    buf_put_CARD16(rect_hdr, rect.x);
-    buf_put_CARD16(&rect_hdr[2], rect.y);
-    buf_put_CARD16(&rect_hdr[4], rect.w);
-    buf_put_CARD16(&rect_hdr[6], rect.h);
     if (rect.src_x != 0xFFFF && cl->enc_enable[RFB_ENCODING_COPYRECT]) {
-      encoding = RFB_ENCODING_COPYRECT;
-    } else if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
-      encoding = RFB_ENCODING_HEXTILE;
-    }
-    buf_put_CARD32(&rect_hdr[8], encoding);
-
-    /* If it's the last rectangle, install hook function which would
-       be called after all data has been sent. */
-    if (!cl->pending_rects.num_rects)
-      fn = wf_client_update_finished;
-
-    /* Send rectangle header, prepare and send rectangle data */
-    switch (encoding) {
-    case RFB_ENCODING_COPYRECT:
-      buf_put_CARD16(&rect_hdr[12], rect.src_x);
-      buf_put_CARD16(&rect_hdr[14], rect.src_y);
-      aio_write(fn, rect_hdr, 16);
-      break;
-    case RFB_ENCODING_HEXTILE:
-      aio_write(NULL, rect_hdr, 12);
+      /* CopyRect */
+      block = rfb_encode_copyrect_block(cl, &rect);
+    } else if (use_tight_f) {
+      /* Use Tight encoding */
+      rfb_encode_tight8(cl, &rect);
+      continue;                 /* Important! */
+    } else if ( cl->enc_prefer != RFB_ENCODING_RAW &&
+                cl->enc_enable[RFB_ENCODING_HEXTILE] ) {
+      /* Use Hextile encoding */
       block = rfb_encode_hextile_block(cl, &rect);
       if (block != NULL) {
         hextile_bytes += block->data_size;
         raw_bytes += rect.w * rect.h * (cl->format.bits_pixel / 8);
       }
-      aio_write_nocopy(fn, block);
-      break;
-    default: /* RFB_ENCODING_RAW */
-      aio_write(NULL, rect_hdr, 12);
-      aio_write_nocopy(fn, rfb_encode_raw_block(cl, &rect));
+    } else {
+      /* Use Raw encoding */
+      block = rfb_encode_raw_block(cl, &rect);
     }
+
+    /* If it's the last rectangle, install hook function which would
+       be called after all data has been sent. But do not do that if
+       we use Tight encoding since there would be one more rectangle
+       (LastRect marker) */
+    if (!cl->pending_rects.num_rects)
+      fn = wf_client_update_finished;
+
+    /* Send the rectangle.
+       FIXME: Check for block == NULL? */
+    aio_write_nocopy(fn, block);
+  }
+
+  /* Send LastRect marker. */
+  if (use_tight_f) {
+    rect.x = rect.y = rect.w = rect.h = 0;
+    put_rect_header(rect_hdr, &rect, RFB_ENCODING_LASTRECT);
+    aio_write(wf_client_update_finished, rect_hdr, 12);
   }
 
   if (hextile_bytes) {

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: control.c,v 1.4 2001/10/02 09:03:45 const Exp $
+ * $Id: control.c,v 1.5 2001/10/05 10:36:19 const Exp $
  * Processing signals to control reflector
  */
 
@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "async_io.h"

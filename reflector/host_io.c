@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.28 2001/10/02 14:23:36 const Exp $
+ * $Id: host_io.c,v 1.29 2001/10/05 10:36:19 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <zlib.h>
 
 #include "rfblib.h"
 #include "reflector.h"
@@ -392,20 +393,20 @@ static void rf_host_hextile_subenc(void)
     *s_fbs_buffer_ptr++ = cur_slot->readbuf[0];
 
   hextile_subenc = cur_slot->readbuf[0];
-  if (hextile_subenc & HEXTILE_RAW) {
+  if (hextile_subenc & RFB_HEXTILE_RAW) {
     data_size = hextile_rect.w * hextile_rect.h * sizeof(CARD32);
     aio_setread(rf_host_hextile_raw, hextile_buf, data_size);
     return;
   }
   data_size = 0;
-  if (hextile_subenc & HEXTILE_BG_SPECIFIED) {
+  if (hextile_subenc & RFB_HEXTILE_BG_SPECIFIED) {
     data_size += sizeof(CARD32);
   } else {
     hextile_fill_tile();
   }
-  if (hextile_subenc & HEXTILE_FG_SPECIFIED)
+  if (hextile_subenc & RFB_HEXTILE_FG_SPECIFIED)
     data_size += sizeof(CARD32);
-  if (hextile_subenc & HEXTILE_ANY_SUBRECTS)
+  if (hextile_subenc & RFB_HEXTILE_ANY_SUBRECTS)
     data_size += sizeof(CARD8);
   if (data_size) {
     aio_setread(rf_host_hextile_hex, hextile_buf, data_size);
@@ -446,26 +447,26 @@ static void rf_host_hextile_hex(void)
   int data_size, size;
 
   /* Get background and foreground colors */
-  if (hextile_subenc & HEXTILE_BG_SPECIFIED) {
+  if (hextile_subenc & RFB_HEXTILE_BG_SPECIFIED) {
     hextile_bg = *from_ptr++;
     hextile_fill_tile();
   }
-  if (hextile_subenc & HEXTILE_FG_SPECIFIED) {
+  if (hextile_subenc & RFB_HEXTILE_FG_SPECIFIED) {
     hextile_fg = *from_ptr++;
   }
 
   /* Copy data for saving in a file if necessary */
   if (s_fbs_fp != NULL) {
     size = (from_ptr - hextile_buf) * sizeof(CARD32);
-    if (hextile_subenc & HEXTILE_ANY_SUBRECTS)
+    if (hextile_subenc & RFB_HEXTILE_ANY_SUBRECTS)
       size++;
     memcpy(s_fbs_buffer_ptr, hextile_buf, size);
     s_fbs_buffer_ptr += size;
   }
 
-  if (hextile_subenc & HEXTILE_ANY_SUBRECTS) {
+  if (hextile_subenc & RFB_HEXTILE_ANY_SUBRECTS) {
     hextile_num_subrects = *((CARD8 *)from_ptr);
-    if (hextile_subenc & HEXTILE_SUBRECTS_COLOURED) {
+    if (hextile_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {
       data_size = 6 * (unsigned int)hextile_num_subrects;
     } else {
       data_size = 2 * (unsigned int)hextile_num_subrects;
@@ -489,14 +490,14 @@ static void rf_host_hextile_subrects(void)
   /* Copy data for saving in a file if necessary */
   if (s_fbs_fp != NULL) {
     size = (int)hextile_num_subrects;
-    size *= (hextile_subenc & HEXTILE_SUBRECTS_COLOURED) ? 6 : 2;
+    size *= (hextile_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) ? 6 : 2;
     memcpy(s_fbs_buffer_ptr, cur_slot->readbuf, size);
     s_fbs_buffer_ptr += size;
   }
 
   ptr = cur_slot->readbuf;
 
-  if (hextile_subenc & HEXTILE_SUBRECTS_COLOURED) {
+  if (hextile_subenc & RFB_HEXTILE_SUBRECTS_COLOURED) {
     for (i = 0; i < (int)hextile_num_subrects; i++) {
       memcpy(&hextile_fg, ptr, sizeof(hextile_fg));
       ptr += sizeof(hextile_fg);

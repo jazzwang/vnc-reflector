@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: async_io.h,v 1.14 2001/10/02 09:03:45 const Exp $
+ * $Id: async_io.h,v 1.15 2001/10/05 10:36:19 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -90,6 +90,7 @@ int aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size);
 int aio_listen(int port, AIO_FUNCPTR initfunc, AIO_FUNCPTR acceptfunc,
                size_t slot_size);
 int aio_walk_slots(AIO_FUNCPTR fn, int type);
+void aio_call_func(AIO_FUNCPTR fn, int fn_type);
 void aio_close(int fatal_f);
 void aio_close_other(AIO_SLOT *slot, int fatal_f);
 void aio_mainloop(void);
