@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.37 2002/07/25 16:59:48 const Exp $
+ * $Id: host_io.c,v 1.38 2002/09/02 14:26:52 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -317,7 +317,15 @@ static void rf_host_fbupdate_recthdr(void)
     return;
   }
 
-  /* Handle NewFBSize "encoding" first, as a special case */
+  /* Handle LastRect "encoding" first */
+  if (cur_rect.enc == RFB_ENCODING_NEWFBSIZE) {
+    cur_rect.x = cur_rect.y = 0;
+    rect_count = 1;
+    fbupdate_rect_done();
+    return;
+  }
+
+  /* Handle NewFBSize "encoding", as a special case */
   if (cur_rect.enc == RFB_ENCODING_NEWFBSIZE) {
     log_write(LL_INFO, "New host desktop geometry: %dx%d",
               (int)cur_rect.w, (int)cur_rect.h);
