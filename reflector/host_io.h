@@ -1,12 +1,14 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.h,v 1.4 2001/08/22 22:35:40 const Exp $
+ * $Id: host_io.h,v 1.5 2001/08/23 15:24:51 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
 #ifndef _REFLIB_HOST_IO_H
 #define _REFLIB_HOST_IO_H
+
+#define TYPE_HOST_SLOT  2
 
 void host_activate(void);
 void host_close_hook(void);

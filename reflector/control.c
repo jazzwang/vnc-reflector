@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: control.c,v 1.1 2001/08/23 10:52:32 const Exp $
+ * $Id: control.c,v 1.2 2001/08/23 15:24:51 const Exp $
  * Processing signals to control reflector
  */
 
@@ -24,11 +24,12 @@
 #define FUNC_CL_DISCONNECT   0
 #define FUNC_HOST_RECONNECT  1
 
-static void sh_disconnect_clients (int signo);
-static void sh_reconnect_to_host (int signo);
+static void sh_disconnect_clients(int signo);
+static void sh_reconnect_to_host(int signo);
 static void safe_disconnect_clients(void);
-static void fn_disconnect_client(void);
+static void fn_disconnect_client(AIO_SLOT *slot);
 static void safe_reconnect_to_host(void);
+static void fn_reconnect_to_host(AIO_SLOT *slot);
 
 /*
  * Function visible from outside
@@ -48,13 +49,13 @@ void set_control_signals(void)
 static void sh_disconnect_clients (int signo)
 {
   aio_call_func(safe_disconnect_clients, FUNC_CL_DISCONNECT);
-  signal (signo, sh_disconnect_clients);
+  signal(signo, sh_disconnect_clients);
 }
 
 static void sh_reconnect_to_host (int signo)
 {
   aio_call_func(safe_reconnect_to_host, FUNC_HOST_RECONNECT);
-  signal (signo, sh_reconnect_to_host);
+  signal(signo, sh_reconnect_to_host);
 }
 
 /*
@@ -67,13 +68,34 @@ static void safe_disconnect_clients(void)
   aio_walk_slots(fn_disconnect_client, TYPE_CL_SLOT);
 }
 
-static void fn_disconnect_client(void)
+static void fn_disconnect_client(AIO_SLOT *slot)
 {
+  AIO_SLOT *saved_slot = cur_slot;
+
+  cur_slot = slot;
   aio_close(0);
+  cur_slot = saved_slot;
 }
 
 static void safe_reconnect_to_host(void)
 {
+  log_write(LL_WARN, "Caught SIGUSR1 signal, re-connecting");
 
+  /* If host connection is active, aio_walk_slots would return 1 and
+     we would request re-connect after current host connection is
+     closed (fn_reconnect_to_host function). Otherwise (if there is no
+     host connection), just connect immediately. */
+
+  if (aio_walk_slots(fn_reconnect_to_host, TYPE_HOST_SLOT) == 0)
+    connect_to_host(NULL, 0);
 }
 
+static void fn_reconnect_to_host(AIO_SLOT *slot)
+{
+  AIO_SLOT *saved_slot = cur_slot;
+
+  cur_slot = slot;
+  aio_close(0);
+  host_request_reconnect();
+  cur_slot = saved_slot;
+}

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.11 2001/08/23 10:52:32 const Exp $
+ * $Id: host_connect.c,v 1.12 2001/08/23 15:24:51 const Exp $
  * Connecting to a VNC host
  */
 
@@ -25,6 +25,7 @@
 #include "client_io.h"
 #include "host_connect.h"
 
+static int parse_host_info(void);
 static void host_init_hook(void);
 static void rf_host_ver(void);
 static void rf_host_auth(void);
@@ -36,21 +37,37 @@ static void rf_host_initmsg(void);
 static void rf_host_set_formats(void);
 static int allocate_framebuffer(void);
 
-static CARD32 s_len;
-static unsigned char s_password[9];
+static int s_reconnect_f;
+
+static char *s_host_info_file;
 static int s_cl_listen_port;
 
+static char s_hostname[256];
+static int s_host_port;
+static unsigned char s_host_password[9];
+
+static CARD32 s_len;
+
 /* Connect to remote RFB host */
-int connect_to_host(char *host, int port, int cl_listen_port,
-                    unsigned char *password)
+int connect_to_host(char *host_info_file, int cl_listen_port)
 {
   int host_fd;
   struct hostent *phe;
   struct sockaddr_in host_addr;
 
-  log_write(LL_MSG, "Connecting to %s, port %d", host, port);
+  /* Save arguments in static variables, for later use */
+  if (host_info_file != NULL)
+    s_host_info_file = host_info_file;
+  if (cl_listen_port != 0)
+    s_cl_listen_port = cl_listen_port;
 
-  phe = gethostbyname(host);
+  /* Extract hostname, port and password from host info file */
+  if (!parse_host_info())
+    return 0;
+
+  log_write(LL_MSG, "Connecting to %s, port %d", s_hostname, s_host_port);
+
+  phe = gethostbyname(s_hostname);
   if (phe == NULL) {
     log_write(LL_ERROR, "Could not get host address: %s", strerror(errno));
     return 0;
@@ -58,7 +75,7 @@ int connect_to_host(char *host, int port, int cl_listen_port,
 
   host_addr.sin_family = AF_INET;
   memcpy(&host_addr.sin_addr.s_addr, phe->h_addr, phe->h_length);
-  host_addr.sin_port = htons((unsigned short)port);
+  host_addr.sin_port = htons((unsigned short)s_host_port);
 
   host_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (host_fd == -1) {
@@ -75,18 +92,87 @@ int connect_to_host(char *host, int port, int cl_listen_port,
 
   log_write(LL_MSG, "Connection established");
 
-  /* Copy arguments to static variables */
-  if (cl_listen_port != 0)
-    s_cl_listen_port = cl_listen_port;
-  strncpy((char *)s_password, (char *)password, sizeof(s_password) - 1);
-  s_password[sizeof(s_password) - 1] = '\0';
-
   aio_add_slot(host_fd, NULL, host_init_hook, sizeof(AIO_SLOT));
+  return 1;
+}
+
+void host_request_reconnect(void)
+{
+  s_reconnect_f = 1;
+}
+
+void host_maybe_reconnect(void)
+{
+  if (s_reconnect_f) {
+    connect_to_host(NULL, 0);
+    s_reconnect_f = 0;
+  }
+}
+
+static int parse_host_info(void)
+{
+  FILE *fp;
+  char buf[256];
+  char *pos, *colon_pos, *space_pos;
+  int len;
+
+  fp = fopen(s_host_info_file, "r");
+  if (fp == NULL) {
+    log_write(LL_ERROR, "Cannot open host info file: %s", s_host_info_file);
+    return 0;
+  }
+
+  /* Read the file into buffer first */
+  len = fread(buf, 1, 255, fp);
+  buf[len] = '\0';
+  fclose(fp);
+
+  if (len == 0) {
+    log_write(LL_ERROR, "Error reading host info file (is it empty?)");
+    return 0;
+  }
+
+  /* Truncate at the end of first line */
+  pos = strchr(buf, '\n');
+  if (pos != NULL)
+    *pos = '\0';
+
+  /* FIXME: parsing code below is primitive */
+
+  space_pos = strchr(buf, ' ');
+  if (space_pos != NULL) {
+    strncpy((char *)s_host_password, space_pos + 1, 8);
+    s_host_password[8] = '\0';
+    *space_pos = '\0';
+  } else {
+    log_write(LL_WARN, "Host password not specified, assuming no auth");
+    s_host_password[0] = '\0';
+  }
+
+  colon_pos = strchr(buf, ':');
+  if (colon_pos != NULL) {
+    if (!isdigit(colon_pos[1])) {
+      log_write(LL_ERROR, "Non-numeric host display number: %s",
+                colon_pos + 1);
+      return 0;
+    }
+    s_host_port = 5900 + atoi(colon_pos + 1);
+    *colon_pos = '\0';
+  } else {
+    log_write(LL_WARN, "Host display not specified, assuming display :0");
+    s_host_port = 5900;
+  }
+
+  strcpy(s_hostname, buf);
+
   return 1;
 }
 
 static void host_init_hook(void)
 {
+  s_reconnect_f = 0;
+
+  cur_slot->type = TYPE_HOST_SLOT;
   aio_setclose(host_close_hook);
   aio_setread(rf_host_ver, NULL, 12);
 }
@@ -166,7 +252,7 @@ static void rf_host_crypt(void)
 
   log_write(LL_DEBUG, "Received random challenge");
 
-  rfb_crypt(response, cur_slot->readbuf, s_password);
+  rfb_crypt(response, cur_slot->readbuf, s_host_password);
   log_write(LL_DEBUG, "Sending DES-encrypted response");
   aio_write(NULL, response, 16);
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.15 2001/08/23 11:42:19 const Exp $
+ * $Id: async_io.c,v 1.16 2001/08/23 15:24:51 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -68,7 +68,7 @@ static void aio_process_func_list(void);
 static void aio_accept_connection(void);
 static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 
-static void sh_interrupt (int signo);
+static void sh_interrupt(int signo);
 
 
 /*
@@ -235,20 +235,25 @@ int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
 
 /*
  * Iterate over a list of connection slots with specified type.
+ * Returns number of matching slots.
  */
 
-void aio_walk_slots(AIO_FUNCPTR fn, int type)
+int aio_walk_slots(AIO_FUNCPTR fn, int type)
 {
   AIO_SLOT *slot, *next_slot;
+  int count = 0;
 
   slot = s_first_slot;
   while (slot != NULL && !s_close_f) {
     next_slot = slot->next;
     if (slot->type == type) {
       (*fn)(slot);
+      count++;
     }
     slot = next_slot;
   }
+
+  return count;
 }
 
 /*
@@ -651,9 +656,9 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
  * Signal handler catching SIGTERM and SIGINT signals
  */
 
-static void sh_interrupt (int signo)
+static void sh_interrupt(int signo)
 {
   s_close_f = 1;
-  signal (signo, sh_interrupt);
+  signal(signo, sh_interrupt);
 }
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.18 2001/08/23 09:27:11 const Exp $
+ * $Id: host_io.c,v 1.19 2001/08/23 15:24:51 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -88,9 +88,16 @@ void host_close_hook(void)
     log_write(LL_ERROR, "Host I/O error");
   }
 
-  /* Close host connection, exit if framebuffer was not allocated. */
+  /* Close host connection, and exit if framebuffer was not allocated yet. */
   log_write(LL_WARN, "Closing connection to host");
-  aio_close(g_framebuffer == NULL);
+  if (g_framebuffer == NULL) {
+    aio_close(1);
+    return;
+  }
+  aio_close(0);
+
+  /* If we were asked to re-connect, let's do it */
+  host_maybe_reconnect();
 }
 
 /* Processing RFB messages */
@@ -418,9 +425,11 @@ void pass_msg_to_host(CARD8 *msg, size_t len)
 {
   AIO_SLOT *saved_slot = cur_slot;
 
-  cur_slot = host_slot;
-  aio_write(NULL, msg, len);
-  cur_slot = saved_slot;
+  if (host_slot_active) {
+    cur_slot = host_slot;
+    aio_write(NULL, msg, len);
+    cur_slot = saved_slot;
+  }
 }
 
 void pass_cuttext_to_host(CARD8 *text, size_t len)
@@ -430,12 +439,14 @@ void pass_cuttext_to_host(CARD8 *text, size_t len)
     6, 0, 0, 0, 0, 0, 0, 0
   };
 
-  buf_put_CARD32(&client_cuttext_hdr[4], (CARD32)len);
+  if (host_slot_active) {
+    buf_put_CARD32(&client_cuttext_hdr[4], (CARD32)len);
 
-  cur_slot = host_slot;
-  aio_write(NULL, client_cuttext_hdr, sizeof(client_cuttext_hdr));
-  aio_write(NULL, text, len);
-  cur_slot = saved_slot;
+    cur_slot = host_slot;
+    aio_write(NULL, client_cuttext_hdr, sizeof(client_cuttext_hdr));
+    aio_write(NULL, text, len);
+    cur_slot = saved_slot;
+  }
 }
 
 /********************/

@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.22 2001/08/23 10:52:32 const Exp $
+ * $Id: main.c,v 1.23 2001/08/23 15:24:51 const Exp $
  * Main module
  */
 
@@ -36,9 +36,10 @@ static char  opt_hostname[256];
 static int   opt_hostport;
 static char  opt_pidfile[256];
 
-static unsigned char opt_host_password[9];
 static unsigned char opt_client_password[9];
 static unsigned char opt_client_ro_password[9];
+
+static char *opt_host_info_file;
 
 /*
  * Global variables
@@ -99,8 +100,7 @@ int main(int argc, char **argv)
   aio_init();
 
   /* Main work */
-  if (connect_to_host(opt_hostname, opt_hostport, opt_cl_listen_port,
-                      opt_host_password)) {
+  if (connect_to_host(opt_host_info_file, opt_cl_listen_port)) {
     if (write_pid_file()) {
       set_control_signals();
       aio_mainloop();
@@ -216,40 +216,20 @@ static void parse_args(int argc, char **argv)
             temp_pidfile, temp_buf);
   }
 
-  /* Separate host name and host display number if exists */
-  pos = strchr(argv[optind], ':');
-  if (pos == NULL) {
-    opt_hostport = 5900;        /* Default to display :0 */
-    len = strlen(argv[optind]);
-  } else {
-    opt_hostport = 5900 + atoi(&pos[1]);
-    len = pos - argv[optind];
-  }
-
-  /* More diagnosis */
-  if (len == 0) {
-    fprintf(stderr, "%s: missing host name\n", argv[0]);
-    exit(1);
-  } else if (len > 255) {
-    fprintf(stderr, "%s: host name too long\n", argv[0]);
-    exit(1);
-  }
-
-  /* Save host name */
-  strncpy(opt_hostname, argv[optind], len);
-  opt_hostname[len] = '\0';
+  /* Save pointer to host info filename */
+  opt_host_info_file = argv[optind];
 }
 
 static void report_usage(char *program_name)
 {
-  fprintf(stderr, "\nUsage: %s [OPTIONS...] HOST[:DISPLAY]\n\n",
+  fprintf(stderr, "\nUsage: %s [OPTIONS...] HOST_INFO_FILE\n\n",
           program_name);
 
   fprintf(stderr,
           "Options:\n"
           "  -i PID_FILE     - write pid file, appending listening port"
           " to filename\n"
-          "  -p PASSWD_FILE  - read plaintext password file"
+          "  -p PASSWD_FILE  - read plaintext client password file"
           " [default: passwd]\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
@@ -260,25 +240,25 @@ static void report_usage(char *program_name)
           " [default: %d]\n"
           "  -f LOG_LEVEL    - run in foreground, show logs on stderr"
           " at specified\n"
-          "                    verbosity level (0..%d)\n"
+          "                    verbosity level (0..%d) [note: use %d for"
+          " normal output]\n"
           "  -h              - print this help message\n"
           "\n"
-          "Default host's display number is :0 (port 5900)\n\n"
-          "Password file may contain three lines with one password"
-          " on each line:\n"
-          "  host, client password, read-only client password.\n\n",
+          "Please refer to the README file for description of file formats"
+          " for\n"
+          "  files HOST_INFO_FILE and PASSWD_FILE mentioned above in the help"
+          " text.\n\n",
           LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
 }
 
 static int read_password_file(void)
 {
   FILE *passwd_fp;
-  unsigned char *password_ptr = opt_host_password;
+  unsigned char *password_ptr = opt_client_password;
   int line = 0, len = 0;
   int c;
 
   /* Fill passwords with zeros */
-  memset(opt_host_password, 0, 9);
   memset(opt_client_password, 0, 9);
   memset(opt_client_ro_password, 0, 9);
 
@@ -288,12 +268,12 @@ static int read_password_file(void)
   passwd_fp = fopen(opt_passwd_filename, "r");
   if (passwd_fp == NULL) {
     log_write(LL_WARN,
-              "Cannot open password file, assuming no authentication");
+              "No client password file, assuming no authentication");
     return 1;
   }
 
   /* Read password file */
-  while (line < 3) {
+  while (line < 2) {
     c = getc(passwd_fp);
     if (c != '\n' && c != EOF && len < 8) {
       password_ptr[len++] = c;
@@ -311,38 +291,28 @@ static int read_password_file(void)
         break;
       /* Empty password means no authentication */
       if (len == 0) {
-        log_write(LL_WARN, "Got empty password, hoping no auth can be ok");
+        log_write(LL_WARN, "Got empty client password, hoping no auth is ok");
       }
       /* End of line */
-      switch (++line) {
-      case 1:
-        password_ptr = opt_client_password;
-        break;
-      case 2:
+      if (++line == 1) {
         password_ptr = opt_client_ro_password;
-        break;
       }
       len = 0;
     }
   }
   if (len == 0) {
     if (line == 0) {
-      log_write(LL_WARN, "Got empty host password, assuming no auth");
+      log_write(LL_WARN, "Client password not specified, assuming no auth");
     } else {
       line--;
     }
   }
 
-  log_write(LL_DETAIL, "Got %d password(s) from file, including empty ones",
+  log_write(LL_DEBUG, "Got %d password(s) from file, including empty ones",
             line + 1);
 
-  /* Provide reasonable defaults if not all three passwords set */
+  /* Provide reasonable defaults if not all two passwords set */
   if (line == 0) {
-    log_write(LL_WARN, "Client password not specified, using host's one");
-    strcpy((char *)opt_client_password, (char *)opt_host_password);
-    line++;
-  }
-  if (line == 1) {
     log_write(LL_DETAIL, "Read-only client password not specified");
     strcpy((char *)opt_client_ro_password, (char *)opt_client_password);
   }

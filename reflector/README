@@ -1,0 +1,63 @@
+                         ===================
+                          VNC Reflector 0.9
+                         ===================
+
+Command-line usage
+~~~~~~~~~~~~~~~~~~
+
+./vncreflector [OPTIONS...] HOST_INFO_FILE
+
+Options:
+  -i PID_FILE     - write pid file, appending listening port to filename
+  -p PASSWD_FILE  - read plaintext client password file [default: passwd]
+  -l LISTEN_PORT  - port to listen for client connections [default: 5999]
+  -g LOG_FILE     - write logs to specified file [default: reflector.log]
+  -v LOG_LEVEL    - set verbosity level for log file (0..6) [default: 4]
+  -f LOG_LEVEL    - run in foreground, show logs on stderr at specified
+                    verbosity level (0..6) [note: use 3 for normal output]
+  -h              - print this help message
+
+
+Format of the HOST_INFO_FILE
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+HOST_INFO_FILE provides information about the host to connect to. It's
+first line should begin with hostname (or with an asterisk if we would
+wait for reversed host->reflector connection). Next thing is VNC
+display number after a colon (or a port number, for reversed
+connections), then follows plaintext host password after a space.
+
+Sample to connect to some.hostname.com's display :0 (port 5900):
+
+=== cut ===
+some.hostname.com:0 PaS$w0rD
+=== cut ===
+
+Sample to listen for host connection on the port 5998:
+
+=== cut ===
+*:5998 PaS$w0rD
+=== cut ===
+
+Format of the PASSWD_FILE
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+PASSWD_FILE keeps passwords for client connections.
+
+It may contain two lines with one password on each line. First line is
+for full-control client password, second line is for read-only client
+password. Empty lines denote no authentication. If the file contains
+one line, then there is no read-only password, and all clients would
+have been granted full-control access.
+
+Control signals
+~~~~~~~~~~~~~~~
+
+  * SIGHUP signal causes VNC Reflector to disconnect all connected
+    clients.
+
+  * SIGUSR1 signal tells VNC Reflector that it should re-read
+    HOST_INFO_FILE and to re-connect to host specified there
+    preserving client connections. Note that in the current version,
+    desktop geometry of all hosts should be the same.
+
