@@ -39,16 +39,18 @@ depend: $(SRCS)
 
 # DO NOT DELETE
 main.o: main.c rfblib.h async_io.h logging.h reflector.h rect.h \
-  host_connect.h host_io.h client_io.h
+  host_connect.h host_io.h translate.h client_io.h
 logging.o: logging.c logging.h
 host_connect.o: host_connect.c rfblib.h logging.h host_connect.h d3des.h
 d3des.o: d3des.c d3des.h
 rfblib.o: rfblib.c rfblib.h
 async_io.o: async_io.c async_io.h
 host_io.o: host_io.c rfblib.h reflector.h async_io.h logging.h rect.h \
-  client_io.h host_io.h
+  translate.h client_io.h host_io.h
 client_io.o: client_io.c rfblib.h logging.h async_io.h reflector.h rect.h \
-  encode.h host_io.h client_io.h d3des.h
-encode.o: encode.c rfblib.h reflector.h async_io.h rect.h client_io.h encode.h
+  host_io.h translate.h client_io.h encode.h d3des.h
+encode.o: encode.c rfblib.h reflector.h async_io.h rect.h translate.h \
+  client_io.h encode.h
 rect.o: rect.c rfblib.h rect.h
-translate.o: translate.c rfblib.h reflector.h rect.h
+translate.o: translate.c rfblib.h reflector.h rect.h async_io.h translate.h \
+  client_io.h

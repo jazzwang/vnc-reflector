@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.18 2001/08/15 12:20:44 const Exp $
+ * $Id: main.c,v 1.19 2001/08/19 13:56:42 const Exp $
  * Main module
  */
 
@@ -20,6 +20,7 @@
 #include "rect.h"
 #include "host_connect.h"
 #include "host_io.h"
+#include "translate.h"
 #include "client_io.h"
 
 /*

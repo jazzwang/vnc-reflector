@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: translate.c,v 1.1 2001/08/18 10:44:27 const Exp $
+ * $Id: translate.c,v 1.2 2001/08/19 13:56:42 const Exp $
  * Pixel format translation.
  */
 
@@ -12,6 +12,21 @@
 #include "rfblib.h"
 #include "reflector.h"
 #include "rect.h"
+#include "async_io.h"
+#include "translate.h"
+#include "client_io.h"
+
+#define SWAP_PIXEL8(pixel)  (pixel)
+
+#define SWAP_PIXEL16(pixel)                     \
+  (((pixel) << 8 & 0xFF00) |                    \
+   ((pixel) >> 8 & 0x00FF))
+
+#define SWAP_PIXEL32(pixel)                     \
+  (((pixel) << 24 & 0xFF000000) |               \
+   ((pixel) << 8  & 0x00FF0000) |               \
+   ((pixel) >> 8  & 0x0000FF00) |               \
+   ((pixel) >> 24 & 0x000000FF))
 
 static void *gen_trans_table8(RFB_PIXEL_FORMAT *fmt);
 static void *gen_trans_table16(RFB_PIXEL_FORMAT *fmt);
@@ -30,43 +45,80 @@ void *gen_trans_table(RFB_PIXEL_FORMAT *fmt)
   return NULL;
 }
 
-#define DEFINE_GEN_TRANS_TABLE(bpp)                                           \
-                                                                              \
-static void *gen_trans_table##bpp(RFB_PIXEL_FORMAT *fmt)                      \
-{                                                                             \
-  CARD##bpp *table;                                                           \
-  int c;                                                                      \
-                                                                              \
-  /* Allocate space for 3 tables for 8-bit R, G, B components */              \
-  table = malloc(256 * 3 * sizeof(CARD##bpp));                                \
-  if (table == NULL)                                                          \
-    return NULL;                                                              \
-                                                                              \
-  /* Fill in translation tables */                                            \
-  for (c = 0; c < 255; c++) {                                                 \
-    table[c] = (CARD##bpp)(c * fmt->r_max + 127) / 255 << fmt->r_shift;       \
-    table[256 + c] = (CARD##bpp)(c * fmt->g_max + 127) / 255 << fmt->g_shift; \
-    table[512 + c] = (CARD##bpp)(c * fmt->b_max + 127) / 255 << fmt->b_shift; \
-  }                                                                           \
-                                                                              \
-  return table;                                                               \
+#define DEFINE_GEN_TRANS_TABLE(bpp)                                     \
+                                                                        \
+static void *gen_trans_table##bpp(RFB_PIXEL_FORMAT *fmt)                \
+{                                                                       \
+  CARD##bpp *table;                                                     \
+  CARD##bpp r, g, b;                                                    \
+  int c;                                                                \
+                                                                        \
+  /* Allocate space for 3 tables for 8-bit R, G, B components */        \
+  table = malloc(256 * 3 * sizeof(CARD##bpp));                          \
+                                                                        \
+  /* Fill in translation tables */                                      \
+  if (table != NULL) {                                                  \
+    for (c = 0; c < 256; c++) {                                         \
+      r = (CARD##bpp)((c * fmt->r_max + 127) / 255 << fmt->r_shift);    \
+      g = (CARD##bpp)((c * fmt->g_max + 127) / 255 << fmt->g_shift);    \
+      b = (CARD##bpp)((c * fmt->b_max + 127) / 255 << fmt->b_shift);    \
+      if ((fmt->big_endian != 0) ==                                     \
+          (g_screen_info->pixformat.big_endian != 0)) {                 \
+        table[c] = r;                                                   \
+        table[256 + c] = g;                                             \
+        table[512 + c] = b;                                             \
+      } else {                                                          \
+        table[c] = SWAP_PIXEL##bpp(r);                                  \
+        table[256 + c] = SWAP_PIXEL##bpp(g);                            \
+        table[512 + c] = SWAP_PIXEL##bpp(b);                            \
+      }                                                                 \
+    }                                                                   \
+  }                                                                     \
+                                                                        \
+  return (void *)table;                                                 \
 }
 
 DEFINE_GEN_TRANS_TABLE(8)
 DEFINE_GEN_TRANS_TABLE(16)
 DEFINE_GEN_TRANS_TABLE(32)
 
-void transfunc_null(CARD32 *dst_buf, FB_RECT *r)
+void transfunc_null(void *dst_buf, FB_RECT *r, void *table)
 {
   CARD32 *fb_ptr;
+  CARD32 *dst_ptr = (CARD32 *)dst_buf;
   int y;
 
   fb_ptr = &g_framebuffer[r->y * g_screen_info->width + r->x];
 
   for (y = 0; y < r->h; y++) {
-    memcpy(dst_buf, fb_ptr, r->w * sizeof(CARD32));
+    memcpy(dst_ptr, fb_ptr, r->w * sizeof(CARD32));
     fb_ptr += g_screen_info->width;
-    dst_buf += r->w;
+    dst_ptr += r->w;
   }
 }
+
+#define DEFINE_TRANSFUNC(bpp)                                           \
+                                                                        \
+void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
+{                                                                       \
+  CARD32 *fb_ptr;                                                       \
+  CARD##bpp *dst_ptr = (CARD##bpp *)dst_buf;                            \
+  CARD##bpp *tbl_ptr = (CARD##bpp *)table;                              \
+  int x, y;                                                             \
+                                                                        \
+  fb_ptr = &g_framebuffer[r->y * g_screen_info->width + r->x];          \
+  for (y = 0; y < r->h; y++) {                                          \
+    for (x = 0; x < r->w; x++) {                                        \
+      *dst_ptr++ = (CARD##bpp)(tbl_ptr[*fb_ptr >> 16 & 0xFF] |          \
+                               tbl_ptr[256 + (*fb_ptr >> 8 & 0xFF)] |   \
+                               tbl_ptr[512 + (*fb_ptr & 0xFF)]);        \
+      fb_ptr++;                                                         \
+    }                                                                   \
+    fb_ptr += (g_screen_info->width - r->w);                            \
+  }                                                                     \
+}
+
+DEFINE_TRANSFUNC(8)
+DEFINE_TRANSFUNC(16)
+DEFINE_TRANSFUNC(32)
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.21 2001/08/15 12:20:44 const Exp $
+ * $Id: client_io.c,v 1.22 2001/08/19 13:56:42 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -15,9 +15,10 @@
 #include "async_io.h"
 #include "reflector.h"
 #include "rect.h"
-#include "encode.h"
 #include "host_io.h"
+#include "translate.h"
 #include "client_io.h"
+#include "encode.h"
 #include "d3des.h"
 
 static unsigned char *s_password;
@@ -45,6 +46,7 @@ static void rf_client_ptrevent(void);
 static void rf_client_cuttext_hdr(void);
 static void rf_client_cuttext_data(void);
 
+static void set_trans_func(CL_SLOT *cl);
 static void send_update(void);
 
 /*
@@ -65,6 +67,7 @@ void af_client_accept(void)
 
   cur_slot->type = TYPE_CL_SLOT;
   cl->connected = 0;
+  cl->trans_table = NULL;
   aio_setclose(cf_client);
 
   log_write(LL_MSG, "Accepted connection from %s", cur_slot->name);
@@ -75,6 +78,8 @@ void af_client_accept(void)
 
 static void cf_client(void)
 {
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+
   if (cur_slot->errread_f) {
     if (cur_slot->io_errno) {
       log_write(LL_WARN, "Error reading from %s: %s",
@@ -91,6 +96,10 @@ static void cf_client(void)
     }
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
+
+  /* Free dynamically allocated memory */
+  if (cl->trans_table != NULL)
+    free(cl->trans_table);
 }
 
 static void rf_client_ver(void)
@@ -200,6 +209,7 @@ static void rf_client_initmsg(void)
 
   /* Set up initial pixel format */
   memcpy(&cl->format, &g_screen_info->pixformat, sizeof(RFB_PIXEL_FORMAT));
+  cl->trans_func = transfunc_null;
 
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
@@ -257,8 +267,14 @@ static void rf_client_pixfmt(void)
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
 
   buf_get_pixfmt(&cur_slot->readbuf[3], &cl->format);
+  if (cl->trans_table != NULL)
+    free(cl->trans_table);
+
   log_write(LL_DETAIL, "Pixel format (%d bpp) set by %s",
             cl->format.bits_pixel, cur_slot->name);
+
+  set_trans_func(cl);
+
   aio_setread(rf_client_msg, NULL, 1);
 }
 
@@ -461,6 +477,45 @@ void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, size_t len)
  * Non-callback functions
  */
 
+static void set_trans_func(CL_SLOT *cl)
+{
+  if (cl->trans_table != NULL) {
+    free(cl->trans_table);
+    cl->trans_table = NULL;
+    cl->trans_func = transfunc_null;
+  }
+
+  if ( cl->format.bits_pixel != g_screen_info->pixformat.bits_pixel ||
+       cl->format.color_depth != g_screen_info->pixformat.color_depth ||
+       cl->format.big_endian != g_screen_info->pixformat.big_endian ||
+       ((cl->format.true_color != 0) !=
+        (g_screen_info->pixformat.true_color != 0)) ||
+       cl->format.r_max != g_screen_info->pixformat.r_max ||
+       cl->format.g_max != g_screen_info->pixformat.g_max ||
+       cl->format.b_max != g_screen_info->pixformat.b_max ||
+       cl->format.r_shift != g_screen_info->pixformat.r_shift ||
+       cl->format.g_shift != g_screen_info->pixformat.g_shift ||
+       cl->format.b_shift != g_screen_info->pixformat.b_shift ) {
+
+    cl->trans_table = gen_trans_table(&cl->format);
+    switch(cl->format.bits_pixel) {
+    case 8:
+      cl->trans_func = transfunc8;
+      break;
+    case 16:
+      cl->trans_func = transfunc16;
+      break;
+    case 32:
+      cl->trans_func = transfunc32;
+      break;
+    }
+    log_write(LL_DEBUG, "Pixel format translation tables prepared");
+
+  } else {
+    log_write(LL_DETAIL, "No pixel format translation needed");
+  }
+}
+
 static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
@@ -492,7 +547,7 @@ static void send_update(void)
     }
     aio_write(NULL, rect_hdr, 12);
     if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
-      block = rfb_encode_hextile_block(&cl->format, &rect);
+      block = rfb_encode_hextile_block(cl, &rect);
       if (block != NULL) {
         hextile_bytes += block->data_size;
         raw_bytes += rect.w * rect.h * (cl->format.bits_pixel / 8);
@@ -500,7 +555,7 @@ static void send_update(void)
       aio_write_nocopy(wf_client_update_finished, block);
     } else {
       aio_write_nocopy(wf_client_update_finished,
-                       rfb_encode_raw_block(&cl->format, &rect));
+                       rfb_encode_raw_block(cl, &rect));
     }
   }
 

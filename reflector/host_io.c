@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.13 2001/08/08 14:42:08 const Exp $
+ * $Id: host_io.c,v 1.14 2001/08/19 13:56:42 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -15,6 +15,7 @@
 #include "async_io.h"
 #include "logging.h"
 #include "rect.h"
+#include "translate.h"
 #include "client_io.h"
 #include "host_io.h"
 
