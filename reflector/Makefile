@@ -45,7 +45,7 @@ host_connect.o: host_connect.c rfblib.h logging.h host_connect.h d3des.h
 d3des.o: d3des.c d3des.h
 rfblib.o: rfblib.c rfblib.h
 async_io.o: async_io.c async_io.h
-host_io.o: host_io.c rfblib.h  reflector.h async_io.h logging.h rect.h \
+host_io.o: host_io.c rfblib.h reflector.h async_io.h logging.h rect.h \
   client_io.h host_io.h
 client_io.o: client_io.c rfblib.h logging.h async_io.h reflector.h rect.h \
   encode.h host_io.h client_io.h d3des.h
