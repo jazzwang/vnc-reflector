@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: dispatch.c,v 1.2 2001/08/01 16:06:07 const Exp $
+ * $Id: dispatch.c,v 1.3 2001/08/02 09:35:21 const Exp $
  * Watching I/O events, dispatching control flow.
  */
 
@@ -183,7 +183,7 @@ static void rf_host_fbupdate_recthdr(void)
                  rect_w * rect_h * sizeof(CARD32));
     break;
   default:
-    log_write(LL_ERROR, "Unknown encoding: %0x08lX", (unsigned long)rect_enc);
+    log_write(LL_ERROR, "Unknown encoding: 0x%08lX", (unsigned long)rect_enc);
     set_readfunc(rf_host_msg, inbuf_host, 1);
   }
 }
