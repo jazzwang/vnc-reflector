@@ -10,14 +10,14 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: reflector.h,v 1.26 2002/09/03 13:16:58 const Exp $
+ * $Id: reflector.h,v 1.27 2002/09/09 07:27:45 const Exp $
  * Global include file
  */
 
 #ifndef _REF_REFLECTOR_H
 #define _REF_REFLECTOR_H
 
-#define VERSION  "1.1.9"
+#define VERSION  "1.2.0"
 
 /* FIXME: Too many header files with too many dependencies */
 
