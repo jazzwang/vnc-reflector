@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.18 2001/10/11 08:56:30 const Exp $
+ * $Id: encode.c,v 1.19 2001/10/11 09:27:31 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -550,38 +550,44 @@ DEFINE_ENCODE_TILE_RAW(32)
  * Hextile encoder, therefore it's not declared as static.
  */
 
-#define DEFINE_ANALYZE_RECT(bpp)                                             \
-                                                                             \
-static void analyze_rect##bpp(CARD##bpp *buf, PALETTE2 *pal, FB_RECT *r)     \
-{                                                                            \
-  int i;                                                                     \
-  int bg_count = 0, fg_count = 0;                                            \
-  CARD32 pixel;                                                              \
-                                                                             \
-  pal->bg = pal->fg = (CARD32)*buf++;                                        \
-  pal->num_colors = 1;                                                       \
-  for (i = 1; i < r->h * r->w; i++) {                                        \
-    pixel = (CARD32)*buf++;                                                  \
-    if (pixel == pal->bg) {                                                  \
-      bg_count++;                                                            \
-    } else if (pixel == pal->fg) {                                           \
-      fg_count++;                                                            \
-    } else if (pal->num_colors == 1) {                                       \
-      pal->num_colors++;        /* Two different colors */                   \
-      pal->fg = pixel;                                                       \
-      fg_count++;                                                            \
-    } else {                                                                 \
-      pal->num_colors = 0;      /* More than two different colors */         \
-      break;                                                                 \
-    }                                                                        \
-  }                                                                          \
-                                                                             \
-  /* Background color is one that occupies more pixels */                    \
-  if (fg_count > bg_count) {                                                 \
-    pixel = pal->bg;                                                         \
-    pal->bg = pal->fg;                                                       \
-    pal->fg = pixel;                                                         \
-  }                                                                          \
+#define DEFINE_ANALYZE_RECT(bpp)                                         \
+                                                                         \
+static void analyze_rect##bpp(CARD##bpp *buf, PALETTE2 *pal, FB_RECT *r) \
+{                                                                        \
+  CARD##bpp c0, c1;                                                      \
+  int i, n0, n1;                                                         \
+  int num_pixels = r->w * r->h;                                          \
+                                                                         \
+  c0 = buf[0];                                                           \
+  for (i = 1; i < num_pixels && buf[i] == c0; i++);                      \
+  if (i == num_pixels) {                                                 \
+    pal->bg = (CARD32)c0;                                                \
+    pal->num_colors = 1;        /* Solid-color rectangle */              \
+    return;                                                              \
+  }                                                                      \
+                                                                         \
+  n0 = i;                                                                \
+  c1 = buf[i];                                                           \
+  n1 = 0;                                                                \
+  for (i++; i < num_pixels; i++) {                                       \
+    if (buf[i] == c0) {                                                  \
+      n0++;                                                              \
+    } else if (buf[i] == c1) {                                           \
+      n1++;                                                              \
+    } else                                                               \
+      break;                                                             \
+  }                                                                      \
+  if (i == num_pixels) {                                                 \
+    /* Background color is one that occupies more pixels */              \
+    if (n0 > n1) {                                                       \
+      pal->bg = (CARD32)c0; pal->fg = (CARD32)c1;                        \
+    } else {                                                             \
+      pal->bg = (CARD32)c1; pal->fg = (CARD32)c0;                        \
+    }                                                                    \
+    pal->num_colors = 2;        /* Two colors */                         \
+  } else {                                                               \
+    pal->num_colors = 0;        /* More than two colors */               \
+  }                                                                      \
 }
 
 DEFINE_ANALYZE_RECT(8)
