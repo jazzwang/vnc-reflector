@@ -73,6 +73,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 /* Get definitions for CARD16 etc. */
 #include "rfblib.h"
