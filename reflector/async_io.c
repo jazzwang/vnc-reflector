@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.20 2001/08/28 18:11:04 const Exp $
+ * $Id: async_io.c,v 1.21 2001/09/08 07:46:41 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -528,7 +528,7 @@ AIO_SLOT *aio_new_slot(int fd, char *name, size_t slot_size)
 
 static void aio_process_input(AIO_SLOT *slot)
 {
-  int bytes;
+  int bytes = 0;
 
   /* FIXME: Do not read anything if readfunc is not set?
      Or maybe skip everything we're receiving?
@@ -536,10 +536,11 @@ static void aio_process_input(AIO_SLOT *slot)
 
   if (!slot->close_f) {
     errno = 0;
-    bytes = read(slot->fd, slot->readbuf + slot->bytes_ready,
-                 slot->bytes_to_read - slot->bytes_ready);
-
-    if (bytes > 0) {
+    if (slot->bytes_to_read - slot->bytes_ready > 0) {
+      bytes = read(slot->fd, slot->readbuf + slot->bytes_ready,
+                   slot->bytes_to_read - slot->bytes_ready);
+    }
+    if (bytes > 0 || slot->bytes_to_read == 0) {
       slot->bytes_ready += bytes;
       if (slot->bytes_ready == slot->bytes_to_read) {
         cur_slot = slot;
@@ -556,17 +557,18 @@ static void aio_process_input(AIO_SLOT *slot)
 
 static void aio_process_output(AIO_SLOT *slot)
 {
-  int bytes;
+  int bytes = 0;
   AIO_BLOCK *next;
 
   /* FIXME: Maybe write all blocks in a loop. */
 
   if (!slot->close_f) {
     errno = 0;
-    bytes = write(slot->fd, slot->outqueue->data + slot->bytes_written,
-                  slot->outqueue->data_size - slot->bytes_written);
-
-    if (bytes > 0) {
+    if (slot->outqueue->data_size - slot->bytes_written > 0) {
+      bytes = write(slot->fd, slot->outqueue->data + slot->bytes_written,
+                    slot->outqueue->data_size - slot->bytes_written);
+    }
+    if (bytes > 0 || slot->outqueue->data_size == 0) {
       slot->bytes_written += bytes;
       if (slot->bytes_written == slot->outqueue->data_size) {
         /* Block sent, call hook function if set */

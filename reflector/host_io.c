@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.25 2001/08/28 17:28:47 const Exp $
+ * $Id: host_io.c,v 1.26 2001/09/08 07:46:41 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -461,8 +461,10 @@ static void rf_host_hextile_hex(void)
     } else {
       data_size = 2 * (unsigned int)hextile_num_subrects;
     }
-    aio_setread(rf_host_hextile_subrects, NULL, data_size);
-    return;
+    if (data_size > 0) {
+      aio_setread(rf_host_hextile_subrects, NULL, data_size);
+      return;
+    }
   }
 
   hextile_next_tile();
@@ -520,7 +522,10 @@ static void rf_host_colormap_hdr(void)
   log_write(LL_WARN, "Ignoring SetColourMapEntries message");
 
   num_colors = buf_get_CARD16(&cur_slot->readbuf[3]);
-  aio_setread(rf_host_colormap_data, NULL, num_colors * 6);
+  if (num_colors > 0)
+    aio_setread(rf_host_colormap_data, NULL, num_colors * 6);
+  else
+    aio_setread(rf_host_msg, NULL, 1);
 }
 
 static void rf_host_colormap_data(void)
@@ -544,7 +549,10 @@ static void rf_host_cuttext_hdr(void)
             (unsigned long)cut_len);
 
   cut_len = (size_t)buf_get_CARD32(&cur_slot->readbuf[3]);
-  aio_setread(rf_host_cuttext_data, NULL, cut_len);
+  if (cut_len > 0)
+    aio_setread(rf_host_cuttext_data, NULL, cut_len);
+  else
+    rf_host_cuttext_data();
 }
 
 static void rf_host_cuttext_data(void)
