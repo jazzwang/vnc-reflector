@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.16 2001/08/20 11:58:48 const Exp $
+ * $Id: host_io.c,v 1.17 2001/08/22 22:35:40 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -18,9 +18,6 @@
 #include "translate.h"
 #include "client_io.h"
 #include "host_io.h"
-
-static void if_host(void);      /* Init hook */
-static void cf_host(void);      /* Close hook */
 
 static void rf_host_msg(void);
 
@@ -52,18 +49,14 @@ static void request_update(int incr);
  */
 
 static AIO_SLOT *host_slot;
+static int host_slot_active = 0;
 
-/* Initializing host I/O */
-void init_host_io(int fd)
+/* Prepare host I/O slot for operating in main protocol phase */
+void host_activate(void)
 {
-  aio_add_slot(fd, NULL, if_host, sizeof(AIO_SLOT));
-}
 
-/* Initializing I/O slot */
-static void if_host(void)
-{
   host_slot = cur_slot;
-  aio_setclose(cf_host);
+  host_slot_active = 1;
 
   log_write(LL_DETAIL, "Requesting full framebuffer update");
   request_update(0);
@@ -72,8 +65,11 @@ static void if_host(void)
 }
 
 /* On-close hook */
-static void cf_host(void)
+void host_close_hook(void)
 {
+
+  host_slot_active = 0;
+
   if (cur_slot->errread_f) {
     if (cur_slot->io_errno) {
       log_write(LL_ERROR, "Host I/O error, read: %s",
@@ -91,6 +87,7 @@ static void cf_host(void)
   } else if (cur_slot->errio_f) {
     log_write(LL_ERROR, "Host I/O error");
   }
+
   log_write(LL_WARN, "Closing connection to host");
   aio_close(1);
 }

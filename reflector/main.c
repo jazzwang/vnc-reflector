@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.19 2001/08/19 13:56:42 const Exp $
+ * $Id: main.c,v 1.20 2001/08/22 22:35:40 const Exp $
  * Main module
  */
 
@@ -19,15 +19,12 @@
 #include "reflector.h"
 #include "rect.h"
 #include "host_connect.h"
-#include "host_io.h"
-#include "translate.h"
-#include "client_io.h"
 
 /*
  * Configuration options
  */
 
-static int   opt_listen_port;
+static int   opt_cl_listen_port;
 static char *opt_log_filename;
 static char *opt_passwd_filename;
 static int   opt_foreground;
@@ -63,8 +60,6 @@ static int init_screen_info(void);
 
 int main(int argc, char **argv)
 {
-  int host_fd;
-  int fb_size;
 
   /* Parse command line, exit on error */
   parse_args(argc, argv);
@@ -92,41 +87,23 @@ int main(int argc, char **argv)
     log_write(LL_INFO, "Switched to the background mode");
   }
 
+  /* Initialization */
+  init_screen_info();
   read_password_file();
+  set_client_passwords(opt_client_password, opt_client_ro_password);
+  aio_init();
 
-  /* FIXME: This part of code looks ugly. */
+  /* Main work */
+  if (connect_to_host(opt_hostname, opt_hostport, opt_cl_listen_port,
+                      opt_host_password))
+    aio_mainloop();
 
-  host_fd = connect_to_host(opt_hostname, opt_hostport);
-  if (host_fd != -1 && init_screen_info()) {
-    if (setup_session(host_fd, opt_host_password, &g_screen_info)) {
-
-      /* Allocate framebuffer */
-      fb_size = (int)g_screen_info->width * (int)g_screen_info->height * 4;
-      g_framebuffer = malloc(fb_size);
-      if (g_framebuffer == NULL) {
-        log_write(LL_ERROR, "Error allocating framebuffer");
-        /* FIXME: Make function in host_connect.c to close fd,
-           report into logs on closing connection. */
-        close(host_fd);
-      } else {
-        log_write(LL_DEBUG, "Allocated framebuffer, %d bytes", fb_size);
-        aio_init();
-        set_client_passwords(opt_client_password, opt_client_ro_password);
-        if (!aio_listen(opt_listen_port, af_client_accept, sizeof(CL_SLOT))) {
-          log_write(LL_ERROR, "Error creating listening socket: %s",
-                    strerror(errno));
-          close(host_fd);
-        } else {
-          init_host_io(host_fd);
-          aio_mainloop();
-        }
-        log_write(LL_DEBUG, "Freeing framebuffer");
-        free(g_framebuffer);
-      }
-
-    }
-    free(g_screen_info);
+  /* Free everything */
+  if (g_framebuffer != NULL) {
+    log_write(LL_DEBUG, "Freeing framebuffer");
+    free(g_framebuffer);
   }
+  free(g_screen_info);
 
   log_write(LL_MSG, "Terminating");
 
@@ -151,7 +128,7 @@ static void parse_args(int argc, char **argv)
   opt_file_loglevel = -1;
   opt_passwd_filename = NULL;
   opt_log_filename = NULL;
-  opt_listen_port = -1;
+  opt_cl_listen_port = -1;
 
   while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:")) != -1) {
     switch (c) {
@@ -184,11 +161,11 @@ static void parse_args(int argc, char **argv)
         opt_log_filename = optarg;
       break;
     case 'l':
-      if (opt_listen_port != -1)
+      if (opt_cl_listen_port != -1)
         err = 1;
       else {
-        opt_listen_port = atoi(optarg);
-        if (opt_listen_port < 0)
+        opt_cl_listen_port = atoi(optarg);
+        if (opt_cl_listen_port < 0)
           err = 1;
       }
       break;
@@ -203,15 +180,15 @@ static void parse_args(int argc, char **argv)
     exit(1);
   }
 
-  /* Provide reasonable defaults to options */
+  /* Provide reasonable defaults for options */
   if (opt_file_loglevel == -1)
     opt_file_loglevel = LL_INFO;
   if (opt_passwd_filename == NULL)
     opt_passwd_filename = "passwd";
   if (opt_log_filename == NULL)
     opt_log_filename = "reflector.log";
-  if (opt_listen_port == -1)
-    opt_listen_port = 5999;
+  if (opt_cl_listen_port == -1)
+    opt_cl_listen_port = 5999;
 
   /* Separate host name and host display number if exists */
   pos = strchr(argv[optind], ':');
@@ -244,19 +221,19 @@ static void report_usage(char *program_name)
 
   fprintf(stderr,
           "Options:\n"
-          "  -p PASSWD_FILE - read vncpasswd's password file"
+          "  -p PASSWD_FILE  - read plaintext password file"
           " [default: passwd]\n"
-          "  -l LISTEN_PORT - port to listen for client connections"
+          "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
-          "  -g LOG_FILE    - write logs to specified file"
+          "  -g LOG_FILE     - write logs to specified file"
           " [default: reflector.log]\n");
   fprintf(stderr,
-          "  -v LOG_LEVEL   - set verbosity level for log file (0..%d)"
+          "  -v LOG_LEVEL    - set verbosity level for log file (0..%d)"
           " [default: %d]\n"
-          "  -f LOG_LEVEL   - run in foreground, show logs on stderr"
+          "  -f LOG_LEVEL    - run in foreground, show logs on stderr"
           " at specified\n"
-          "                   verbosity level (0..%d)\n"
-          "  -h             - print this help message\n"
+          "                    verbosity level (0..%d)\n"
+          "  -h              - print this help message\n"
           "\n"
           "Default host's display number is :0 (port 5900)\n\n"
           "Password file may contain three lines with one password"
@@ -358,6 +335,12 @@ static int init_screen_info(void)
   if (g_screen_info == NULL)
     return 0;
 
+  /* Zero screen dimensions, set initial desktop name */
+  g_screen_info->width = 0;
+  g_screen_info->height = 0;
+  g_screen_info->name_length = 1;
+  g_screen_info->name[0] = '?';
+
   /* Fill in PIXEL_FORMAT structure */
   g_screen_info->pixformat.bits_pixel = 32;
   g_screen_info->pixformat.color_depth = 24;
@@ -378,5 +361,9 @@ static int init_screen_info(void)
     g_screen_info->pixformat.big_endian = 1;
   }
 
+  /* Make sure we would not try to free framebuffer */
+  g_framebuffer = NULL;
+
   return 1;
 }
+
