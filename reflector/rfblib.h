@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.8 2001/08/08 14:42:08 const Exp $
+ * $Id: rfblib.h,v 1.9 2001/08/11 02:47:47 const Exp $
  * RFB protocol definitions
  */
 
@@ -88,13 +88,49 @@ typedef struct _RFB_SCREEN_INFO {
 #define HEXTILE_SUBRECTS_COLOURED  16
 
 /*
- * Functions to compose/decompose bigger values from/into byte arrays.
+ * Macros and functions to compose/decompose bigger values from/into
+ * byte arrays.
  */
 
+#define buf_get_CARD8(buf)                      \
+  (*((CARD8 *)buf))
+
+#define buf_get_CARD16(buf)                     \
+  ((CARD16)((CARD8 *)buf)[0] << 8 |             \
+   (CARD16)((CARD8 *)buf)[1])
+
+#define buf_get_CARD32(buf)                     \
+  ((CARD32)((CARD8 *)buf)[0] << 24 |            \
+   (CARD32)((CARD8 *)buf)[1] << 16 |            \
+   (CARD32)((CARD8 *)buf)[2] << 8  |            \
+   (CARD32)((CARD8 *)buf)[3]);
+
+#define buf_put_CARD8(buf, value)               \
+  *((CARD8 *)buf) = (CARD8)value;
+
+#define buf_put_CARD16(buf, value)              \
+{                                               \
+  ((CARD8 *)buf)[0] = (CARD8)(value >> 8);      \
+  ((CARD8 *)buf)[1] = (CARD8)value;             \
+}
+
+#define buf_put_CARD32(buf, value)              \
+{                                               \
+  ((CARD8 *)buf)[0] = (CARD8)(value >> 24);     \
+  ((CARD8 *)buf)[1] = (CARD8)(value >> 16);     \
+  ((CARD8 *)buf)[2] = (CARD8)(value >> 8);      \
+  ((CARD8 *)buf)[3] = (CARD8)value;             \
+}
+
+/*
+ * The following functions are not used, replaced by macros
+ *
 CARD16 buf_get_CARD16(void *buf);
 CARD32 buf_get_CARD32(void *buf);
 void buf_put_CARD16(void *buf, CARD16 value);
 void buf_put_CARD32(void *buf, CARD32 value);
+ *
+ */
 
 void buf_get_pixfmt(void *buf, RFB_PIXEL_FORMAT *format);
 void buf_put_pixfmt(void *buf, RFB_PIXEL_FORMAT *format);
