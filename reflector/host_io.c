@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.14 2001/08/19 13:56:42 const Exp $
+ * $Id: host_io.c,v 1.15 2001/08/19 18:38:11 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -88,6 +88,8 @@ static void cf_host(void)
     } else {
       log_write(LL_ERROR, "Host I/O error, write");
     }
+  } else if (cur_slot->errio_f) {
+    log_write(LL_ERROR, "Host I/O error");
   }
   log_write(LL_WARN, "Closing connection to host");
   aio_close(1);

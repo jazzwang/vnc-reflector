@@ -1,3 +1,10 @@
+# VNC Reflector
+# Copyright (C) 2001 Const Kaplinsky
+#
+# $Id: Makefile,v 1.20 2001/08/19 18:38:11 const Exp $
+#
+# Variables you might want to edit: CFLAGS, CONFFLAGS.
+
 IFLAGS =	-I.
 
 # Production
@@ -8,6 +15,9 @@ CFLAGS =	-g -pedantic $(IFLAGS)
 #CFLAGS =	-g -pg $(IFLAGS)
 # Debug (normal)
 #CFLAGS =	-g $(IFLAGS)
+
+# Use poll(2) syscall in async I/O instead of select(2)
+CONFFLAGS =	-DUSE_POLL
 
 LDFLAGS =
 
@@ -34,7 +44,7 @@ depend: $(SRCS)
 	$(MAKEDEPEND) -Y -I. $(SRCS)
 
 .c.o:
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
+	$(CC) $(CFLAGS) $(CONFFLAGS) -c $<
 
 
 # DO NOT DELETE

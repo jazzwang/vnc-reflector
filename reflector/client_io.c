@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.22 2001/08/19 13:56:42 const Exp $
+ * $Id: client_io.c,v 1.23 2001/08/19 18:38:11 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -94,6 +94,8 @@ static void cf_client(void)
     } else {
       log_write(LL_WARN, "Error sending to %s", cur_slot->name);
     }
+  } else if (cur_slot->errio_f) {
+    log_write(LL_WARN, "I/O error, client %s", cur_slot->name);
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
 

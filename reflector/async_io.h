@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.7 2001/08/04 21:58:57 const Exp $
+ * $Id: async_io.h,v 1.8 2001/08/19 18:38:11 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -27,6 +27,7 @@ typedef struct _AIO_SLOT {
   int type;                     /* To be used by the application to mark   */
                                 /*   certain type of file/socket           */
   int fd;                       /* File/socket descriptor                  */
+  int idx;                      /* Index in the array of pollfd structures */
   char *name;                   /* Allocated string containing slot name   */
                                 /*   (currently, IP address for sockets)   */
 
@@ -49,6 +50,7 @@ typedef struct _AIO_SLOT {
 
   unsigned alloc_f    :1;       /* 1 if buffer has to be freed with free() */
   unsigned close_f    :1;       /* 1 if the slot is about to be closed     */
+  unsigned errio_f    :1;       /* 1 if there was an I/O problem           */
   unsigned errread_f  :1;       /* 1 if there was a problem reading data   */
   unsigned errwrite_f :1;       /* 1 if there was a problem writing data   */
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.9 2001/08/08 09:48:57 const Exp $
+ * $Id: async_io.c,v 1.10 2001/08/19 18:38:11 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -18,6 +18,11 @@
 #include <signal.h>
 #include <errno.h>
 
+#ifdef USE_POLL
+#include <sys/poll.h>
+#define FD_ARRAY_MAXSIZE  10000
+#endif
+
 #include "async_io.h"
 
 /*
@@ -30,9 +35,16 @@ AIO_SLOT *cur_slot;
  * Static variables
  */
 
+#ifdef USE_POLL
+static struct pollfd s_fd_array[FD_ARRAY_MAXSIZE];
+static unsigned int s_fd_array_size;
+static int s_listen_fd_idx;
+#else
 static fd_set s_fdset_read;
 static fd_set s_fdset_write;
 static int s_max_fd;
+#endif
+
 static AIO_FUNCPTR s_idle_func;
 static AIO_SLOT *s_first_slot;
 static AIO_SLOT *s_last_slot;
@@ -66,9 +78,13 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 void aio_init(void)
 {
   signal(SIGPIPE, SIG_IGN);
+#ifdef USE_POLL
+  s_fd_array_size = 0;
+#else
   FD_ZERO(&s_fdset_read);
   FD_ZERO(&s_fdset_write);
   s_max_fd = 0;
+#endif
   s_listen_fd = -1;
   s_idle_func = NULL;
   s_first_slot = NULL;
@@ -78,8 +94,8 @@ void aio_init(void)
 
 /*
  * Create I/O slot for existing connection (open file). After new slot
- * was created, initfunc would be called with cur_slot pointing to
- * that slot. To allow reading from provided descriptor, initfunc
+ * has been created, initfunc would be called with cur_slot pointing
+ * to that slot. To allow reading from provided descriptor, initfunc
  * should set some input handler using aio_setread() function.
  */
 
@@ -100,6 +116,7 @@ void aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size)
   slot->closefunc = NULL;
   slot->alloc_f = 0;
   slot->close_f = 0;
+  slot->errio_f = 0;
   slot->errread_f = 0;
   slot->errwrite_f = 0;
   slot->next = NULL;
@@ -123,11 +140,20 @@ void aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size)
 
   /* Put fd into non-blocking mode */
   /* FIXME: check return value? */
-  fcntl (fd, F_SETFL, O_NONBLOCK);
+  fcntl(fd, F_SETFL, O_NONBLOCK);
 
+#ifdef USE_POLL
+  /* FIXME: do something better if s_fd_array_size exceeds max size? */
+  if (s_fd_array_size < FD_ARRAY_MAXSIZE) {
+    slot->idx = s_fd_array_size++;
+    s_fd_array[slot->idx].fd = fd;
+    s_fd_array[slot->idx].events = POLLIN;
+  }
+#else
   FD_SET(fd, &s_fdset_read);
   if (fd > s_max_fd)
     s_max_fd = fd;
+#endif
 
   /* Saving cur_slot value, calling initfunc with different cur_slot */
   saved_slot = cur_slot;
@@ -171,15 +197,24 @@ int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
   if ( bind(s_listen_fd, (struct sockaddr *)&listen_addr,
             sizeof(listen_addr)) != 0 ||
        fcntl(s_listen_fd, F_SETFL, O_NONBLOCK) != 0 ||
-       listen (s_listen_fd, 5) != 0) {
+       listen(s_listen_fd, 5) != 0 ) {
     close(s_listen_fd);
     s_listen_fd = -1;
     return 0;
   }
 
+#ifdef USE_POLL
+  /* FIXME: do something better if s_fd_array_size exceeds max size? */
+  if (s_fd_array_size < FD_ARRAY_MAXSIZE) {
+    s_listen_fd_idx = s_fd_array_size++;
+    s_fd_array[s_listen_fd_idx].fd = s_listen_fd;
+    s_fd_array[s_listen_fd_idx].events = POLLIN;
+  }
+#else
   FD_SET(s_listen_fd, &s_fdset_read);
   if (s_listen_fd > s_max_fd)
     s_max_fd = s_listen_fd;
+#endif
 
   s_accept_func = acceptfunc;
   s_new_slot_size = slot_size;
@@ -213,8 +248,6 @@ void aio_walk_slots(AIO_FUNCPTR fn, int type)
  * of main loop cycle.
  */
 
-/* FIXME: Implement "closing after all data has been sent" */
-
 void aio_close(int fatal)
 {
   cur_slot->close_f = 1;
@@ -227,34 +260,41 @@ void aio_close(int fatal)
  * Main event loop. It watches for possibility to perform I/O
  * operations on descriptors and dispatches results to custom
  * callback functions.
+ *
+ * Here are two versions, one uses poll(2) syscall, another uses
+ * select(2) instead. Note that select(2) is more portable while
+ * poll(2) is less limited.
  */
 
 /* FIXME: Implement configurable network timeout. */
 
+#ifdef USE_POLL
+
 void aio_mainloop(void)
 {
-  fd_set fdset_r, fdset_w;
-  struct timeval timeout;
   AIO_SLOT *slot, *next_slot;
 
   while (!s_close_f) {
-    memcpy(&fdset_r, &s_fdset_read, sizeof(fd_set));
-    memcpy(&fdset_w, &s_fdset_write, sizeof(fd_set));
-    timeout.tv_sec = 10;        /* Ten seconds timeout */
-    timeout.tv_usec = 0;
-    if (select (s_max_fd + 1, &fdset_r, &fdset_w, NULL, &timeout) > 0) {
+    if (poll(s_fd_array, s_fd_array_size, 10000) > 0) {
       slot = s_first_slot;
       while (slot != NULL && !s_close_f) {
         next_slot = slot->next;
-        if (FD_ISSET(slot->fd, &fdset_w))
-          aio_process_output(slot);
-        if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f)
-          aio_process_input(slot);
+        if (s_fd_array[slot->idx].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+          slot->errio_f = 1;
+          slot->close_f = 1;
+        } else {
+          if (s_fd_array[slot->idx].revents & POLLOUT)
+            aio_process_output(slot);
+          if ((s_fd_array[slot->idx].revents & POLLIN) && !slot->close_f)
+            aio_process_input(slot);
+        }
         if (slot->close_f)
           aio_destroy_slot(slot, 0);
         slot = next_slot;
       }
-      if (FD_ISSET(s_listen_fd, &fdset_r) && !s_close_f)
+      if ( s_listen_fd != -1 &&
+           (s_fd_array[s_listen_fd_idx].revents & POLLIN) &&
+           !s_close_f )
         aio_accept_connection();
     } else {
       /* Do something in idle periods */
@@ -267,6 +307,47 @@ void aio_mainloop(void)
   for (slot = s_first_slot; slot != NULL; slot = slot->next)
     aio_destroy_slot(slot, 1);
 }
+
+#else
+
+void aio_mainloop(void)
+{
+  fd_set fdset_r, fdset_w;
+  struct timeval timeout;
+  AIO_SLOT *slot, *next_slot;
+
+  while (!s_close_f) {
+    memcpy(&fdset_r, &s_fdset_read, sizeof(fd_set));
+    memcpy(&fdset_w, &s_fdset_write, sizeof(fd_set));
+    timeout.tv_sec = 10;        /* Ten seconds timeout */
+    timeout.tv_usec = 0;
+    if (select(s_max_fd + 1, &fdset_r, &fdset_w, NULL, &timeout) > 0) {
+      slot = s_first_slot;
+      while (slot != NULL && !s_close_f) {
+        next_slot = slot->next;
+        if (FD_ISSET(slot->fd, &fdset_w))
+          aio_process_output(slot);
+        if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f)
+          aio_process_input(slot);
+        if (slot->close_f)
+          aio_destroy_slot(slot, 0);
+        slot = next_slot;
+      }
+      if (s_listen_fd != -1 && FD_ISSET(s_listen_fd, &fdset_r) && !s_close_f)
+        aio_accept_connection();
+    } else {
+      /* Do something in idle periods */
+      if (s_idle_func != NULL)
+        (*s_idle_func)();
+    }
+  }
+  /* Stop listening, close all slots and exit */
+  close(s_listen_fd);
+  for (slot = s_first_slot; slot != NULL; slot = slot->next)
+    aio_destroy_slot(slot, 1);
+}
+
+#endif /* USE_POLL */
 
 void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read)
 {
@@ -323,7 +404,11 @@ void aio_write_nocopy(AIO_FUNCPTR fn, AIO_BLOCK *block)
       /* Output queue was empty */
       cur_slot->outqueue = block;
       cur_slot->bytes_written = 0;
+#ifdef USE_POLL
+      s_fd_array[cur_slot->idx].events |= POLLOUT;
+#else
       FD_SET(cur_slot->fd, &s_fdset_write);
+#endif
     } else {
       /* Output queue was not empty */
       cur_slot->outqueue_last->next = block;
@@ -364,6 +449,7 @@ static void aio_process_input(AIO_SLOT *slot)
       }
     } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
       slot->close_f = 1;
+      slot->errio_f = 1;
       slot->errread_f = 1;
       slot->io_errno = errno;
     }
@@ -395,7 +481,13 @@ static void aio_process_output(AIO_SLOT *slot)
           /* Last block sent, free it and call writefunc */
           free(slot->outqueue);
           slot->outqueue = NULL;
+
+#ifdef USE_POLL
+          s_fd_array[slot->idx].events &= (short)~POLLOUT;
+#else
           FD_CLR(slot->fd, &s_fdset_write);
+#endif
+
           if (slot->writefunc != NULL) {
             cur_slot = slot;
             (*slot->writefunc)();
@@ -404,6 +496,7 @@ static void aio_process_output(AIO_SLOT *slot)
       }
     } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
       slot->close_f = 1;
+      slot->errio_f = 1;
       slot->errwrite_f = 1;
       slot->io_errno = errno;
     }
@@ -434,9 +527,14 @@ static void aio_accept_connection(void)
 
 /* FIXME: Dangerous. Changes slot list while we might iterate over it. */
 
+#include "logging.h"            /* DEBUG */
+
 static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
 {
   AIO_BLOCK *block, *next_block;
+#ifdef USE_POLL
+  AIO_SLOT *h_slot;
+#endif
 
   /* Call on-close hook */
   if (slot->closefunc != NULL) {
@@ -456,12 +554,32 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
       slot->next->prev = slot->prev;
 
     /* Remove references to descriptor */
+#ifdef USE_POLL
+    log_write(LL_WARN, "DEBUG: Closing slot");
+    if (s_fd_array_size - 1 > slot->idx) {
+      log_write(LL_WARN, "DEBUG: Moving data, %d records",
+                s_fd_array_size - slot->idx - 1);
+      memmove(&s_fd_array[slot->idx],
+              &s_fd_array[slot->idx + 1],
+              (s_fd_array_size - slot->idx - 1) * sizeof(struct pollfd));
+      if (s_listen_fd_idx > slot->idx)
+        s_listen_fd_idx--;
+      for (h_slot = slot->next; h_slot != NULL; h_slot = h_slot->next)
+        {
+        log_write(LL_WARN, "DEBUG: Decrementing idx, %d -> %d",
+                  h_slot->idx, h_slot->idx - 1);
+        h_slot->idx--;
+        }
+    }
+    s_fd_array_size--;
+#else
     FD_CLR(slot->fd, &s_fdset_read);
     FD_CLR(slot->fd, &s_fdset_write);
     if (slot->fd == s_max_fd) {
       /* NOTE: Better way is to find _existing_ max fd */
       s_max_fd--;
     }
+#endif
   }
 
   /* Free all memory in slave structures */
