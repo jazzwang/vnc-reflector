@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.6 2001/08/08 14:42:08 const Exp $
+ * $Id: host_connect.c,v 1.7 2001/08/15 12:20:44 const Exp $
  * Connecting to a VNC host
  */
 
@@ -21,7 +21,7 @@
 #include "d3des.h"
 
 static int negotiate_ver(int fd, int major, int minor);
-static int vnc_authenticate(int fd, char *password);
+static int vnc_authenticate(int fd, unsigned char *password);
 static int set_data_formats(int fd, RFB_PIXEL_FORMAT *pixfmt);
 
 static int recv_data(int fd, void *buf, size_t len);
@@ -67,7 +67,7 @@ int connect_to_host(char *host, int port)
   return host_fd;
 }
 
-int setup_session(int host_fd, char *password, RFB_SCREEN_INFO **scr)
+int setup_session(int host_fd, unsigned char *password, RFB_SCREEN_INFO **scr)
 {
   int success = 1;
   char *reason;
@@ -186,7 +186,7 @@ static int negotiate_ver(int fd, int major, int minor)
   return send_data(fd, buf, 12);
 }
 
-static int vnc_authenticate(int fd, char *password)
+static int vnc_authenticate(int fd, unsigned char *password)
 {
   unsigned char key[8];
   unsigned char challenge[16];
@@ -199,7 +199,7 @@ static int vnc_authenticate(int fd, char *password)
     return 0;
 
   memset(key, 0, 8);
-  strncpy((char *)key, password, 8);
+  strncpy((char *)key, (char *)password, 8);
 
   deskey(key, EN0);
   des(challenge, response);

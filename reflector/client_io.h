@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.h,v 1.11 2001/08/11 03:11:32 const Exp $
+ * $Id: client_io.h,v 1.12 2001/08/15 12:20:44 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -19,16 +19,17 @@ typedef struct _CL_SLOT {
   RFB_PIXEL_FORMAT format;
   FB_RECT_LIST pending_rects;
   CARD16 temp_count;
+  unsigned char auth_challenge[16];
   unsigned char enc_prefer;
   unsigned char enc_enable[NUM_ENCODINGS];
-  unsigned char msg_buf[20];    /* FIXME: get rid of this field. */
   size_t cut_len;
+  unsigned int readonly           :1;
   unsigned int connected          :1;
   unsigned int update_requested   :1;
   unsigned int update_in_progress :1;
 } CL_SLOT;
 
-void set_client_password(unsigned char *password);
+void set_client_passwords(unsigned char *password, unsigned char *password_ro);
 void af_client_accept(void);
 
 /* Functions called from host_io.c */

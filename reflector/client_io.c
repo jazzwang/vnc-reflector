@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.20 2001/08/11 03:11:32 const Exp $
+ * $Id: client_io.c,v 1.21 2001/08/15 12:20:44 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -21,6 +21,7 @@
 #include "d3des.h"
 
 static unsigned char *s_password;
+static unsigned char *s_password_ro;
 
 /*
  * Prototypes for static functions
@@ -50,9 +51,10 @@ static void send_update(void);
  * Implementation
  */
 
-void set_client_password(unsigned char *password)
+void set_client_passwords(unsigned char *password, unsigned char *password_ro)
 {
   s_password = password;
+  s_password_ro = password_ro;
 }
 
 void af_client_accept(void)
@@ -94,6 +96,7 @@ static void cf_client(void)
 static void rf_client_ver(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  CARD8 msg[20];
   int i;
 
   /* FIXME: Check protocol version. */
@@ -107,21 +110,21 @@ static void rf_client_ver(void)
 
   if (s_password[0]) {
     /* Request VNC authentication */
-    buf_put_CARD32(cl->msg_buf, 2);
+    buf_put_CARD32(msg, 2);
 
     /* Prepare "random" challenge */
     srandom((unsigned int)time(NULL));
     for (i = 0; i < 16; i++)
-      cl->msg_buf[i + 4] = (unsigned char)random();
+      cl->auth_challenge[i] = msg[i + 4] = (unsigned char)random();
 
     /* Send both auth ID and challenge */
-    aio_write(NULL, cl->msg_buf, 20);
+    aio_write(NULL, msg, 20);
     aio_setread(rf_client_auth, NULL, 16);
   } else {
     log_write(LL_WARN, "Not requesting authentication from %s",
               cur_slot->name);
-    buf_put_CARD32(cl->msg_buf, 1);
-    aio_write(NULL, cl->msg_buf, 4);
+    buf_put_CARD32(msg, 1);
+    aio_write(NULL, msg, 4);
     aio_setread(rf_client_initmsg, NULL, 1);
   }
 }
@@ -130,28 +133,44 @@ static void rf_client_auth(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
   unsigned char key[8];
-  unsigned char buf[16];
+  unsigned char resp_rw[16];
+  unsigned char resp_ro[16];
+  unsigned char msg[4];
 
+  /* Place correct crypted response to resp_rw, full-control password */
   memset(key, 0, 8);
   strncpy((char *)key, (char *)s_password, 8);
-
-  /* Place correct crypted response to buf */
   deskey(key, EN0);
-  des(cl->msg_buf + 4, buf);
-  des(cl->msg_buf + 12, buf + 8);
+  des(cl->auth_challenge, resp_rw);
+  des(cl->auth_challenge + 8, resp_rw + 8);
 
-  /* Compare client response with the correct one */
+  /* Place correct crypted response to resp_ro, read-only password */
+  memset(key, 0, 8);
+  strncpy((char *)key, (char *)s_password_ro, 8);
+  deskey(key, EN0);
+  des(cl->auth_challenge, resp_ro);
+  des(cl->auth_challenge + 8, resp_ro + 8);
+
+  /* Compare client response with correct ones */
   /* FIXME: Implement "too many tries" functionality some day. */
-  if (memcmp(cur_slot->readbuf, buf, 16) != 0) {
-    log_write(LL_WARN, "Authentication failed for %s", cur_slot->name);
-    buf_put_CARD32(buf, 1);
-    aio_write(wf_client_auth_failed, buf, 4);
+  if (memcmp(cur_slot->readbuf, resp_rw, 16) == 0) {
+    cl->readonly = 0;
+    log_write(LL_MSG, "Full-control authentication passed by %s",
+              cur_slot->name);
+  } else if (memcmp(cur_slot->readbuf, resp_ro, 16) == 0) {
+    cl->readonly = 1;
+    log_write(LL_MSG, "Read-only authentication passed by %s",
+              cur_slot->name);
   } else {
-    log_write(LL_MSG, "Authentication passed by %s", cur_slot->name);
-    buf_put_CARD32(buf, 0);
-    aio_write(NULL, buf, 4);
-    aio_setread(rf_client_initmsg, NULL, 1);
+    log_write(LL_WARN, "Authentication failed for %s", cur_slot->name);
+    buf_put_CARD32(msg, 1);
+    aio_write(wf_client_auth_failed, msg, 4);
+    return;
   }
+
+  buf_put_CARD32(msg, 0);
+  aio_write(NULL, msg, 4);
+  aio_setread(rf_client_initmsg, NULL, 1);
 }
 
 static void wf_client_auth_failed(void)
@@ -345,21 +364,29 @@ static void wf_client_update_finished(void)
 
 static void rf_client_keyevent(void)
 {
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
   CARD8 msg[8];
 
-  msg[0] = 4;                   /* KeyEvent */
-  memcpy(&msg[1], cur_slot->readbuf, 7);
-  pass_msg_to_host(msg, sizeof(msg));
+  if (!cl->readonly) {
+    msg[0] = 4;                 /* KeyEvent */
+    memcpy(&msg[1], cur_slot->readbuf, 7);
+    pass_msg_to_host(msg, sizeof(msg));
+  }
+
   aio_setread(rf_client_msg, NULL, 1);
 }
 
 static void rf_client_ptrevent(void)
 {
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
   CARD8 msg[6];
 
-  msg[0] = 5;                   /* PointerEvent */
-  memcpy(&msg[1], cur_slot->readbuf, 5);
-  pass_msg_to_host(msg, sizeof(msg));
+  if (!cl->readonly) {
+    msg[0] = 5;                 /* PointerEvent */
+    memcpy(&msg[1], cur_slot->readbuf, 5);
+    pass_msg_to_host(msg, sizeof(msg));
+  }
+
   aio_setread(rf_client_msg, NULL, 1);
 }
 
@@ -378,7 +405,9 @@ static void rf_client_cuttext_data(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
 
-  pass_cuttext_to_host(cur_slot->readbuf, cl->cut_len);
+  if (!cl->readonly)
+    pass_cuttext_to_host(cur_slot->readbuf, cl->cut_len);
+
   aio_setread(rf_client_msg, NULL, 1);
 }
 

@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.17 2001/08/08 09:36:19 const Exp $
+ * $Id: main.c,v 1.18 2001/08/15 12:20:44 const Exp $
  * Main module
  */
 
@@ -22,7 +22,10 @@
 #include "host_io.h"
 #include "client_io.h"
 
-/* Configuration options */
+/*
+ * Configuration options
+ */
+
 static int   opt_listen_port;
 static char *opt_log_filename;
 static char *opt_passwd_filename;
@@ -31,18 +34,31 @@ static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
 static char  opt_hostname[256];
 static int   opt_hostport;
-static char  opt_password[9];
 
-/* Framebuffer */
+static unsigned char opt_host_password[9];
+static unsigned char opt_client_password[9];
+static unsigned char opt_client_ro_password[9];
+
+/*
+ * Global variables
+ */
+
 /* FIXME: allocate desktop name only, not the whole g_screen_info. */
 RFB_SCREEN_INFO *g_screen_info;
 CARD32 *g_framebuffer;
 
-/* Functions local to this file */
+/*
+ * Functions local to this file
+ */
+
 static void parse_args(int argc, char **argv);
 static void report_usage(char *program_name);
-static int read_pasword_file(void);
+static int read_password_file(void);
 static int init_screen_info(void);
+
+/*
+ * Implementation
+ */
 
 int main(int argc, char **argv)
 {
@@ -75,13 +91,13 @@ int main(int argc, char **argv)
     log_write(LL_INFO, "Switched to the background mode");
   }
 
-  read_pasword_file();
+  read_password_file();
 
   /* FIXME: This part of code looks ugly. */
 
   host_fd = connect_to_host(opt_hostname, opt_hostport);
   if (host_fd != -1 && init_screen_info()) {
-    if (setup_session(host_fd, opt_password, &g_screen_info)) {
+    if (setup_session(host_fd, opt_host_password, &g_screen_info)) {
 
       /* Allocate framebuffer */
       fb_size = (int)g_screen_info->width * (int)g_screen_info->height * 4;
@@ -94,7 +110,7 @@ int main(int argc, char **argv)
       } else {
         log_write(LL_DEBUG, "Allocated framebuffer, %d bytes", fb_size);
         aio_init();
-        set_client_password((unsigned char *)opt_password);
+        set_client_passwords(opt_client_password, opt_client_ro_password);
         if (!aio_listen(opt_listen_port, af_client_accept, sizeof(CL_SLOT))) {
           log_write(LL_ERROR, "Error creating listening socket: %s",
                     strerror(errno));
@@ -241,17 +257,26 @@ static void report_usage(char *program_name)
           "                   verbosity level (0..%d)\n"
           "  -h             - print this help message\n"
           "\n"
-          "Note: default host's display number is :0 (port 5900)\n\n",
+          "Default host's display number is :0 (port 5900)\n\n"
+          "Password file may contain three lines with one password"
+          " on each line:\n"
+          "  host, client password, read-only client password.\n\n",
           LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
 }
 
-static int read_pasword_file(void)
+static int read_password_file(void)
 {
   FILE *passwd_fp;
-  char buf[8];
-  int len;
+  unsigned char *password_ptr = opt_host_password;
+  int line = 0, len = 0;
+  int c;
 
-  log_write(LL_DETAIL, "Looking for a password in the file \"%s\"",
+  /* Fill passwords with zeros */
+  memset(opt_host_password, 0, 9);
+  memset(opt_client_password, 0, 9);
+  memset(opt_client_ro_password, 0, 9);
+
+  log_write(LL_DETAIL, "Looking for passwords in the file \"%s\"",
             opt_passwd_filename);
 
   passwd_fp = fopen(opt_passwd_filename, "r");
@@ -261,16 +286,60 @@ static int read_pasword_file(void)
     return 1;
   }
 
-  len = fread(buf, 1, 8, passwd_fp);
-  strncpy(opt_password, buf, len);
-  opt_password[len] = '\0';
-  len = strcspn(opt_password, "\n\r");
-  opt_password[len] = '\0';
+  /* Read password file */
+  while (line < 3) {
+    c = getc(passwd_fp);
+    if (c != '\n' && c != EOF && len < 8) {
+      password_ptr[len++] = c;
+    } else {
+      password_ptr[len] = '\0';
+      /* Truncate long passwords */
+      if (len == 8 && c != '\n' && c != EOF) {
+        log_write(LL_WARN, "Using only 8 first bytes of a longer password");
+        do {
+          c = getc(passwd_fp);
+        } while (c != '\n' && c != EOF);
+      }
+      /* End of file */
+      if (c == EOF)
+        break;
+      /* Empty password means no authentication */
+      if (len == 0) {
+        log_write(LL_WARN, "Got empty password, hoping no auth can be ok");
+      }
+      /* End of line */
+      switch (++line) {
+      case 1:
+        password_ptr = opt_client_password;
+        break;
+      case 2:
+        password_ptr = opt_client_ro_password;
+        break;
+      }
+      len = 0;
+    }
+  }
+  if (len == 0) {
+    if (line == 0) {
+      log_write(LL_WARN, "Got empty host password, assuming no auth");
+    } else {
+      line--;
+    }
+  }
 
-  if (len == 0)
-    log_write(LL_WARN, "Got empty password, hoping that's ok");
-  else
-    log_write(LL_DETAIL, "Got the password");
+  log_write(LL_DETAIL, "Got %d password(s) from file, including empty ones",
+            line + 1);
+
+  /* Provide reasonable defaults if not all three passwords set */
+  if (line == 0) {
+    log_write(LL_WARN, "Client password not specified, using host's one");
+    strcpy((char *)opt_client_password, (char *)opt_host_password);
+    line++;
+  }
+  if (line == 1) {
+    log_write(LL_DETAIL, "Read-only client password not specified");
+    strcpy((char *)opt_client_ro_password, (char *)opt_client_password);
+  }
 
   fclose(passwd_fp);
   return 1;
