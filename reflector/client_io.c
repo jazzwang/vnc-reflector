@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.32 2001/08/26 15:09:53 const Exp $
+ * $Id: client_io.c,v 1.33 2001/08/26 15:20:38 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -383,11 +383,23 @@ static void rf_client_keyevent(void)
 static void rf_client_ptrevent(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  CARD16 x, y;
   CARD8 msg[6];
 
   if (!cl->readonly) {
     msg[0] = 5;                 /* PointerEvent */
-    memcpy(&msg[1], cur_slot->readbuf, 5);
+    msg[1] = cur_slot->readbuf[0];
+    x = buf_get_CARD16(&cur_slot->readbuf[1]);
+    y = buf_get_CARD16(&cur_slot->readbuf[3]);
+
+    /* Pointer position should fit in the host screen */
+    if (x >= g_screen_info.width)
+      x = g_screen_info.width - 1;
+    if (y >= g_screen_info.height)
+      y = g_screen_info.height - 1;
+
+    buf_put_CARD16(&msg[2], x);
+    buf_put_CARD16(&msg[4], y);
     pass_msg_to_host(msg, sizeof(msg));
   }
 
