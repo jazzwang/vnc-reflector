@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.48 2003/01/09 06:41:59 const Exp $
+ * $Id: client_io.c,v 1.49 2003/01/09 08:47:01 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -414,6 +414,7 @@ static void rf_client_updatereq(void)
     rect.y2 = cl->fb_height;
 
   cl->update_rect = rect;
+  cl->update_requested = 1;
 
   if (!cur_slot->readbuf[0]) {
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
@@ -435,10 +436,6 @@ static void rf_client_updatereq(void)
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
-    cl->update_in_progress = 1;
-    cl->update_requested = 0;
-  } else {
-    cl->update_requested = 1;
   }
 
   aio_setread(rf_client_msg, NULL, 1);
@@ -457,8 +454,6 @@ static void wf_client_update_finished(void)
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
-    cl->update_in_progress = 1;
-    cl->update_requested = 0;
   }
 }
 
@@ -577,8 +572,6 @@ void fn_client_send_rects(AIO_SLOT *slot)
        REGION_NOTEMPTY(&cl->copy_region))) {
     cur_slot = slot;
     send_update();
-    cl->update_in_progress = 1;
-    cl->update_requested = 0;
     cur_slot = saved_slot;
   }
 }
@@ -678,6 +671,10 @@ static void send_newfbsize(void)
 
   put_rect_header(rect_hdr, &rect);
   aio_write(wf_client_update_finished, rect_hdr, 12);
+
+  /* Something has been queued for sending. */
+  cl->update_in_progress = 1;
+  cl->update_requested = 0;
 }
 
 /*
@@ -709,9 +706,6 @@ static void send_update(void)
     cl->newfbsize_pending = 0;
     log_write(LL_DEBUG, "Applying new framebuffer size (%dx%d) to %s",
               (int)cl->fb_width, (int)cl->fb_height, cur_slot->name);
-    /* Send NewFBSize update if supported by the client. */
-    if (cl->enable_newfbsize)
-      send_newfbsize();
     /* In any case, mark all the framebuffer contents as changed. */
     fb_rect.x1 = 0;
     fb_rect.y1 = 0;
@@ -722,9 +716,12 @@ static void send_update(void)
     REGION_UNION(&cl->pending_region, &cl->pending_region, &fb_region);
     REGION_UNINIT(&fb_region);
     REGION_EMPTY(&cl->copy_region);
-    /* If NewFBSize was sent, then pixel data will be sent next time. */
-    if (cl->enable_newfbsize)
+    /* If NewFBSize is supported by the client, send only NewFBSize
+       pseudo-rectangle, pixel data will be sent in the next update. */
+    if (cl->enable_newfbsize) {
+      send_newfbsize();
       return;
+    }
   }
 
   /* Clip pending region to the rectangle requested by the client. */
@@ -734,8 +731,8 @@ static void send_update(void)
   REGION_INTERSECT(&cl->copy_region, &cl->copy_region, &clip_region);
   REGION_UNINIT(&clip_region);
 
-  num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
   num_penging_rects = REGION_NUM_RECTS(&cl->pending_region);
+  num_copy_rects = REGION_NUM_RECTS(&cl->copy_region);
   num_all_rects = num_penging_rects + num_copy_rects;
   if (num_all_rects == 0)
     return;
@@ -835,5 +832,9 @@ static void send_update(void)
     put_rect_header(rect_hdr, &rect);
     aio_write(wf_client_update_finished, rect_hdr, 12);
   }
+
+  /* Something has been queued for sending. */
+  cl->update_in_progress = 1;
+  cl->update_requested = 0;
 }
 
