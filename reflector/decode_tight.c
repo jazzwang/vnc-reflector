@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.3 2002/09/04 02:12:43 const Exp $
+ * $Id: decode_tight.c,v 1.4 2002/09/04 02:53:37 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -55,6 +55,7 @@ static void rf_host_tight_compressed(void);
 
 static void tight_draw_truecolor_data(CARD8 *src);
 static void tight_draw_indexed_data(CARD8 *src);
+static void tight_draw_gradient_data(CARD8 *src);
 
 void setread_decode_tight(FB_RECT *r)
 {
@@ -92,7 +93,7 @@ static void rf_host_tight_compctl(void)
     aio_setread(rf_host_tight_fill, NULL, 3);
   }
   else if (comp_ctl == RFB_TIGHT_JPEG) {
-    log_write(LL_WARN, "JPEG is not supported on host connections");
+    log_write(LL_ERROR, "JPEG is not supported on host connections");
     aio_close(0);
     return;
   }
@@ -130,14 +131,18 @@ static void rf_host_tight_fill(void)
   fbupdate_rect_done();
 }
 
-/* FIXME: Implement "gradient" filter. */
-
 static void rf_host_tight_filter(void)
 {
   s_filter_id = cur_slot->readbuf[0];
   if (s_filter_id == RFB_TIGHT_FILTER_PALETTE) {
     aio_setread(rf_host_tight_numcolors, NULL, 1);
   } else {
+    if (s_filter_id != RFB_TIGHT_FILTER_COPY &&
+        s_filter_id != RFB_TIGHT_FILTER_GRADIENT) {
+      log_write(LL_ERROR, "Unrecognized filter ID in the Tight decoder");
+      aio_close(0);
+      return;
+    }
     s_uncompressed_size = s_rect.w * s_rect.h * 3;
     if (s_uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
       aio_setread(rf_host_tight_raw, NULL, s_uncompressed_size);
@@ -270,6 +275,8 @@ static void rf_host_tight_compressed(void)
 
   if (s_filter_id == RFB_TIGHT_FILTER_PALETTE) {
     tight_draw_indexed_data(buf);
+  } else if (s_filter_id == RFB_TIGHT_FILTER_GRADIENT) {
+    tight_draw_gradient_data(buf);
   } else {
     tight_draw_truecolor_data(buf);
   }
@@ -338,6 +345,52 @@ static void tight_draw_indexed_data(CARD8 *src)
       }
       fb_ptr += g_fb_width - s_rect.w;
     }
+  }
+}
+
+/*
+ * Restore and draw the data processed with the "gradient" filter.
+ */
+
+static void tight_draw_gradient_data(CARD8 *src)
+{
+  int x, y, c;
+  CARD32 *fb_ptr;
+  CARD8 prev_row[2048*3];
+  CARD8 this_row[2048*3];
+  CARD8 pix[3];
+  int est;
+
+  fb_ptr = &g_framebuffer[s_rect.y * (int)g_fb_width + s_rect.x];
+
+  memset(prev_row, 0, s_rect.w * 3);
+
+  for (y = 0; y < s_rect.h; y++) {
+
+    /* First pixel in a row */
+    for (c = 0; c < 3; c++) {
+      pix[c] = prev_row[c] + src[y*s_rect.w*3+c];
+      this_row[c] = pix[c];
+    }
+    *fb_ptr++ = pix[0] << 16 | pix[1] << 8 | pix[2];
+
+    /* Remaining pixels of a row */
+    for (x = 1; x < s_rect.w; x++) {
+      for (c = 0; c < 3; c++) {
+	est = (int)prev_row[x*3+c] + (int)pix[c] - (int)prev_row[(x-1)*3+c];
+	if (est > 0xFF) {
+	  est = 0xFF;
+	} else if (est < 0x00) {
+	  est = 0x00;
+	}
+	pix[c] = (CARD8)est + src[(y*s_rect.w+x)*3+c];
+	this_row[x*3+c] = pix[c];
+      }
+      *fb_ptr++ = pix[0] << 16 | pix[1] << 8 | pix[2];
+    }
+
+    fb_ptr += g_fb_width - s_rect.w;
+    memcpy(prev_row, this_row, s_rect.w * 3);
   }
 }
 
