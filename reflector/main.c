@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.31 2001/10/02 09:43:55 const Exp $
+ * $Id: main.c,v 1.32 2001/10/02 12:25:51 const Exp $
  * Main module
  */
 
@@ -108,6 +108,11 @@ int main(int argc, char **argv)
 
   /* Fork the process to the background if necessary */
   if (!opt_foreground) {
+    if (!opt_no_banner) {
+      fprintf(stderr, "Starting in the background, "
+              "see the log file for errors and other messages.\n");
+    }
+
     if (getpid() != 1) {
       signal(SIGTTIN, SIG_IGN);
       signal(SIGTTOU, SIG_IGN);
