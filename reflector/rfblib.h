@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.17 2002/09/03 19:57:28 const Exp $
+ * $Id: rfblib.h,v 1.18 2002/09/04 02:52:55 const Exp $
  * RFB protocol definitions
  */
 
@@ -112,7 +112,7 @@ typedef struct _RFB_SCREEN_INFO {
 #define RFB_TIGHT_FILTER_PALETTE          0x01
 #define RFB_TIGHT_FILTER_GRADIENT         0x02
 
-#define RFB_TIGHT_MIN_TO_COMPRESS         12
+#define RFB_TIGHT_MIN_TO_COMPRESS  12
 
 /*
  * Macros and functions to compose/decompose bigger values from/into
