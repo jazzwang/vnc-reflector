@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.10 2001/08/04 22:23:06 const Exp $
+ * $Id: client_io.c,v 1.11 2001/08/04 22:25:14 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -77,14 +77,14 @@ static void cf_client(void)
       log_write(LL_WARN, "Error reading from %s: %s",
                 cur_slot->name, strerror(cur_slot->io_errno));
     } else {
-      log_write(LL_ERROR, "Error reading from %s", cur_slot->name);
+      log_write(LL_WARN, "Error reading from %s", cur_slot->name);
     }
   } else if (cur_slot->errwrite_f) {
     if (cur_slot->io_errno) {
       log_write(LL_WARN, "Error sending to %s: %s",
                 cur_slot->name, strerror(cur_slot->io_errno));
     } else {
-      log_write(LL_ERROR, "Error sending to %s", cur_slot->name);
+      log_write(LL_WARN, "Error sending to %s", cur_slot->name);
     }
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
