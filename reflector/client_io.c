@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.19 2001/08/11 02:49:04 const Exp $
+ * $Id: client_io.c,v 1.20 2001/08/11 03:11:32 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -272,20 +272,26 @@ static void rf_client_encodings_data(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
   int i;
+  int preferred_enc_set = 0;
   CARD32 enc;
 
   /* Reset encoding list (always enable raw encoding) */
-  cl->enc_enable[0] = 1;
-  for (i = 1; i < NUM_ENCODINGS; i++) {
+  cl->enc_enable[RFB_ENCODING_RAW] = 1;
+  cl->enc_prefer = RFB_ENCODING_RAW;
+  for (i = 1; i < NUM_ENCODINGS; i++)
     cl->enc_enable[i] = 0;
-  }
 
   /* Read and store encoding list supplied by the client */
   for (i = 0; i < (int)cl->temp_count; i++) {
     enc = buf_get_CARD32(&cur_slot->readbuf[i * sizeof(CARD32)]);
-    if (enc >= 0 && enc < NUM_ENCODINGS) {
-      cl->enc_enable[enc] = 1;
+    if (!preferred_enc_set) {
+      if (enc == RFB_ENCODING_RAW || enc == RFB_ENCODING_HEXTILE) {
+        cl->enc_prefer = enc;
+        preferred_enc_set = 1;
+      }
     }
+    if (enc >= 0 && enc < NUM_ENCODINGS)
+      cl->enc_enable[enc] = 1;
   }
 
   log_write(LL_DETAIL, "Encoding list set by %s", cur_slot->name);
@@ -452,11 +458,11 @@ static void send_update(void)
     buf_put_CARD16(&rect_hdr[2], rect.y);
     buf_put_CARD16(&rect_hdr[4], rect.w);
     buf_put_CARD16(&rect_hdr[6], rect.h);
-    if (cl->enc_enable[RFB_ENCODING_HEXTILE]) {
+    if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
       buf_put_CARD32(&rect_hdr[8], RFB_ENCODING_HEXTILE);
     }
     aio_write(NULL, rect_hdr, 12);
-    if (cl->enc_enable[RFB_ENCODING_HEXTILE]) {
+    if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
       block = rfb_encode_hextile_block(&cl->format, &rect);
       if (block != NULL) {
         hextile_bytes += block->data_size;
