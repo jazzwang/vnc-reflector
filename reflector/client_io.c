@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.34 2001/10/02 09:03:45 const Exp $
+ * $Id: client_io.c,v 1.35 2001/10/02 14:23:36 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -304,6 +304,7 @@ static void rf_client_encodings_data(void)
   /* Reset encoding list (always enable raw encoding) */
   cl->enc_enable[RFB_ENCODING_RAW] = 1;
   cl->enc_prefer = RFB_ENCODING_RAW;
+  cl->compress_level = -1;
   for (i = 1; i < NUM_ENCODINGS; i++)
     cl->enc_enable[i] = 0;
 
@@ -311,16 +312,37 @@ static void rf_client_encodings_data(void)
   for (i = 0; i < (int)cl->temp_count; i++) {
     enc = buf_get_CARD32(&cur_slot->readbuf[i * sizeof(CARD32)]);
     if (!preferred_enc_set) {
-      if (enc == RFB_ENCODING_RAW || enc == RFB_ENCODING_HEXTILE) {
+      if ( enc == RFB_ENCODING_RAW ||
+           enc == RFB_ENCODING_HEXTILE ||
+           enc == RFB_ENCODING_TIGHT ) {
         cl->enc_prefer = enc;
         preferred_enc_set = 1;
       }
     }
-    if (enc >= 0 && enc < NUM_ENCODINGS)
+    if (enc >= 0 && enc < NUM_ENCODINGS) {
       cl->enc_enable[enc] = 1;
+    } else if (enc >= RFB_ENCODING_COMPESSLEVEL0 &&
+               enc <= RFB_ENCODING_COMPESSLEVEL9 &&
+               cl->compress_level == -1) {
+      cl->compress_level = (int)(enc - RFB_ENCODING_COMPESSLEVEL0);
+      log_write(LL_DETAIL, "Compression level %d requested by client %s",
+                cl->compress_level, cur_slot->name);
+    }
+    if (cl->compress_level < 0)
+      cl->compress_level = 6;   /* Default compression level */
   }
 
-  log_write(LL_DETAIL, "Encoding list set by %s", cur_slot->name);
+  log_write(LL_DEBUG, "Encoding list set by %s", cur_slot->name);
+  if (cl->enc_prefer == RFB_ENCODING_RAW) {
+    log_write(LL_WARN, "Using raw encoding for client %s",
+              cur_slot->name);
+  } else if (cl->enc_prefer == RFB_ENCODING_TIGHT) {
+    log_write(LL_DETAIL, "Using Tight encoding for client %s",
+              cur_slot->name);
+  } else if (cl->enc_prefer == RFB_ENCODING_HEXTILE) {
+    log_write(LL_DETAIL, "Using Hextile encoding for client %s",
+              cur_slot->name);
+  }
   aio_setread(rf_client_msg, NULL, 1);
 }
 
