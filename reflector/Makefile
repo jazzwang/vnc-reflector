@@ -3,19 +3,21 @@ IFLAGS =	-I.
 # Production
 #CFLAGS =	-O2 $(IFLAGS)
 # Debug (strict)
-#CFLAGS =	-g -pedantic $(IFLAGS)
+CFLAGS =	-g -pedantic $(IFLAGS)
+# Debug (profiling)
+#CFLAGS =	-g -pg $(IFLAGS)
 # Debug (normal)
-CFLAGS =	-g $(IFLAGS)
+#CFLAGS =	-g $(IFLAGS)
 
 LDFLAGS =
 
 PROG = 	vncreflector
 
 OBJS = 	main.o logging.o host_connect.o d3des.o rfblib.o async_io.o \
-	host_io.o client_io.o
+	host_io.o client_io.o encode.o
 
 SRCS =	main.c logging.c host_connect.c d3des.c rfblib.c async_io.c \
-	host_io.c client_io.c
+	host_io.c client_io.c encode.c
 
 CC = gcc
 MAKEDEPEND = gccmakedep
@@ -39,8 +41,10 @@ depend: $(SRCS)
 
 
 async_io.o: async_io.h
-client_io.o: async_io.h client_io.h d3des.h logging.h reflector.h rfblib.h
+client_io.o: async_io.h client_io.h d3des.h encode.h logging.h reflector.h
+client_io.o: rfblib.h
 d3des.o: d3des.h
+encode.o: async_io.h client_io.h encode.h reflector.h rfblib.h
 host_connect.o: d3des.h host_connect.h logging.h rfblib.h
 host_io.o: async_io.h host_io.h logging.h reflector.h rfblib.h
 logging.o: logging.h

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.2 2001/08/03 13:06:59 const Exp $
+ * $Id: host_connect.c,v 1.3 2001/08/04 17:29:34 const Exp $
  * Connecting to a VNC host
  */
 
@@ -109,7 +109,7 @@ int setup_session(int host_fd, char *password, RFB_SCREEN_INFO **scr)
   if (success) {
     CARD8 pixfmt_buf[16];
     CARD32 name_length;
-    CARD8 *name;
+    char *name;
 
     log_write(LL_DEBUG, "Receiving host desktop parameters");
     if ( recv_CARD16(host_fd, &(*scr)->width) &&

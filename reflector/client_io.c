@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.6 2001/08/03 13:06:59 const Exp $
+ * $Id: client_io.c,v 1.7 2001/08/04 17:29:34 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -15,6 +15,7 @@
 #include "async_io.h"
 #include "client_io.h"
 #include "reflector.h"
+#include "encode.h"
 #include "d3des.h"
 
 static unsigned char *s_password;
@@ -34,10 +35,13 @@ static void rf_client_colormap_data(void);
 static void rf_client_encodings_hdr(void);
 static void rf_client_encodings_data(void);
 static void rf_client_updatereq(void);
+static void wf_client_update_finished(void);
 static void rf_client_keyevent(void);
 static void rf_client_ptrevent(void);
 static void rf_client_cuttext_hdr(void);
 static void rf_client_cuttext_data(void);
+
+static void send_update(void);
 
 /*
  * Implementation
@@ -64,9 +68,11 @@ void af_client_accept(void)
 static void cf_client(void)
 {
   if (cur_slot->errread_f) {
-    log_write(LL_WARN, "Error reading data from %s", cur_slot->name);
+    log_write(LL_WARN, "Error reading from %s: %s",
+              cur_slot->name, strerror(cur_slot->io_errno));
   } else if (cur_slot->errwrite_f) {
-    log_write(LL_WARN, "Error sending data to %s", cur_slot->name);
+    log_write(LL_WARN, "Error sending to %s: %s",
+              cur_slot->name, strerror(cur_slot->io_errno));
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
 }
@@ -104,7 +110,7 @@ static void rf_client_auth(void)
   unsigned char buf[16];
 
   memset(key, 0, 8);
-  strncpy((char *)key, s_password, 8);
+  strncpy((char *)key, (char *)s_password, 8);
 
   /* Place correct crypted response to buf */
   deskey(key, EN0);
@@ -128,6 +134,7 @@ static void rf_client_auth(void)
 
 static void rf_client_initmsg(void)
 {
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
   unsigned char msg_server_init[24];
 
   if (cur_slot->readbuf[0] == 0) {
@@ -143,6 +150,10 @@ static void rf_client_initmsg(void)
   aio_write(NULL, msg_server_init, 24);
   aio_write(NULL, g_screen_info->name, g_screen_info->name_length);
   aio_setread(rf_client_msg, NULL, 1);
+
+  /* The client did not requested framebuffer updates yet */
+  cl->update_requested = 0;
+  cl->update_in_progress = 0;
 }
 
 static void rf_client_msg(void)
@@ -236,26 +247,42 @@ static void rf_client_encodings_data(void)
 static void rf_client_updatereq(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
-  unsigned char msg_hdr[16] = {
-    0, 0, 0, 1,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0
-  };
 
-  log_write(LL_DEBUG, "Received framebuffer update request from %s",
+  if (!cur_slot->readbuf[0]) {
+    cl->update_full = 1;
+    log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
+              cur_slot->name);
+  } else {
+    log_write(LL_DEBUG, "Received framebuffer update request from %s",
+              cur_slot->name);
+  }
+
+  if (cl->update_in_progress) {
+    cl->update_requested = 1;
+  } else {
+    send_update();
+    cl->update_in_progress = 1;
+    cl->update_requested = 0;
+    cl->update_full = 0;
+  }
+
+  aio_setread(rf_client_msg, NULL, 1);
+}
+
+static void wf_client_update_finished(void)
+{
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+
+  log_write(LL_DEBUG, "Finished sending framebuffer update to %s",
             cur_slot->name);
 
-  /* FIXME: This sends the whole framebuffer to the client! */
-
-  buf_put_CARD16(&msg_hdr[8], g_screen_info->width);
-  buf_put_CARD16(&msg_hdr[10], g_screen_info->height);
-
-  aio_write(NULL, msg_hdr, 16);
-  aio_write(NULL, g_framebuffer,
-            (int)g_screen_info->width * (int)g_screen_info->height *
-            (cl->format.bits_pixel / 8));
-  aio_setread(rf_client_msg, NULL, 1);
+  cl->update_in_progress = 0;
+  if (cl->update_requested) {
+    send_update();
+    cl->update_in_progress = 1;
+    cl->update_requested = 0;
+    cl->update_full = 0;
+  }
 }
 
 static void rf_client_keyevent(void)
@@ -276,5 +303,34 @@ static void rf_client_cuttext_hdr(void)
 static void rf_client_cuttext_data(void)
 {
   aio_setread(rf_client_msg, NULL, 1);
+}
+
+/*
+ * Non-callback functions
+ */
+
+static void send_update(void)
+{
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  unsigned char msg_hdr[16] = {
+    0, 0, 0, 1,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0
+  };
+
+  /* FIXME: This sends the whole framebuffer to the client! */
+
+  log_write(LL_DEBUG, "Sending framebuffer update to %s",
+            cur_slot->name);
+
+  buf_put_CARD16(&msg_hdr[8], g_screen_info->width);
+  buf_put_CARD16(&msg_hdr[10], g_screen_info->height);
+
+  aio_write(NULL, msg_hdr, 16);
+  aio_write_nocopy(wf_client_update_finished,
+                   rfb_encode_raw_block(&cl->format, 0, 0,
+                                        g_screen_info->width,
+                                        g_screen_info->height));
 }
 
