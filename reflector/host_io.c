@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.2 2001/08/02 11:53:00 const Exp $
+ * $Id: host_io.c,v 1.3 2001/08/02 13:37:25 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -22,7 +22,9 @@ static void rf_host_fbupdate_hdr(void);
 static void rf_host_fbupdate_recthdr(void);
 static void rf_host_fbupdate_raw(void);
 static void rf_host_colormap_hdr(void);
-static void rf_host_cuttext(void);
+static void rf_host_colormap_data(void);
+static void rf_host_cuttext_hdr(void);
+static void rf_host_cuttext_data(void);
 
 static void request_update(int incr);
 
@@ -39,7 +41,7 @@ void init_host_io(int fd)
 /* Initializing I/O slot */
 static void if_host_io(void)
 {
-  log_write(LL_DEBUG, "Requesting full framebuffer update");
+  log_write(LL_DETAIL, "Requesting full framebuffer update");
   request_update(0);
 
   aio_setread(rf_host_msg, NULL, 1);
@@ -56,14 +58,14 @@ static void rf_host_msg(void)
     aio_setread(rf_host_fbupdate_hdr, NULL, 3);
     break;
   case 1:                       /* SetColourMapEntries */
-    aio_setread(rf_host_colormap_hdr, NULL, 1);
+    aio_setread(rf_host_colormap_hdr, NULL, 5);
     break;
   case 2:                       /* Bell */
-    log_write(LL_DEBUG, "Received Bell message from host");
+    log_write(LL_DETAIL, "Received Bell message from host");
     aio_setread(rf_host_msg, NULL, 1);
     break;
   case 3:                       /* ServerCutText */
-    aio_setread(rf_host_cuttext, NULL, 1);
+    aio_setread(rf_host_cuttext_hdr, NULL, 7);
     break;
   default:
     log_write(LL_ERROR, "Unknown server message type: %d", msg_id);
@@ -86,9 +88,9 @@ static void rf_host_fbupdate_hdr(void)
   rect_count = buf_get_CARD16(&cur_slot->readbuf[1]);
 
   if (rect_count == 0xFFFF) {
-    log_write(LL_DEBUG, "Receiving framebuffer update");
+    log_write(LL_DETAIL, "Receiving framebuffer update");
   } else {
-    log_write(LL_DEBUG, "Receiving framebuffer update, %d rectangle(s)",
+    log_write(LL_DETAIL, "Receiving framebuffer update, %d rectangle(s)",
               rect_count);
   }
 
@@ -144,6 +146,7 @@ static void rf_host_fbupdate_raw(void)
     if (--rect_count) {
       aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
     } else {
+      log_write(LL_DETAIL, "Requesting incremental framebuffer update");
       request_update(1);
       aio_setread(rf_host_msg, NULL, 1);
     }
@@ -156,9 +159,17 @@ static void rf_host_fbupdate_raw(void)
 
 static void rf_host_colormap_hdr(void)
 {
+  CARD16 num_colors;
+
   log_write(LL_WARN, "Ignoring SetColourMapEntries message");
 
-  /* FIXME: add real processing */
+  num_colors = buf_get_CARD16(&cur_slot->readbuf[3]);
+  aio_setread(rf_host_colormap_data, NULL, num_colors * 6);
+}
+
+static void rf_host_colormap_data(void)
+{
+  /* Nothing to do with colormap */
   aio_setread(rf_host_msg, NULL, 1);
 }
 
@@ -166,11 +177,29 @@ static void rf_host_colormap_hdr(void)
 /* Handling ServerCutText messages */
 /***********************************/
 
-static void rf_host_cuttext(void)
-{
-  log_write(LL_DEBUG, "Receiving ServerCutText message from host");
+/* FIXME: Add state variables to the AIO_SLOT structure clone. */
+static CARD32 cut_len;
 
-  /* FIXME: add real processing */
+static void rf_host_cuttext_hdr(void)
+{
+  cut_len = buf_get_CARD32(&cur_slot->readbuf[3]);
+
+  log_write(LL_DETAIL,
+            "Receiving ServerCutText message from host, %lu byte(s)",
+            (unsigned long)cut_len);
+
+  aio_setread(rf_host_cuttext_data, NULL, (size_t)cut_len);
+}
+
+static void rf_host_cuttext_data(void)
+{
+  if (cut_len <= 46) {
+    log_write(LL_DEBUG, "Cut text: \"%.*s\"",
+              (int)cut_len, cur_slot->readbuf);
+  } else {
+    log_write(LL_DEBUG, "Cut text: \"%.34s\" (truncated)",
+              cur_slot->readbuf);
+  }
   aio_setread(rf_host_msg, NULL, 1);
 }
 
