@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.12 2001/10/09 14:20:20 const Exp $
+ * $Id: encode.c,v 1.13 2001/10/09 14:57:23 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -28,21 +28,9 @@
 #include "client_io.h"
 #include "encode.h"
 
-/*
- * Tiny function to fill in rectangle header in an RFB update
- */
-
-int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc)
-{
-
-  buf_put_CARD16(buf, r->x);
-  buf_put_CARD16(&buf[2], r->y);
-  buf_put_CARD16(&buf[4], r->w);
-  buf_put_CARD16(&buf[6], r->h);
-  buf_put_CARD32(&buf[8], enc);
-
-  return 12;                    /* 12 bytes written */
-}
+/********************************************************************/
+/*                        Simple "encoders"                         */
+/********************************************************************/
 
 /*
  * Raw encoder
@@ -83,12 +71,30 @@ AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r)
 }
 
 /*
- * Hextile encoder
+ * Tiny function to fill in rectangle header in an RFB update
  */
 
+int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc)
+{
+
+  buf_put_CARD16(buf, r->x);
+  buf_put_CARD16(&buf[2], r->y);
+  buf_put_CARD16(&buf[4], r->w);
+  buf_put_CARD16(&buf[6], r->h);
+  buf_put_CARD32(&buf[8], enc);
+
+  return 12;                    /* 12 bytes written */
+}
+
+/********************************************************************/
+/*                         Hextile encoder                          */
+/********************************************************************/
+
 /* Medium-level functions */
-static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static int encode_tile8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static int encode_tile16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static int encode_tile32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 
 /* Low-level functions */
 static int encode_tile_ht8(CARD8 *dst_buf, CARD8 *tile_buf,
@@ -105,6 +111,10 @@ static int encode_tile_raw32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static PALETTE2 pal;
 static CARD32 prev_bg;
 static int prev_bg_set;
+
+/********************************************************************/
+/*                Hextile encoder: High-level stuff                 */
+/********************************************************************/
 
 /*
  * Highest-level function implementing Hextile encoder. It iterates
@@ -150,11 +160,20 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
       if (rx1 - tile_r.x < 16)
         tile_r.w = rx1 - tile_r.x;
 
-      /* To cache or not to cache? */
-      if (aligned_f && cl->bgr233_f && tile_r.w == 16 && tile_r.h == 16) {
-        data_ptr += encode_tile_bgr233(data_ptr, cl, &tile_r);
-      } else {
-        data_ptr += encode_tile(data_ptr, cl, &tile_r);
+      switch (cl->format.bits_pixel) {
+      case 8:
+        /* 8-bit color: to cache or not to cache? */
+        if (aligned_f && cl->bgr233_f && tile_r.w == 16 && tile_r.h == 16)
+          data_ptr += encode_tile_using_cache(data_ptr, cl, &tile_r);
+        else
+          data_ptr += encode_tile8(data_ptr, cl, &tile_r);
+        break;
+      case 16:
+        data_ptr += encode_tile16(data_ptr, cl, &tile_r);
+        break;
+      case 32:
+        data_ptr += encode_tile32(data_ptr, cl, &tile_r);
+        break;
       }
     }
   }
@@ -175,49 +194,9 @@ void get_hextile_caching_stats(long *hits, long *misses)
   *misses = s_cache_misses;
 }
 
-/*
- * A function to encode a tile (of size 16x16 or less) using Hextile
- * encoding.
- */
-
-static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
-{
-  CARD32 tile_buf[256];         /* Properly aligned for any pixel format */
-  int bytes;
-
-  /* Perform pixel format translation */
-  /* FIXME: Do it in another function? */
-  (*cl->trans_func)(tile_buf, r, cl->trans_table);
-
-  switch (cl->format.bits_pixel) {
-
-  case 8:
-    /* FIXME: Arrange into separate function? */
-    analyze_rect8((CARD8 *)tile_buf, r, &pal);
-    bytes = encode_tile_ht8(dst_buf, (CARD8 *)tile_buf, &pal, r);
-    if (bytes < 0)
-      bytes = encode_tile_raw8(dst_buf, cl, r);
-    break;
-
-  case 16:
-    /* FIXME: Arrange into separate function? */
-    analyze_rect16((CARD16 *)tile_buf, r, &pal);
-    bytes = encode_tile_ht16(dst_buf, (CARD16 *)tile_buf, &pal, r);
-    if (bytes < 0)
-      bytes = encode_tile_raw16(dst_buf, cl, r);
-    break;
-
-  case 32:
-    /* FIXME: Arrange into separate function? */
-    analyze_rect32(tile_buf, r, &pal);
-    bytes = encode_tile_ht32(dst_buf, tile_buf, &pal, r);
-    if (bytes < 0)
-      bytes = encode_tile_raw32(dst_buf, cl, r);
-    break;
-  }
-
-  return bytes;
-}
+/********************************************************************/
+/*                        Medium-level stuff                        */
+/********************************************************************/
 
 /*
  * Encode properly-aligned 16x16 tile in BGR233 pixel format, using
@@ -225,11 +204,10 @@ static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
  * otherwise.
  */
 
-static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
+static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 {
   int tiles_in_row, tile_ord;
   TILE_HINTS *hints;
-  CARD8 tile_buf[256];
   CARD8 *dst = dst_buf;
   size_t data_size;
   int dst_bytes;
@@ -268,13 +246,10 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
   } else {                      /* Cache miss */
     s_cache_misses++;
 
-    /* FIXME: Arrange into separate function? */
-    (*cl->trans_func)(tile_buf, r, cl->trans_table);
-    analyze_rect8(tile_buf, r, &pal);
-    dst_bytes = encode_tile_ht8(dst_buf, tile_buf, &pal, r);
-    if (dst_bytes < 0)
-      dst_bytes = encode_tile_raw8(dst_buf, cl, r);
+    /* Encode tile... */
+    dst_bytes = encode_tile8(dst_buf, cl, r);
 
+    /* ... and save encoded data in the cache. */
     hints->subenc8 = *dst++;
     if (hints->subenc8 & RFB_HEXTILE_RAW) {
       memcpy(&g_cache8[tile_ord * 256], dst, 256);
@@ -298,6 +273,41 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 
   return dst_bytes;
 }
+
+/*
+ * Analyze and encode a tile.
+ */
+
+#define DEFINE_ENCODE_TILE(bpp)                                         \
+                                                                        \
+static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
+{                                                                       \
+  CARD##bpp tile_buf[256];                                              \
+  int bytes;                                                            \
+                                                                        \
+  /* Translate pixel data into client's format. */                      \
+  (*cl->trans_func)(tile_buf, r, cl->trans_table);                      \
+                                                                        \
+  /* Count number of colors, consider background & foreground. */       \
+  analyze_rect##bpp(tile_buf, r, &pal);                                 \
+                                                                        \
+  /* Try to encode tile representing it as a set of subrects. */        \
+  bytes = encode_tile_ht##bpp(dst_buf, tile_buf, &pal, r);              \
+                                                                        \
+  /* If such encoding was inefficient, use raw sub-encoding. */         \
+  if (bytes < 0)                                                        \
+    bytes = encode_tile_raw##bpp(dst_buf, cl, r);                       \
+                                                                        \
+  return bytes;                                                         \
+}
+
+DEFINE_ENCODE_TILE(8)
+DEFINE_ENCODE_TILE(16)
+DEFINE_ENCODE_TILE(32)
+
+/********************************************************************/
+/*                         Low-level stuff                          */
+/********************************************************************/
 
 /*
  * A function to encode a tile (of size 16x16 or less) using Hextile
@@ -449,7 +459,7 @@ DEFINE_ENCODE_TILE_RAW(32)
 /*
  * Determine number of colors in a tile, choose background and
  * foreground colors. Note that this function is used not only by
- * Hextile encoder.
+ * Hextile encoder, therefore it's not declared as static.
  */
 
 #define DEFINE_ANALYZE_RECT(bpp)                                             \
