@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.10 2001/08/22 17:53:53 const Exp $
+ * $Id: rfblib.h,v 1.11 2001/08/26 13:34:37 const Exp $
  * RFB protocol definitions
  */
 
@@ -61,7 +61,7 @@ typedef struct _RFB_SCREEN_INFO {
   CARD16 height;
   RFB_PIXEL_FORMAT pixformat;
   CARD32 name_length;
-  CARD8 name[1];
+  CARD8 *name;
 } RFB_SCREEN_INFO;
 
 /*

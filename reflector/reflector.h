@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: reflector.h,v 1.10 2001/08/24 09:15:12 const Exp $
+ * $Id: reflector.h,v 1.11 2001/08/26 13:34:37 const Exp $
  * Global include file
  */
 
@@ -21,7 +21,7 @@ typedef struct _TILE_HINTS {
 
 /* Framebuffer and related metadata */
 
-extern RFB_SCREEN_INFO *g_screen_info;
+extern RFB_SCREEN_INFO g_screen_info;
 
 extern CARD32 *g_framebuffer;
 extern TILE_HINTS *g_hints;

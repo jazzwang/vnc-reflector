@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.13 2001/08/24 00:50:47 const Exp $
+ * $Id: host_connect.c,v 1.14 2001/08/26 13:34:37 const Exp $
  * Connecting to a VNC host
  */
 
@@ -307,11 +307,11 @@ static void rf_host_initmsg(void)
   log_write(LL_MSG, "Remote desktop geometry is %dx%d",
             (int)width, (int)height);
 
-  if (g_screen_info->width == 0) {
-    g_screen_info->width = width;
-    g_screen_info->height = height;
-  } else if (g_screen_info->width != width ||
-             g_screen_info->height != height) {
+  if (g_screen_info.width == 0) {
+    g_screen_info.width = width;
+    g_screen_info.height = height;
+  } else if (g_screen_info.width != width ||
+             g_screen_info.height != height) {
     log_write(LL_ERROR, "Incompatible geometry of remote desktop");
     aio_close(0);
     return;
@@ -323,6 +323,7 @@ static void rf_host_initmsg(void)
 
 static void rf_host_set_formats(void)
 {
+  CARD8 *new_name;
   unsigned char setpixfmt_msg[4 + SZ_RFB_PIXEL_FORMAT];
   unsigned char setencodings_msg[] = {
     2,                          /* Message id */
@@ -336,21 +337,22 @@ static void rf_host_set_formats(void)
   log_write(LL_INFO, "Remote desktop name: %.*s",
             (int)s_len, cur_slot->readbuf);
 
-  g_screen_info = realloc(g_screen_info,
-                          sizeof(RFB_SCREEN_INFO) + (size_t)s_len);
-  if (g_screen_info != NULL) {
-    g_screen_info->name_length = s_len;
-    memcpy(g_screen_info->name, cur_slot->readbuf, s_len);
-  } else {
-    g_screen_info->name_length = 1;
-    g_screen_info->name[0] = '?';
+  new_name = malloc((size_t)s_len + 1);
+  if (new_name != NULL) {
+    if (g_screen_info.name != NULL)
+      free(g_screen_info.name);
+
+    g_screen_info.name = new_name;
+    g_screen_info.name_length = s_len;
+    memcpy(g_screen_info.name, cur_slot->readbuf, s_len);
+    g_screen_info.name[(int)s_len] = '\0';
   }
 
   log_write(LL_DETAIL, "Setting up pixel format and encodings");
 
   log_write(LL_DEBUG, "Sending SetPixelFormat message");
   memset(setpixfmt_msg, 0, 4);
-  buf_put_pixfmt(&setpixfmt_msg[4], &g_screen_info->pixformat);
+  buf_put_pixfmt(&setpixfmt_msg[4], &g_screen_info.pixformat);
   aio_write(NULL, setpixfmt_msg, sizeof(setpixfmt_msg));
 
   log_write(LL_DEBUG, "Sending SetEncodings message");
@@ -378,7 +380,7 @@ static int allocate_framebuffer(void)
 {
   int fb_size, tiles_x, tiles_y;
 
-  fb_size = (int)g_screen_info->width * (int)g_screen_info->height;
+  fb_size = (int)g_screen_info.width * (int)g_screen_info.height;
   g_framebuffer = malloc(fb_size * sizeof(CARD32));
   if (g_framebuffer == NULL) {
     log_write(LL_ERROR, "Error allocating framebuffer");
@@ -387,8 +389,8 @@ static int allocate_framebuffer(void)
   log_write(LL_INFO, "Allocated framebuffer, %d bytes",
             fb_size * sizeof(CARD32));
 
-  tiles_x = ((int)g_screen_info->width + 15) / 16;
-  tiles_y = ((int)g_screen_info->height + 15) / 16;
+  tiles_x = ((int)g_screen_info.width + 15) / 16;
+  tiles_y = ((int)g_screen_info.height + 15) / 16;
   g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
   if (g_hints == NULL) {
     log_write(LL_ERROR, "Error allocating memory for hextile hints");

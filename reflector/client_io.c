@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.30 2001/08/24 09:15:12 const Exp $
+ * $Id: client_io.c,v 1.31 2001/08/26 13:34:37 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -188,16 +188,16 @@ static void rf_client_initmsg(void)
   }
 
   /* Send ServerInitialisation message */
-  buf_put_CARD16(msg_server_init, g_screen_info->width);
-  buf_put_CARD16(msg_server_init + 2, g_screen_info->height);
-  buf_put_pixfmt(msg_server_init + 4, &g_screen_info->pixformat);
-  buf_put_CARD32(msg_server_init + 20, g_screen_info->name_length);
+  buf_put_CARD16(msg_server_init, g_screen_info.width);
+  buf_put_CARD16(msg_server_init + 2, g_screen_info.height);
+  buf_put_pixfmt(msg_server_init + 4, &g_screen_info.pixformat);
+  buf_put_CARD32(msg_server_init + 20, g_screen_info.name_length);
   aio_write(NULL, msg_server_init, 24);
-  aio_write(NULL, g_screen_info->name, g_screen_info->name_length);
+  aio_write(NULL, g_screen_info.name, g_screen_info.name_length);
   aio_setread(rf_client_msg, NULL, 1);
 
   /* Set up initial pixel format */
-  memcpy(&cl->format, &g_screen_info->pixformat, sizeof(RFB_PIXEL_FORMAT));
+  memcpy(&cl->format, &g_screen_info.pixformat, sizeof(RFB_PIXEL_FORMAT));
   cl->trans_func = transfunc_null;
   cl->bgr233_f = 0;
 
@@ -479,17 +479,17 @@ static void set_trans_func(CL_SLOT *cl)
 
   cl->bgr233_f = 0;
 
-  if ( cl->format.bits_pixel != g_screen_info->pixformat.bits_pixel ||
-       cl->format.color_depth != g_screen_info->pixformat.color_depth ||
-       cl->format.big_endian != g_screen_info->pixformat.big_endian ||
+  if ( cl->format.bits_pixel != g_screen_info.pixformat.bits_pixel ||
+       cl->format.color_depth != g_screen_info.pixformat.color_depth ||
+       cl->format.big_endian != g_screen_info.pixformat.big_endian ||
        ((cl->format.true_color != 0) !=
-        (g_screen_info->pixformat.true_color != 0)) ||
-       cl->format.r_max != g_screen_info->pixformat.r_max ||
-       cl->format.g_max != g_screen_info->pixformat.g_max ||
-       cl->format.b_max != g_screen_info->pixformat.b_max ||
-       cl->format.r_shift != g_screen_info->pixformat.r_shift ||
-       cl->format.g_shift != g_screen_info->pixformat.g_shift ||
-       cl->format.b_shift != g_screen_info->pixformat.b_shift ) {
+        (g_screen_info.pixformat.true_color != 0)) ||
+       cl->format.r_max != g_screen_info.pixformat.r_max ||
+       cl->format.g_max != g_screen_info.pixformat.g_max ||
+       cl->format.b_max != g_screen_info.pixformat.b_max ||
+       cl->format.r_shift != g_screen_info.pixformat.r_shift ||
+       cl->format.g_shift != g_screen_info.pixformat.g_shift ||
+       cl->format.b_shift != g_screen_info.pixformat.b_shift ) {
 
     cl->trans_table = gen_trans_table(&cl->format);
     switch(cl->format.bits_pixel) {
@@ -543,6 +543,9 @@ static void send_update(void)
 
   /* For each pending rectangle: */
   while (rlist_pick_rect(&cl->pending_rects, &rect)) {
+    log_write(LL_DEBUG, "Sending rectangle %dx%d at %d,%d to %s",
+              (int)rect.w, (int)rect.h, (int)rect.x, (int)rect.y,
+              cur_slot->name);
 
     /* Prepare rectangle header */
     buf_put_CARD16(rect_hdr, rect.x);

@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.26 2001/08/24 05:55:50 const Exp $
+ * $Id: main.c,v 1.27 2001/08/26 13:34:37 const Exp $
  * Main module
  */
 
@@ -50,8 +50,7 @@ static char *opt_host_info_file;
  * Global variables
  */
 
-/* FIXME: allocate desktop name only, not the whole g_screen_info. */
-RFB_SCREEN_INFO *g_screen_info;
+RFB_SCREEN_INFO g_screen_info;
 CARD32 *g_framebuffer;
 TILE_HINTS *g_hints;
 CARD8 *g_cache8;
@@ -102,35 +101,37 @@ int main(int argc, char **argv)
   }
 
   /* Initialization */
-  init_screen_info();
-  read_password_file();
-  set_client_passwords(opt_client_password, opt_client_ro_password);
-  host_set_fbs_prefix(opt_fbs_prefix);
-  aio_init();
+  if (init_screen_info()) {
+    read_password_file();
+    set_client_passwords(opt_client_password, opt_client_ro_password);
+    host_set_fbs_prefix(opt_fbs_prefix);
+    aio_init();
 
-  /* Main work */
-  if (connect_to_host(opt_host_info_file, opt_cl_listen_port)) {
-    if (write_pid_file()) {
-      set_control_signals();
-      aio_mainloop();
-      remove_pid_file();
+    /* Main work */
+    if (connect_to_host(opt_host_info_file, opt_cl_listen_port)) {
+      if (write_pid_file()) {
+        set_control_signals();
+        aio_mainloop();
+        remove_pid_file();
+      }
     }
-  }
 
-  /* Cleanup */
-  if (g_framebuffer != NULL) {
-    log_write(LL_DETAIL, "Freeing framebuffer and associated structures");
-    free(g_framebuffer);
-    free(g_hints);
-    free(g_cache8);
-  }
-  free(g_screen_info);
+    /* Cleanup */
+    if (g_framebuffer != NULL) {
+      log_write(LL_DETAIL, "Freeing framebuffer and associated structures");
+      free(g_framebuffer);
+      free(g_hints);
+      free(g_cache8);
+    }
+    if (g_screen_info.name != NULL)
+      free(g_screen_info.name);
 
-  get_hextile_caching_stats(&cache_hits, &cache_misses);
-  if (cache_hits + cache_misses != 0) {
-    log_write(LL_INFO, "Caching stats for 16x16 tiles: %d%% hits (%ld/%ld)",
-              (int)(cache_hits * 100 / (cache_hits + cache_misses)),
-              cache_hits, cache_hits + cache_misses);
+    get_hextile_caching_stats(&cache_hits, &cache_misses);
+    if (cache_hits + cache_misses != 0) {
+      log_write(LL_INFO, "Caching stats for 16x16 tiles: %d%% hits (%ld/%ld)",
+                (int)(cache_hits * 100 / (cache_hits + cache_misses)),
+                cache_hits, cache_hits + cache_misses);
+    }
   }
 
   log_write(LL_MSG, "Terminating");
@@ -357,27 +358,27 @@ static int init_screen_info(void)
     CARD8 test;
   } little_endian;
 
-  /* Allocate memory making sure all fields are zeroed */
-  g_screen_info = calloc(1, sizeof(RFB_SCREEN_INFO));
-  if (g_screen_info == NULL)
-    return 0;
-
   /* Zero screen dimensions, set initial desktop name */
-  g_screen_info->width = 0;
-  g_screen_info->height = 0;
-  g_screen_info->name_length = 1;
-  g_screen_info->name[0] = '?';
+  g_screen_info.width = 0;
+  g_screen_info.height = 0;
+  g_screen_info.name_length = 1;
+  g_screen_info.name = malloc(2);
+  if (g_screen_info.name == NULL) {
+    log_write(LL_ERROR, "Error allocating memory");
+    return 0;
+  }
+  memcpy(g_screen_info.name, "?", 2);
 
   /* Fill in PIXEL_FORMAT structure */
-  g_screen_info->pixformat.bits_pixel = 32;
-  g_screen_info->pixformat.color_depth = 24;
-  g_screen_info->pixformat.true_color = 1;
-  g_screen_info->pixformat.r_max = 255;
-  g_screen_info->pixformat.g_max = 255;
-  g_screen_info->pixformat.b_max = 255;
-  g_screen_info->pixformat.r_shift = 16;
-  g_screen_info->pixformat.g_shift = 8;
-  g_screen_info->pixformat.b_shift = 0;
+  g_screen_info.pixformat.bits_pixel = 32;
+  g_screen_info.pixformat.color_depth = 24;
+  g_screen_info.pixformat.true_color = 1;
+  g_screen_info.pixformat.r_max = 255;
+  g_screen_info.pixformat.g_max = 255;
+  g_screen_info.pixformat.b_max = 255;
+  g_screen_info.pixformat.r_shift = 16;
+  g_screen_info.pixformat.g_shift = 8;
+  g_screen_info.pixformat.b_shift = 0;
 
   /* Set correct endian flag in PIXEL_FORMAT */
   little_endian.value32 = 1;
@@ -385,7 +386,7 @@ static int init_screen_info(void)
     log_write(LL_DEBUG, "Our machine is little endian");
   } else {
     log_write(LL_DEBUG, "Our machine is big endian");
-    g_screen_info->pixformat.big_endian = 1;
+    g_screen_info.pixformat.big_endian = 1;
   }
 
   /* Make sure we would not try to free framebuffer */

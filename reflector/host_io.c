@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.21 2001/08/24 05:55:50 const Exp $
+ * $Id: host_io.c,v 1.22 2001/08/26 13:34:37 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -239,7 +239,7 @@ static void rf_host_fbupdate_recthdr(void)
               cur_rect.w * cur_rect.h * sizeof(CARD32));
     rect_cur_row = 0;
     aio_setread(rf_host_fbupdate_raw,
-                &g_framebuffer[cur_rect.y * (int)g_screen_info->width +
+                &g_framebuffer[cur_rect.y * (int)g_screen_info.width +
                                cur_rect.x],
                 cur_rect.w * sizeof(CARD32));
     break;
@@ -273,7 +273,7 @@ static void rf_host_fbupdate_raw(void)
 
   if (++rect_cur_row < cur_rect.h) {
     /* Read next row */
-    idx = (cur_rect.y + rect_cur_row) * (int)g_screen_info->width + cur_rect.x;
+    idx = (cur_rect.y + rect_cur_row) * (int)g_screen_info.width + cur_rect.x;
     aio_setread(rf_host_fbupdate_raw, &g_framebuffer[idx],
                 cur_rect.w * sizeof(CARD32));
   } else {
@@ -286,7 +286,7 @@ static void rf_host_copyrect(void)
 {
   CARD32 *src_ptr;
   CARD32 *dst_ptr;
-  int width = (int)g_screen_info->width;
+  int width = (int)g_screen_info.width;
   int row;
 
   /* Save data in a file if necessary */
@@ -368,14 +368,14 @@ static void rf_host_hextile_raw(void)
   }
 
   from_ptr = hextile_buf;
-  fb_ptr = &g_framebuffer[hextile_rect.y * (int)g_screen_info->width +
+  fb_ptr = &g_framebuffer[hextile_rect.y * (int)g_screen_info.width +
                           hextile_rect.x];
 
   /* Just copy raw data into the framebuffer */
   for (row = 0; row < hextile_rect.h; row++) {
     memcpy(fb_ptr, from_ptr, hextile_rect.w * sizeof(CARD32));
     from_ptr += hextile_rect.w;
-    fb_ptr += g_screen_info->width;
+    fb_ptr += g_screen_info.width;
   }
 
   hextile_next_tile();
@@ -589,22 +589,22 @@ static void fbs_open_file(void)
   /* Prepare stream header data */
   memcpy(fbs_header, "RFB 003.003\n", 12);
   buf_put_CARD32(&fbs_header[12], 1);
-  buf_put_CARD16(&fbs_header[16], g_screen_info->width);
-  buf_put_CARD16(&fbs_header[18], g_screen_info->height);
-  buf_put_pixfmt(&fbs_header[20], &g_screen_info->pixformat);
-  len = g_screen_info->name_length;
+  buf_put_CARD16(&fbs_header[16], g_screen_info.width);
+  buf_put_CARD16(&fbs_header[18], g_screen_info.height);
+  buf_put_pixfmt(&fbs_header[20], &g_screen_info.pixformat);
+  len = g_screen_info.name_length;
   if (len > 192)
     len = 192;
   buf_put_CARD32(&fbs_header[36], len);
-  memcpy(&fbs_header[40], g_screen_info->name, len);
+  memcpy(&fbs_header[40], g_screen_info.name, len);
 
   /* Write stream header data */
   fbs_write_data(fbs_header, 40 + len);
 
   /* Allocate memory to hold one rectangle of maximum size */
   if (s_fbs_fp != NULL) {
-    w = (int)g_screen_info->width;
-    h = (int)g_screen_info->height;
+    w = (int)g_screen_info.width;
+    h = (int)g_screen_info.height;
     max_rect_size = 12 + (w * h * 4) + ((w + 15) / 16) * ((h + 15) / 16);
     s_fbs_buffer = malloc(max_rect_size);
     if (s_fbs_buffer == NULL) {
@@ -664,14 +664,14 @@ static void hextile_fill_tile(void)
   int x, y;
   CARD32 *fb_ptr;
 
-  fb_ptr = &g_framebuffer[hextile_rect.y * (int)g_screen_info->width +
+  fb_ptr = &g_framebuffer[hextile_rect.y * (int)g_screen_info.width +
                           hextile_rect.x];
 
   for (y = 0; y < hextile_rect.h; y++) {
     for (x = 0; x < hextile_rect.w; x++) {
       *fb_ptr++ = hextile_bg;
     }
-    fb_ptr += g_screen_info->width - hextile_rect.w;
+    fb_ptr += g_screen_info.width - hextile_rect.w;
   }
 }
 
@@ -687,14 +687,14 @@ static void hextile_fill_subrect(CARD8 pos, CARD8 dim)
   dim_w = (dim >> 4 & 0x0F) + 1;
   dim_h = (dim & 0x0F) + 1;
 
-  fb_ptr = &g_framebuffer[(hextile_rect.y+pos_y) * (int)g_screen_info->width +
+  fb_ptr = &g_framebuffer[(hextile_rect.y+pos_y) * (int)g_screen_info.width +
                           (hextile_rect.x+pos_x)];
 
   for (y = 0; y < dim_h; y++) {
     for (x = 0; x < dim_w; x++) {
       *fb_ptr++ = hextile_fg;
     }
-    fb_ptr += g_screen_info->width - dim_w;
+    fb_ptr += g_screen_info.width - dim_w;
   }
 }
 
@@ -754,7 +754,7 @@ static void invalidate_cache(FB_RECT *r)
   int tile_x0, tile_y0, tile_x1, tile_y1;
   int x, y;
 
-  tiles_in_row = ((int)g_screen_info->width + 15) / 16;
+  tiles_in_row = ((int)g_screen_info.width + 15) / 16;
 
   tile_x0 = r->x / 16;
   tile_y0 = r->y / 16;
@@ -777,8 +777,8 @@ static void request_update(int incr)
   };
 
   fbupdatereq_msg[1] = (incr) ? 1 : 0;
-  buf_put_CARD16(&fbupdatereq_msg[6], g_screen_info->width);
-  buf_put_CARD16(&fbupdatereq_msg[8], g_screen_info->height);
+  buf_put_CARD16(&fbupdatereq_msg[6], g_screen_info.width);
+  buf_put_CARD16(&fbupdatereq_msg[8], g_screen_info.height);
 
   log_write(LL_DEBUG, "Sending FramebufferUpdateRequest message");
   aio_write(NULL, fbupdatereq_msg, sizeof(fbupdatereq_msg));

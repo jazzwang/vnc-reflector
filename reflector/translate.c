@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: translate.c,v 1.2 2001/08/19 13:56:42 const Exp $
+ * $Id: translate.c,v 1.3 2001/08/26 13:34:37 const Exp $
  * Pixel format translation.
  */
 
@@ -63,7 +63,7 @@ static void *gen_trans_table##bpp(RFB_PIXEL_FORMAT *fmt)                \
       g = (CARD##bpp)((c * fmt->g_max + 127) / 255 << fmt->g_shift);    \
       b = (CARD##bpp)((c * fmt->b_max + 127) / 255 << fmt->b_shift);    \
       if ((fmt->big_endian != 0) ==                                     \
-          (g_screen_info->pixformat.big_endian != 0)) {                 \
+          (g_screen_info.pixformat.big_endian != 0)) {                  \
         table[c] = r;                                                   \
         table[256 + c] = g;                                             \
         table[512 + c] = b;                                             \
@@ -88,11 +88,11 @@ void transfunc_null(void *dst_buf, FB_RECT *r, void *table)
   CARD32 *dst_ptr = (CARD32 *)dst_buf;
   int y;
 
-  fb_ptr = &g_framebuffer[r->y * g_screen_info->width + r->x];
+  fb_ptr = &g_framebuffer[r->y * g_screen_info.width + r->x];
 
   for (y = 0; y < r->h; y++) {
     memcpy(dst_ptr, fb_ptr, r->w * sizeof(CARD32));
-    fb_ptr += g_screen_info->width;
+    fb_ptr += g_screen_info.width;
     dst_ptr += r->w;
   }
 }
@@ -106,7 +106,7 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
   CARD##bpp *tbl_ptr = (CARD##bpp *)table;                              \
   int x, y;                                                             \
                                                                         \
-  fb_ptr = &g_framebuffer[r->y * g_screen_info->width + r->x];          \
+  fb_ptr = &g_framebuffer[r->y * g_screen_info.width + r->x];           \
   for (y = 0; y < r->h; y++) {                                          \
     for (x = 0; x < r->w; x++) {                                        \
       *dst_ptr++ = (CARD##bpp)(tbl_ptr[*fb_ptr >> 16 & 0xFF] |          \
@@ -114,7 +114,7 @@ void transfunc##bpp(void *dst_buf, FB_RECT *r, void *table)             \
                                tbl_ptr[512 + (*fb_ptr & 0xFF)]);        \
       fb_ptr++;                                                         \
     }                                                                   \
-    fb_ptr += (g_screen_info->width - r->w);                            \
+    fb_ptr += (g_screen_info.width - r->w);                             \
   }                                                                     \
 }
 
