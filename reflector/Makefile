@@ -1,7 +1,7 @@
 # VNC Reflector
 # Copyright (C) 2001 Const Kaplinsky
 #
-# $Id: Makefile,v 1.20 2001/08/19 18:38:11 const Exp $
+# $Id: Makefile,v 1.21 2001/08/22 17:53:53 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS.
 
@@ -41,7 +41,7 @@ clean:
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
 
 depend: $(SRCS)
-	$(MAKEDEPEND) -Y -I. $(SRCS)
+	$(MAKEDEPEND) -I. $(SRCS)
 
 .c.o:
 	$(CC) $(CFLAGS) $(CONFFLAGS) -c $<
@@ -51,14 +51,14 @@ depend: $(SRCS)
 main.o: main.c rfblib.h async_io.h logging.h reflector.h rect.h \
   host_connect.h host_io.h translate.h client_io.h
 logging.o: logging.c logging.h
-host_connect.o: host_connect.c rfblib.h logging.h host_connect.h d3des.h
+host_connect.o: host_connect.c rfblib.h logging.h host_connect.h
 d3des.o: d3des.c d3des.h
-rfblib.o: rfblib.c rfblib.h
+rfblib.o: rfblib.c rfblib.h d3des.h
 async_io.o: async_io.c async_io.h
 host_io.o: host_io.c rfblib.h reflector.h async_io.h logging.h rect.h \
   translate.h client_io.h host_io.h
 client_io.o: client_io.c rfblib.h logging.h async_io.h reflector.h rect.h \
-  host_io.h translate.h client_io.h encode.h d3des.h
+  host_io.h translate.h client_io.h encode.h
 encode.o: encode.c rfblib.h reflector.h async_io.h rect.h translate.h \
   client_io.h encode.h
 rect.o: rect.c rfblib.h rect.h

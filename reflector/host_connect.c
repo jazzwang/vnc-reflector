@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.7 2001/08/15 12:20:44 const Exp $
+ * $Id: host_connect.c,v 1.8 2001/08/22 17:53:53 const Exp $
  * Connecting to a VNC host
  */
 
@@ -18,7 +18,6 @@
 #include "rfblib.h"
 #include "logging.h"
 #include "host_connect.h"
-#include "d3des.h"
 
 static int negotiate_ver(int fd, int major, int minor);
 static int vnc_authenticate(int fd, unsigned char *password);
@@ -198,12 +197,7 @@ static int vnc_authenticate(int fd, unsigned char *password)
   if (!recv_data(fd, challenge, 16))
     return 0;
 
-  memset(key, 0, 8);
-  strncpy((char *)key, (char *)password, 8);
-
-  deskey(key, EN0);
-  des(challenge, response);
-  des(challenge + 8, response + 8);
+  rfb_crypt(response, challenge, password);
 
   log_write(LL_DEBUG, "Sending DES-encrypted response");
 

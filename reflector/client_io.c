@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.25 2001/08/20 11:58:48 const Exp $
+ * $Id: client_io.c,v 1.26 2001/08/22 17:53:53 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -19,7 +19,6 @@
 #include "translate.h"
 #include "client_io.h"
 #include "encode.h"
-#include "d3des.h"
 
 static unsigned char *s_password;
 static unsigned char *s_password_ro;
@@ -108,7 +107,6 @@ static void rf_client_ver(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
   CARD8 msg[20];
-  int i;
 
   /* FIXME: Check protocol version. */
 
@@ -124,9 +122,8 @@ static void rf_client_ver(void)
     buf_put_CARD32(msg, 2);
 
     /* Prepare "random" challenge */
-    srandom((unsigned int)time(NULL));
-    for (i = 0; i < 16; i++)
-      cl->auth_challenge[i] = msg[i + 4] = (unsigned char)random();
+    rfb_gen_challenge(cl->auth_challenge);
+    memcpy(&msg[4], cl->auth_challenge, 16);
 
     /* Send both auth ID and challenge */
     aio_write(NULL, msg, 20);
@@ -148,19 +145,9 @@ static void rf_client_auth(void)
   unsigned char resp_ro[16];
   unsigned char msg[4];
 
-  /* Place correct crypted response to resp_rw, full-control password */
-  memset(key, 0, 8);
-  strncpy((char *)key, (char *)s_password, 8);
-  deskey(key, EN0);
-  des(cl->auth_challenge, resp_rw);
-  des(cl->auth_challenge + 8, resp_rw + 8);
-
-  /* Place correct crypted response to resp_ro, read-only password */
-  memset(key, 0, 8);
-  strncpy((char *)key, (char *)s_password_ro, 8);
-  deskey(key, EN0);
-  des(cl->auth_challenge, resp_ro);
-  des(cl->auth_challenge + 8, resp_ro + 8);
+  /* Place correct crypted responses to resp_rw, resp_ro */
+  rfb_crypt(resp_rw, cl->auth_challenge, s_password);
+  rfb_crypt(resp_ro, cl->auth_challenge, s_password_ro);
 
   /* Compare client response with correct ones */
   /* FIXME: Implement "too many tries" functionality some day. */

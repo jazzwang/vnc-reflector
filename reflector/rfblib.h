@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.9 2001/08/11 02:47:47 const Exp $
+ * $Id: rfblib.h,v 1.10 2001/08/22 17:53:53 const Exp $
  * RFB protocol definitions
  */
 
@@ -123,16 +123,13 @@ typedef struct _RFB_SCREEN_INFO {
 }
 
 /*
- * The following functions are not used, replaced by macros
- *
-CARD16 buf_get_CARD16(void *buf);
-CARD32 buf_get_CARD32(void *buf);
-void buf_put_CARD16(void *buf, CARD16 value);
-void buf_put_CARD32(void *buf, CARD32 value);
- *
+ * Functions
  */
 
 void buf_get_pixfmt(void *buf, RFB_PIXEL_FORMAT *format);
 void buf_put_pixfmt(void *buf, RFB_PIXEL_FORMAT *format);
+
+void rfb_gen_challenge(CARD8 *buf);
+void rfb_crypt(CARD8 *dst_buf, CARD8 *src_buf, unsigned char *password);
 
 #endif /* _REFLIB_RFBLIB_H */
