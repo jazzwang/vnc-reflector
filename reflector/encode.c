@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.11 2001/10/09 10:34:32 const Exp $
+ * $Id: encode.c,v 1.12 2001/10/09 14:20:20 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -91,9 +91,12 @@ static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 
 /* Low-level functions */
-static int encode_tile_ht8(CARD8 *dst_buf, CARD8 *tile_buf, FB_RECT *r);
-static int encode_tile_ht16(CARD8 *dst_buf, CARD16 *tile_buf, FB_RECT *r);
-static int encode_tile_ht32(CARD8 *dst_buf, CARD32 *tile_buf, FB_RECT *r);
+static int encode_tile_ht8(CARD8 *dst_buf, CARD8 *tile_buf,
+                           PALETTE2 *pal, FB_RECT *r);
+static int encode_tile_ht16(CARD8 *dst_buf, CARD16 *tile_buf,
+                            PALETTE2 *pal, FB_RECT *r);
+static int encode_tile_ht32(CARD8 *dst_buf, CARD32 *tile_buf,
+                            PALETTE2 *pal, FB_RECT *r);
 static int encode_tile_raw8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
@@ -183,25 +186,31 @@ static int encode_tile(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
   int bytes;
 
   /* Perform pixel format translation */
-  /* FIXME: Do it in encode_tile_htNN()? */
+  /* FIXME: Do it in another function? */
   (*cl->trans_func)(tile_buf, r, cl->trans_table);
 
   switch (cl->format.bits_pixel) {
 
   case 8:
-    bytes = encode_tile_ht8(dst_buf, (CARD8 *)tile_buf, r);
+    /* FIXME: Arrange into separate function? */
+    analyze_rect8((CARD8 *)tile_buf, r, &pal);
+    bytes = encode_tile_ht8(dst_buf, (CARD8 *)tile_buf, &pal, r);
     if (bytes < 0)
       bytes = encode_tile_raw8(dst_buf, cl, r);
     break;
 
   case 16:
-    bytes = encode_tile_ht16(dst_buf, (CARD16 *)tile_buf, r);
+    /* FIXME: Arrange into separate function? */
+    analyze_rect16((CARD16 *)tile_buf, r, &pal);
+    bytes = encode_tile_ht16(dst_buf, (CARD16 *)tile_buf, &pal, r);
     if (bytes < 0)
       bytes = encode_tile_raw16(dst_buf, cl, r);
     break;
 
   case 32:
-    bytes = encode_tile_ht32(dst_buf, tile_buf, r);
+    /* FIXME: Arrange into separate function? */
+    analyze_rect32(tile_buf, r, &pal);
+    bytes = encode_tile_ht32(dst_buf, tile_buf, &pal, r);
     if (bytes < 0)
       bytes = encode_tile_raw32(dst_buf, cl, r);
     break;
@@ -259,8 +268,10 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
   } else {                      /* Cache miss */
     s_cache_misses++;
 
+    /* FIXME: Arrange into separate function? */
     (*cl->trans_func)(tile_buf, r, cl->trans_table);
-    dst_bytes = encode_tile_ht8(dst_buf, tile_buf, r);
+    analyze_rect8(tile_buf, r, &pal);
+    dst_bytes = encode_tile_ht8(dst_buf, tile_buf, &pal, r);
     if (dst_bytes < 0)
       dst_bytes = encode_tile_raw8(dst_buf, cl, r);
 
@@ -293,15 +304,19 @@ static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
  * encoding. The tile_buf should point to raw pixel data for the tile
  * in client pixel format. The dst_buf argument should point to an
  * array of size at least (256 * (cl->format.bits_pixel/8) + 1) bytes.
- * This funtion returns number of bytes put into the dst_buf or -1 if
+ * The pal argument should point to a valid PALETTE2 structire filled
+ * in by the analyze_rectNN funtion.
+ *
+ * Return value: the number of bytes put into the dst_buf or -1 if
  * this tile should be raw-encoded.
+ *
  * NOTE: tile_buf[] contents would be destroyed by this function.
  */
 
 #define DEFINE_ENCODE_TILE_HT(bpp)                                           \
                                                                              \
-static int                                                                   \
-encode_tile_ht##bpp(CARD8 *dst_buf, CARD##bpp *tile_buf, FB_RECT *r)         \
+static int encode_tile_ht##bpp(CARD8 *dst_buf, CARD##bpp *tile_buf,          \
+                               PALETTE2 *pal, FB_RECT *r)                    \
 {                                                                            \
   CARD8 *dst = dst_buf;                                                      \
   CARD8 *dst_num_subrects;                                                   \
@@ -311,23 +326,21 @@ encode_tile_ht##bpp(CARD8 *dst_buf, CARD##bpp *tile_buf, FB_RECT *r)         \
   CARD##bpp color, bg_color;                                                 \
   CARD8 subenc = 0;                                                          \
                                                                              \
-  /* Count colors, consider bg, fg */                                        \
-  analyze_rect##bpp(tile_buf, r, &pal);                                      \
-  bg_color = (CARD##bpp)pal.bg;                                              \
+  bg_color = (CARD##bpp)pal->bg;                                             \
                                                                              \
   /* Set appropriate sub-encoding flags */                                   \
-  if (prev_bg != pal.bg || !prev_bg_set) {                                   \
+  if (prev_bg != pal->bg || !prev_bg_set) {                                  \
     subenc |= RFB_HEXTILE_BG_SPECIFIED;                                      \
   }                                                                          \
-  if (pal.num_colors != 1) {                                                 \
+  if (pal->num_colors != 1) {                                                \
     subenc |= RFB_HEXTILE_ANY_SUBRECTS;                                      \
-    if (pal.num_colors == 0)                                                 \
+    if (pal->num_colors == 0)                                                \
       subenc |= RFB_HEXTILE_SUBRECTS_COLOURED;                               \
     else                                                                     \
       subenc |= RFB_HEXTILE_FG_SPECIFIED;                                    \
   }                                                                          \
   *dst++ = subenc;                                                           \
-  prev_bg = pal.bg;                                                          \
+  prev_bg = pal->bg;                                                         \
   prev_bg_set = 1;                                                           \
                                                                              \
   /* Write subencoding-dependent heading data */                             \
@@ -336,7 +349,7 @@ encode_tile_ht##bpp(CARD8 *dst_buf, CARD##bpp *tile_buf, FB_RECT *r)         \
     dst += sizeof(CARD##bpp);                                                \
   }                                                                          \
   if (subenc & RFB_HEXTILE_FG_SPECIFIED) {                                   \
-    color = (CARD##bpp)pal.fg;                                               \
+    color = (CARD##bpp)pal->fg;                                              \
     BUF_PUT_PIXEL##bpp(dst, color);                                          \
     dst += sizeof(CARD##bpp);                                                \
   }                                                                          \
@@ -346,7 +359,7 @@ encode_tile_ht##bpp(CARD8 *dst_buf, CARD##bpp *tile_buf, FB_RECT *r)         \
   }                                                                          \
                                                                              \
   /* Sort out the simplest case, solid-color tile */                         \
-  if (pal.num_colors == 1)                                                   \
+  if (pal->num_colors == 1)                                                  \
     return (dst - dst_buf);                                                  \
                                                                              \
   /* Limit data size in dst_buf */                                           \
