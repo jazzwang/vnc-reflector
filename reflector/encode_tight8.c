@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight8.c,v 1.3 2001/12/02 08:30:07 const Exp $
+ * $Id: encode_tight8.c,v 1.4 2001/12/05 20:18:47 const Exp $
  * Tight encoder.
  */
 
@@ -88,6 +88,8 @@ int rfb_encode_tight8(CL_SLOT *cl, FB_RECT *r)
   int max_rect_size, max_rect_width;
   int max_subrect_width, max_subrect_height;
   FB_RECT sr;
+
+  sr.enc = RFB_ENCODING_TIGHT;
 
   max_rect_size = s_tight_conf[cl->compress_level].max_rect_size;
   max_rect_width = s_tight_conf[cl->compress_level].max_rect_width;
