@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: reflector.h,v 1.25 2002/09/03 10:48:17 const Exp $
+ * $Id: reflector.h,v 1.26 2002/09/03 13:16:58 const Exp $
  * Global include file
  */
 
@@ -29,17 +29,26 @@ extern CARD16 g_fb_width, g_fb_height;
 
 /* actions.c */
 
-int set_actions_file(char *file_path);
-int perform_action(char *action_str);
+extern int set_actions_file(char *file_path);
+extern int perform_action(char *action_str);
 
 /* active.c */
 
-int write_active_file(void);
-int remove_active_file(void);
-int set_active_file(char *file_path);
+extern int write_active_file(void);
+extern int remove_active_file(void);
+extern int set_active_file(char *file_path);
 
 /* control.c */
 
-void set_control_signals(void);
+extern void set_control_signals(void);
+
+/* fbs_files.c */
+
+extern void fbs_set_prefix(char *fbs_prefix, int join_sessions);
+extern void fbs_open_file(CARD16 fb_width, CARD16 fb_height);
+extern void fbs_write_data(void *buf, size_t len);
+extern void fbs_spool_data(void *buf, size_t len);
+extern void fbs_flush_data(void);
+extern void fbs_close_file(void);
 
 #endif /* _REF_REFLECTOR_H */

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.42 2002/09/03 10:48:17 const Exp $
+ * $Id: main.c,v 1.43 2002/09/03 13:16:58 const Exp $
  * Main module
  */
 
@@ -131,7 +131,7 @@ int main(int argc, char **argv)
   if (init_screen_info()) {
     read_password_file();
     set_client_passwords(opt_client_password, opt_client_ro_password);
-    host_set_fbs_prefix(opt_fbs_prefix, opt_join_sessions);
+    fbs_set_prefix(opt_fbs_prefix, opt_join_sessions);
 
     set_active_file(opt_active_filename);
     set_actions_file(opt_actions_filename);
