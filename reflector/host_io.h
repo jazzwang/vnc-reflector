@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.h,v 1.5 2001/08/23 15:24:51 const Exp $
+ * $Id: host_io.h,v 1.6 2001/08/23 21:19:44 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -10,6 +10,7 @@
 
 #define TYPE_HOST_SLOT  2
 
+void host_set_fbs_prefix(char *fbs_prefix);
 void host_activate(void);
 void host_close_hook(void);
 

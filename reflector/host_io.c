@@ -1,11 +1,13 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.19 2001/08/23 15:24:51 const Exp $
+ * $Id: host_io.c,v 1.20 2001/08/23 21:19:44 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -38,6 +40,10 @@ static void rf_host_cuttext_hdr(void);
 static void rf_host_cuttext_data(void);
 static void fn_host_pass_cuttext(AIO_SLOT *slot);
 
+static void fbs_open_file(void);
+static void fbs_write_data(void *buf, size_t len);
+static void fbs_close_file(void);
+
 static void hextile_fill_tile(void);
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim);
 static void hextile_next_tile(void);
@@ -48,8 +54,21 @@ static void request_update(int incr);
  * Implementation
  */
 
+static char *s_fbs_prefix = NULL;
+static int s_fbs_idx = 0;
+static FILE *s_fbs_fp = NULL;
+static CARD8 *s_fbs_buffer, *s_fbs_buffer_ptr;
+static struct timeval s_fbs_start_time, s_fbs_time;
+static struct timezone s_fbs_timezone;
+
 static AIO_SLOT *host_slot;
 static int host_slot_active = 0;
+
+void host_set_fbs_prefix(char *fbs_prefix)
+{
+  s_fbs_prefix = fbs_prefix;
+  s_fbs_idx = 0;
+}
 
 /* Prepare host I/O slot for operating in main protocol phase */
 void host_activate(void)
@@ -57,6 +76,12 @@ void host_activate(void)
 
   host_slot = cur_slot;
   host_slot_active = 1;
+
+  /* If requested, open file to save this session and write the header */
+  if (s_fbs_prefix != NULL) {
+    s_fbs_idx++;
+    fbs_open_file();
+  }
 
   log_write(LL_DETAIL, "Requesting full framebuffer update");
   request_update(0);
@@ -67,6 +92,9 @@ void host_activate(void)
 /* On-close hook */
 void host_close_hook(void)
 {
+
+  if (s_fbs_fp != NULL)
+    fbs_close_file();
 
   host_slot_active = 0;
 
@@ -115,6 +143,9 @@ static void rf_host_msg(void)
     break;
   case 2:                       /* Bell */
     log_write(LL_DETAIL, "Received Bell message from host");
+    if (s_fbs_fp != NULL) {
+      fbs_write_data(cur_slot->readbuf, 1);
+    }
     aio_setread(rf_host_msg, NULL, 1);
     break;
   case 3:                       /* ServerCutText */
@@ -142,10 +173,13 @@ static CARD8 hextile_num_subrects;
 static CARD32 hextile_bg;
 static CARD32 hextile_fg;
 static FB_RECT hextile_rect;
-static CARD32 hextile_buf[256];
+
+/* FIXME: Evil/buggy servers can overflow this buffer */
+static CARD32 hextile_buf[256 + 2];
 
 static void rf_host_fbupdate_hdr(void)
 {
+  CARD8 hdr_buf[4];
 
   rect_count = buf_get_CARD16(&cur_slot->readbuf[1]);
 
@@ -154,6 +188,12 @@ static void rf_host_fbupdate_hdr(void)
   } else {
     log_write(LL_DETAIL, "Receiving framebuffer update, %d rectangle(s)",
               rect_count);
+  }
+
+  if (s_fbs_fp != NULL) {
+    hdr_buf[0] = 0;
+    memcpy(&hdr_buf[1], cur_slot->readbuf, 3);
+    fbs_write_data(hdr_buf, 4);
   }
 
   aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
@@ -170,10 +210,20 @@ static void rf_host_fbupdate_recthdr(void)
   cur_rect.src_y = 0xFFFF;
   rect_enc = buf_get_CARD32(&cur_slot->readbuf[8]);
 
+  /* Copy data for saving in a file if necessary */
+  if (s_fbs_fp != NULL) {
+    memcpy(s_fbs_buffer, cur_slot->readbuf, 12);
+    s_fbs_buffer_ptr = s_fbs_buffer + 12;
+  }
+
   if (!cur_rect.h || !cur_rect.w) {
     log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring)",
               (int)cur_rect.w, (int)cur_rect.h,
               (int)cur_rect.x, (int)cur_rect.y);
+    /* Save data in a file if necessary */
+    if (s_fbs_fp != NULL) {
+      fbs_write_data(s_fbs_buffer, s_fbs_buffer_ptr - s_fbs_buffer);
+    }
     aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
     return;
   }
@@ -214,6 +264,12 @@ static void rf_host_fbupdate_raw(void)
 {
   int idx;
 
+  /* Save data in a file if necessary */
+  if (s_fbs_fp != NULL) {
+    memcpy(s_fbs_buffer_ptr, cur_slot->readbuf, cur_rect.w * sizeof(CARD32));
+    s_fbs_buffer_ptr += cur_rect.w * sizeof(CARD32);
+  }
+
   if (++rect_cur_row < cur_rect.h) {
     /* Read next row */
     idx = (cur_rect.y + rect_cur_row) * (int)g_screen_info->width + cur_rect.x;
@@ -231,6 +287,12 @@ static void rf_host_copyrect(void)
   CARD32 *dst_ptr;
   int width = (int)g_screen_info->width;
   int row;
+
+  /* Save data in a file if necessary */
+  if (s_fbs_fp != NULL) {
+    memcpy(s_fbs_buffer_ptr, cur_slot->readbuf, 4);
+    s_fbs_buffer_ptr += 4;
+  }
 
   cur_rect.src_x = buf_get_CARD16(cur_slot->readbuf);
   cur_rect.src_y = buf_get_CARD16(&cur_slot->readbuf[2]);
@@ -264,6 +326,10 @@ static void rf_host_hextile_subenc(void)
 {
   int data_size;
 
+  /* Copy data for saving in a file if necessary */
+  if (s_fbs_fp != NULL)
+    *s_fbs_buffer_ptr++ = cur_slot->readbuf[0];
+
   hextile_subenc = cur_slot->readbuf[0];
   if (hextile_subenc & HEXTILE_RAW) {
     data_size = hextile_rect.w * hextile_rect.h * sizeof(CARD32);
@@ -293,6 +359,13 @@ static void rf_host_hextile_raw(void)
   CARD32 *from_ptr;
   CARD32 *fb_ptr;
 
+  /* Copy data for saving in a file if necessary */
+  if (s_fbs_fp != NULL) {
+    memcpy(s_fbs_buffer_ptr, hextile_buf,
+           hextile_rect.w * hextile_rect.h * sizeof(CARD32));
+    s_fbs_buffer_ptr += hextile_rect.w * hextile_rect.h * sizeof(CARD32);
+  }
+
   from_ptr = hextile_buf;
   fb_ptr = &g_framebuffer[hextile_rect.y * (int)g_screen_info->width +
                           hextile_rect.x];
@@ -310,14 +383,26 @@ static void rf_host_hextile_raw(void)
 static void rf_host_hextile_hex(void)
 {
   CARD32 *from_ptr = hextile_buf;
-  int data_size;
+  int data_size, size;
 
+  /* Get background and foreground colors */
   if (hextile_subenc & HEXTILE_BG_SPECIFIED) {
     hextile_bg = *from_ptr++;
     hextile_fill_tile();
   }
-  if (hextile_subenc & HEXTILE_FG_SPECIFIED)
+  if (hextile_subenc & HEXTILE_FG_SPECIFIED) {
     hextile_fg = *from_ptr++;
+  }
+
+  /* Copy data for saving in a file if necessary */
+  if (s_fbs_fp != NULL) {
+    size = (from_ptr - hextile_buf) * sizeof(CARD32);
+    if (hextile_subenc & HEXTILE_ANY_SUBRECTS)
+      size++;
+    memcpy(s_fbs_buffer_ptr, hextile_buf, size);
+    s_fbs_buffer_ptr += size;
+  }
+
   if (hextile_subenc & HEXTILE_ANY_SUBRECTS) {
     hextile_num_subrects = *((CARD8 *)from_ptr);
     if (hextile_subenc & HEXTILE_SUBRECTS_COLOURED) {
@@ -337,7 +422,15 @@ static void rf_host_hextile_subrects(void)
 {
   CARD8 *ptr;
   CARD8 pos, dim;
-  int i;
+  int i, size;
+
+  /* Copy data for saving in a file if necessary */
+  if (s_fbs_fp != NULL) {
+    size = (int)hextile_num_subrects;
+    size *= (hextile_subenc & HEXTILE_SUBRECTS_COLOURED) ? 6 : 2;
+    memcpy(s_fbs_buffer_ptr, cur_slot->readbuf, size);
+    s_fbs_buffer_ptr += size;
+  }
 
   ptr = cur_slot->readbuf;
 
@@ -449,6 +542,118 @@ void pass_cuttext_to_host(CARD8 *text, size_t len)
   }
 }
 
+/*****************************************/
+/* Saving "framebuffer streams" in files */
+/*****************************************/
+
+static void fbs_open_file(void)
+{
+  int max_rect_size, w, h;
+  char fname[256];
+  char fbs_header[256];
+  CARD32 len;
+
+  /* First, remember current time */
+  gettimeofday(&s_fbs_start_time, &s_fbs_timezone);
+
+  /* Prepare file name suffixed with session number */
+  len = strlen(s_fbs_prefix);
+  if (len + 4 > 255) {
+    log_write(LL_WARN, "FBS filename prefix too long");
+    s_fbs_prefix = NULL;
+    return;
+  }
+  if (s_fbs_idx > 999) {
+    s_fbs_idx = 0;
+  }
+  sprintf(fname, "%s.%03d", s_fbs_prefix, s_fbs_idx);
+
+  /* Open the file */
+  s_fbs_fp = fopen(fname, "w");
+  if (s_fbs_fp == NULL) {
+    log_write(LL_WARN, "Could not open FBS file for writing");
+    s_fbs_prefix = NULL;
+    return;
+  }
+  log_write(LL_MSG, "Opened FBS file for writing: %s", fname);
+
+  /* Write file header */
+  if (fwrite("FBS 001.000\n", 1, 12, s_fbs_fp) != 12) {
+    log_write(LL_WARN, "Could not write FBS file header");
+    fclose(s_fbs_fp);
+    s_fbs_fp = NULL;
+    return;
+  }
+
+  /* Prepare stream header data */
+  memcpy(fbs_header, "RFB 003.003\n", 12);
+  buf_put_CARD32(&fbs_header[12], 1);
+  buf_put_CARD16(&fbs_header[16], g_screen_info->width);
+  buf_put_CARD16(&fbs_header[18], g_screen_info->height);
+  buf_put_pixfmt(&fbs_header[20], &g_screen_info->pixformat);
+  len = g_screen_info->name_length;
+  if (len > 192)
+    len = 192;
+  buf_put_CARD32(&fbs_header[36], len);
+  memcpy(&fbs_header[40], g_screen_info->name, len);
+
+  /* Write stream header data */
+  fbs_write_data(fbs_header, 40 + len);
+
+  /* Allocate memory to hold one rectangle of maximum size */
+  if (s_fbs_fp != NULL) {
+    w = (int)g_screen_info->width;
+    h = (int)g_screen_info->height;
+    max_rect_size = 12 + (w * h * 4) + ((w + 15) / 16) * ((h + 15) / 16);
+    s_fbs_buffer = malloc(max_rect_size);
+    if (s_fbs_buffer == NULL) {
+      log_write(LL_WARN, "Memory allocation error, closing FBS file");
+      fclose(s_fbs_fp);
+      s_fbs_fp = NULL;
+    } else {
+      log_write(LL_DETAIL, "Allocated buffer to cache FBS data, %d bytes",
+                max_rect_size);
+      s_fbs_buffer_ptr = s_fbs_buffer;
+    }
+  }
+}
+
+static void fbs_write_data(void *buf, size_t len)
+{
+  CARD8 data_size_buf[4];
+  CARD8 timestamp_buf[8];
+  CARD32 timestamp;
+  int padding;
+
+  /* Calculate current timestamp */
+  gettimeofday(&s_fbs_time, &s_fbs_timezone);
+  if (s_fbs_time.tv_sec < s_fbs_start_time.tv_sec) {
+    /* FIXME: not sure if this is correct. */
+    s_fbs_time.tv_sec += 60 * 60 * 24;
+  }
+  timestamp = (CARD32)((s_fbs_time.tv_sec - s_fbs_start_time.tv_sec) * 1000 +
+                       (s_fbs_time.tv_usec - s_fbs_start_time.tv_usec) / 1000);
+
+  padding = 3 - ((len - 1) & 0x03);
+  buf_put_CARD32(data_size_buf, (CARD32)len);
+  buf_put_CARD32(&timestamp_buf[padding], timestamp);
+
+  if (fwrite(data_size_buf, 1, 4, s_fbs_fp) != 4 ||
+      fwrite(buf, 1, len, s_fbs_fp) != len ||
+      fwrite(timestamp_buf, 1, 4 + padding, s_fbs_fp) != 4 + padding) {
+    log_write(LL_WARN, "Could not write FBS file data");
+    fbs_close_file();
+  }
+}
+
+static void fbs_close_file(void)
+{
+  if (fclose(s_fbs_fp) != 0)
+    log_write(LL_WARN, "Could not close FBS file");
+  s_fbs_fp = NULL;
+  free(s_fbs_buffer);
+}
+
 /********************/
 /* Helper functions */
 /********************/
@@ -514,12 +719,16 @@ static void hextile_next_tile(void)
     fbupdate_rect_done();       /* No more tiles */
     return;
   }
-  aio_setread(rf_host_hextile_subenc, NULL, sizeof(CARD8));
+  aio_setread(rf_host_hextile_subenc, NULL, 1);
 }
 
 static void fbupdate_rect_done(void)
 {
   log_write(LL_DEBUG, "Received rectangle ok");
+
+  /* Save data in a file if necessary */
+  if (s_fbs_fp != NULL)
+    fbs_write_data(s_fbs_buffer, s_fbs_buffer_ptr - s_fbs_buffer);
 
   /* Queue this rectangle for each client */
   aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);

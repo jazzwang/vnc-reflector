@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.23 2001/08/23 15:24:51 const Exp $
+ * $Id: main.c,v 1.24 2001/08/23 21:19:44 const Exp $
  * Main module
  */
 
@@ -34,7 +34,8 @@ static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
 static char  opt_hostname[256];
 static int   opt_hostport;
-static char  opt_pidfile[256];
+static char  opt_pid_file[256];
+static char *opt_fbs_prefix;
 
 static unsigned char opt_client_password[9];
 static unsigned char opt_client_ro_password[9];
@@ -97,6 +98,7 @@ int main(int argc, char **argv)
   init_screen_info();
   read_password_file();
   set_client_passwords(opt_client_password, opt_client_ro_password);
+  host_set_fbs_prefix(opt_fbs_prefix);
   aio_init();
 
   /* Main work */
@@ -132,7 +134,7 @@ static void parse_args(int argc, char **argv)
   int err = 0;
   int c, len;
   char *pos;
-  char *temp_pidfile = NULL;
+  char *temp_pid_file = NULL;
   char temp_buf[32];            /* 32 bytes should be more than enough */
 
   opt_foreground = 0;
@@ -141,9 +143,10 @@ static void parse_args(int argc, char **argv)
   opt_passwd_filename = NULL;
   opt_log_filename = NULL;
   opt_cl_listen_port = -1;
-  opt_pidfile[0] = '\0';
+  opt_pid_file[0] = '\0';
+  opt_fbs_prefix = NULL;
 
-  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:i:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:i:s:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -183,10 +186,16 @@ static void parse_args(int argc, char **argv)
       }
       break;
     case 'i':
-      if (temp_pidfile != NULL)
+      if (temp_pid_file != NULL)
         err = 1;
       else
-        temp_pidfile = optarg;
+        temp_pid_file = optarg;
+      break;
+    case 's':
+      if (opt_fbs_prefix != NULL)
+        err = 1;
+      else
+        opt_fbs_prefix = optarg;
       break;
     default:
       err = 1;
@@ -210,10 +219,10 @@ static void parse_args(int argc, char **argv)
     opt_cl_listen_port = 5999;
 
   /* Append listening port number to pid filename */
-  if (temp_pidfile != NULL) {
+  if (temp_pid_file != NULL) {
     sprintf(temp_buf, "%d", opt_cl_listen_port);
-    sprintf(opt_pidfile, "%.*s.%s", 255 - strlen(temp_buf) - 1,
-            temp_pidfile, temp_buf);
+    sprintf(opt_pid_file, "%.*s.%s", 255 - strlen(temp_buf) - 1,
+            temp_pid_file, temp_buf);
   }
 
   /* Save pointer to host info filename */
@@ -233,6 +242,10 @@ static void report_usage(char *program_name)
           " [default: passwd]\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
+          "  -s FBS_PREFIX   - save host sessions in rfbproxy-compatible"
+          " files,\n"
+          "                    appending 3-digit session IDs to"
+          " filename prefix\n"
           "  -g LOG_FILE     - write logs to specified file"
           " [default: reflector.log]\n");
   fprintf(stderr,
@@ -370,10 +383,10 @@ static int write_pid_file(void)
   int pid_fd, len;
   char buf[32];                 /* 32 bytes should be more than enough */
 
-  if (opt_pidfile[0] == '\0')
+  if (opt_pid_file[0] == '\0')
     return 1;
 
-  pid_fd = open(opt_pidfile, O_WRONLY | O_CREAT | O_EXCL, 0644);
+  pid_fd = open(opt_pid_file, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (pid_fd == -1) {
     log_write(LL_ERROR, "Pid file exists, another instance may be running");
     return 0;
@@ -386,7 +399,7 @@ static int write_pid_file(void)
     return 0;
   }
 
-  log_write(LL_DEBUG, "Wrote pid file: %s", opt_pidfile);
+  log_write(LL_DEBUG, "Wrote pid file: %s", opt_pid_file);
 
   close(pid_fd);
   return 1;
@@ -394,13 +407,13 @@ static int write_pid_file(void)
 
 static int remove_pid_file(void)
 {
-  if (opt_pidfile[0] == '\0')
+  if (opt_pid_file[0] == '\0')
     return 1;
 
-  if (unlink(opt_pidfile) == 0) {
-    log_write(LL_DEBUG, "Removed pid file", opt_pidfile);
+  if (unlink(opt_pid_file) == 0) {
+    log_write(LL_DEBUG, "Removed pid file", opt_pid_file);
   } else {
-    log_write(LL_WARN, "Error removing pid file: %s", opt_pidfile);
+    log_write(LL_WARN, "Error removing pid file: %s", opt_pid_file);
   }
 }
 

@@ -8,9 +8,12 @@ Command-line usage
 ./vncreflector [OPTIONS...] HOST_INFO_FILE
 
 Options:
+
   -i PID_FILE     - write pid file, appending listening port to filename
   -p PASSWD_FILE  - read plaintext client password file [default: passwd]
   -l LISTEN_PORT  - port to listen for client connections [default: 5999]
+  -s FBS_FILE     - save host sessions in rfbproxy-compatible files,
+                    appending 3-digit session numbers to filename
   -g LOG_FILE     - write logs to specified file [default: reflector.log]
   -v LOG_LEVEL    - set verbosity level for log file (0..6) [default: 4]
   -f LOG_LEVEL    - run in foreground, show logs on stderr at specified
@@ -38,6 +41,9 @@ Sample to listen for host connection on the port 5998:
 === cut ===
 *:5998 PaS$w0rD
 === cut ===
+
+NOTE: current version does not support reversed connections yet.
+
 
 Format of the PASSWD_FILE
 ~~~~~~~~~~~~~~~~~~~~~~~~~
