@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.9 2001/08/02 15:54:38 const Exp $
+ * $Id: main.c,v 1.10 2001/08/02 16:47:45 const Exp $
  * Main module
  */
 
@@ -83,7 +83,8 @@ int main(int argc, char **argv)
       log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
                 desktop_info.width * desktop_info.height * 4);
 
-      /* Initialize I/O subsystem */
+      set_client_password(opt_password);
+
       aio_init();
 
       if (!aio_listen(opt_listen_port, af_client_accept,
