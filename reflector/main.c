@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.28 2001/08/26 13:46:23 const Exp $
+ * $Id: main.c,v 1.29 2001/08/28 18:11:04 const Exp $
  * Main module
  */
 
@@ -40,6 +40,7 @@ static char  opt_hostname[256];
 static int   opt_hostport;
 static char  opt_pid_file[256];
 static char *opt_fbs_prefix;
+static char *opt_bind_ip;
 
 static unsigned char opt_client_password[9];
 static unsigned char opt_client_ro_password[9];
@@ -106,7 +107,17 @@ int main(int argc, char **argv)
     read_password_file();
     set_client_passwords(opt_client_password, opt_client_ro_password);
     host_set_fbs_prefix(opt_fbs_prefix);
+
     aio_init();
+    if (opt_bind_ip != NULL) {
+      if (aio_set_bind_address(opt_bind_ip)) {
+        log_write(LL_INFO, "Would bind listening sockets to address %s",
+                  opt_bind_ip);
+      } else {
+        log_write(LL_WARN, "Illegal address to bind listening sockets to: %s",
+                  opt_bind_ip);
+      }
+    }
 
     /* Main work */
     if (connect_to_host(opt_host_info_file, opt_cl_listen_port)) {
@@ -163,8 +174,9 @@ static void parse_args(int argc, char **argv)
   opt_cl_listen_port = -1;
   opt_pid_file[0] = '\0';
   opt_fbs_prefix = NULL;
+  opt_bind_ip = NULL;
 
-  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:i:s:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:i:s:b:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -215,6 +227,12 @@ static void parse_args(int argc, char **argv)
       else
         opt_fbs_prefix = optarg;
       break;
+    case 'b':
+      if (opt_bind_ip != NULL)
+        err = 1;
+      else
+        opt_bind_ip = optarg;
+      break;
     default:
       err = 1;
     }
@@ -260,6 +278,9 @@ static void report_usage(char *program_name)
           " [default: passwd]\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
+          "  -b IP_ADDRESS   - bind listening sockets to specific IP"
+          " [default: any]\n");
+  fprintf(stderr,
           "  -s FBS_PREFIX   - save host sessions in rfbproxy-compatible"
           " files,\n"
           "                    appending 3-digit session IDs to"

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.12 2001/08/28 17:28:47 const Exp $
+ * $Id: async_io.h,v 1.13 2001/08/28 18:11:04 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -76,6 +76,7 @@ extern AIO_SLOT *cur_slot;
  */
 
 void aio_init(void);
+int aio_set_bind_address(char *bind_ip);
 int aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size);
 int aio_listen(int port, AIO_FUNCPTR initfunc, AIO_FUNCPTR acceptfunc,
                size_t slot_size);

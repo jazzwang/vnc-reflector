@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.19 2001/08/28 17:28:47 const Exp $
+ * $Id: async_io.c,v 1.20 2001/08/28 18:11:04 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -34,6 +34,8 @@ AIO_SLOT *cur_slot;
 /*
  * Static variables
  */
+
+struct in_addr s_bind_address;
 
 #ifdef USE_POLL
 static struct pollfd s_fd_array[FD_ARRAY_MAXSIZE];
@@ -97,6 +99,24 @@ void aio_init(void)
   s_sig_func_set = 0;
   for (i = 0; i < 10; i++)
     s_sig_func[i] = NULL;
+
+  s_bind_address.s_addr = htonl(INADDR_ANY);
+}
+
+/*
+ * Bind all listening sockets to specific interface specified by an IP
+ * adress.
+ */
+
+int aio_set_bind_address(char *bind_ip)
+{
+  struct in_addr tmp_bind_address;
+
+  if (!inet_aton(bind_ip, &tmp_bind_address))
+    return 0;
+
+  s_bind_address = tmp_bind_address;
+  return 1;
 }
 
 /*
@@ -158,7 +178,7 @@ int aio_listen(int port, AIO_FUNCPTR initfunc, AIO_FUNCPTR acceptfunc,
   }
 
   listen_addr.sin_family = AF_INET;
-  listen_addr.sin_addr.s_addr = INADDR_ANY;
+  listen_addr.sin_addr.s_addr = s_bind_address.s_addr;
   listen_addr.sin_port = htons((unsigned short)port);
 
   if ( bind(listen_fd, (struct sockaddr *)&listen_addr,
