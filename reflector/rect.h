@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.h,v 1.1 2001/08/04 21:58:57 const Exp $
+ * $Id: rect.h,v 1.2 2001/08/08 12:56:51 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -33,7 +33,7 @@ typedef struct _FB_RECT_LIST {
 void rlist_init(FB_RECT_LIST *rlist);
 void rlist_clear(FB_RECT_LIST *rlist);
 void rlist_push_rect(FB_RECT_LIST *rlist, FB_RECT *rect);
-void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect, int max_overhead);
+void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect);
 int rlist_pick_rect(FB_RECT_LIST *rlist, FB_RECT *rect);
 int rects_combine(FB_RECT *one, FB_RECT *another);
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.c,v 1.1 2001/08/04 21:58:57 const Exp $
+ * $Id: rect.c,v 1.2 2001/08/08 12:56:51 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -12,8 +12,11 @@
 #include "rfblib.h"
 #include "rect.h"
 
-#define my_min(a,b) (((a) < (b)) ? (a) : (b))
-#define my_max(a,b) (((a) > (b)) ? (a) : (b))
+#define COMBINE_RECTS_LIMIT   16
+#define COMBINE_MAX_OVERHEAD  16
+
+#define my_min(a,b)  (((a) < (b)) ? (a) : (b))
+#define my_max(a,b)  (((a) > (b)) ? (a) : (b))
 
 /*
  * Initialize rectangle list.
@@ -70,7 +73,7 @@ void rlist_push_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
  * with another existing in the list.
  */
 
-void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect, int max_overhead)
+void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
 {
   /* FIXME: Implement that. */
   rlist_push_rect(rlist, rect);
