@@ -37,17 +37,14 @@ depend: $(SRCS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
 
 
-# DO NOT DELETE THIS LINE -- make depend depends on it.
-
-
-async_io.o: async_io.h
-client_io.o: async_io.h client_io.h d3des.h encode.h logging.h reflector.h
-client_io.o: rfblib.h
-d3des.o: d3des.h
-encode.o: async_io.h client_io.h encode.h reflector.h rfblib.h
-host_connect.o: d3des.h host_connect.h logging.h rfblib.h
-host_io.o: async_io.h host_io.h logging.h reflector.h rfblib.h
-logging.o: logging.h
-main.o: async_io.h client_io.h host_connect.h host_io.h logging.h reflector.h
-main.o: rfblib.h
-rfblib.o: rfblib.h
+# DO NOT DELETE
+main.o: main.c rfblib.h async_io.h logging.h reflector.h host_connect.h \
+  host_io.h client_io.h
+logging.o: logging.c logging.h
+host_connect.o: host_connect.c rfblib.h logging.h host_connect.h d3des.h
+d3des.o: d3des.c d3des.h
+rfblib.o: rfblib.c rfblib.h
+async_io.o: async_io.c async_io.h
+host_io.o: host_io.c rfblib.h reflector.h async_io.h logging.h host_io.h
+client_io.o: client_io.c async_io.h client_io.h reflector.h encode.h d3des.h
+encode.o: encode.c rfblib.h reflector.h async_io.h client_io.h encode.h
