@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.28 2001/08/24 05:55:50 const Exp $
+ * $Id: client_io.c,v 1.29 2001/08/24 07:57:40 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -204,17 +204,7 @@ static void rf_client_initmsg(void)
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
   cl->update_in_progress = 0;
-
-  /* Add a rectangle covering the whole framebuffer to the list of
-     pending rectangles */
-  rect.x = 0;
-  rect.y = 0;
-  rect.w = g_screen_info->width;
-  rect.h = g_screen_info->height;
-  rect.src_x = 0xFFFF;
-  rect.src_y = 0xFFFF;
   rlist_init(&cl->pending_rects);
-  rlist_push_rect(&cl->pending_rects, &rect);
 
   /* We are connected. */
   cl->connected = 1;
@@ -345,6 +335,7 @@ static void rf_client_updatereq(void)
     else
       rlist_push_rect(&cl->pending_rects, &rect);
   } else {
+    memcpy(&cl->update_rect, &rect, sizeof(FB_RECT));
     log_write(LL_DEBUG, "Received framebuffer update request from %s",
               cur_slot->name);
   }
@@ -432,12 +423,9 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
 
-  if (cl->connected) {
-    if (cl->bgr233_f)
-      rlist_add_rect(&cl->pending_rects, rect);
-    else
-      rlist_push_rect(&cl->pending_rects, rect);
-  }
+  if (cl->connected)
+    rlist_add_clipped_rect(&cl->pending_rects, rect, &cl->update_rect,
+                           cl->bgr233_f);
 }
 
 void fn_client_send_rects(AIO_SLOT *slot)

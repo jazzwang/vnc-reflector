@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.c,v 1.4 2001/08/24 05:55:50 const Exp $
+ * $Id: rect.c,v 1.5 2001/08/24 07:57:40 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -113,6 +113,46 @@ void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
 }
 
 /*
+ * Intersect a rectangle with another and add the result to a
+ * rectangle list (maybe adding more than one rectangle). If first
+ * rectangle is a CopyRect one, it should be processed correctly by
+ * this function. If split_f flag is non-zero, rlist_add_rect function
+ * will be used, and rlist_push_rect otherwise.
+ */
+
+void rlist_add_clipped_rect(FB_RECT_LIST *rlist, FB_RECT *rect,
+                            FB_RECT *clip, int split_f)
+{
+  FB_RECT temp;
+  memcpy(&temp, rect, sizeof(FB_RECT));
+  rects_intersect(&temp, clip);
+
+  if (rect->src_x == 0xFFFF) {
+    if (temp.w * temp.h) {
+      if (split_f)
+        rlist_add_rect(rlist, &temp);
+      else
+        rlist_push_rect(rlist, &temp);
+    }
+  } else {
+    /* We have clipped CopyRect destination already, so we should
+       remove part of source location corresponding to disappeared
+       part of destination. */
+    if (temp.x != rect->x)
+      temp.src_x += temp.x - rect->x;
+    if (temp.y != rect->y)
+      temp.src_y += temp.y - rect->y;
+
+    /* Now, clip source location of CopyRect operation, and if some
+       part is gone, substitute CopyRect destination rectangle with
+       one smaller CopyRect and a set of non-CopyRect rectangles */
+    /* FIXME: Implement that. */
+    if (temp.w * temp.h)
+      rlist_push_rect(rlist, &temp);
+  }
+}
+
+/*
  * Move first rectangle out from a list. Returns 1 on success, 0 if
  * the list was empty.
  */
@@ -139,7 +179,7 @@ int rlist_pick_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
  * Combine two rectangles into bigger one covering both.
  * Returns difference between the size of resulting rectangle
  * and sum of sizes of those two ones. This function does not respect
-   CopyRect-related fields of source FB_RECT structures.
+ * CopyRect-related fields of source FB_RECT structures.
  */
 
 int rects_combine(FB_RECT *one, FB_RECT *another)
@@ -153,8 +193,28 @@ int rects_combine(FB_RECT *one, FB_RECT *another)
   overhead = w * h - one->w * one->h - another->w * another->h;
 
   one->x = x, one->y = y, one->w = w, one->h = h;
-  one->src_x = 0xFFFF; one->src_y = 0xFFFF;
 
   return overhead;
+}
+
+/*
+ * Intersect two rectangles saving result in first one. This function
+ * does not respect CopyRect-related fields of source FB_RECT
+ * structures.
+ */
+
+void rects_intersect(FB_RECT *one, FB_RECT *another)
+{
+  int x, y, w, h;
+
+  x = my_max(one->x, another->x);
+  y = my_max(one->y, another->y);
+  w = my_min(one->x + one->w, another->x + another->w) - x;
+  h = my_min(one->y + one->h, another->y + another->h) - y;
+
+  if (w < 0 || h < 0) {
+    w = 0, h = 0;
+  }
+  one->x = x, one->y = y, one->w = w, one->h = h;
 }
 
