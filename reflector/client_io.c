@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.47 2003/01/09 06:25:29 const Exp $
+ * $Id: client_io.c,v 1.48 2003/01/09 06:41:59 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -421,6 +421,8 @@ static void rf_client_updatereq(void)
     if (!cl->newfbsize_pending) {
       REGION_INIT(&tmp_region, &rect, 1);
       REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
+      REGION_UNION(&cl->pending_region, &cl->pending_region, &cl->copy_region);
+      REGION_EMPTY(&cl->copy_region);
       REGION_UNINIT(&tmp_region);
     }
   } else {
