@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.10 2001/08/19 18:38:11 const Exp $
+ * $Id: async_io.c,v 1.11 2001/08/19 18:41:30 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -527,8 +527,6 @@ static void aio_accept_connection(void)
 
 /* FIXME: Dangerous. Changes slot list while we might iterate over it. */
 
-#include "logging.h"            /* DEBUG */
-
 static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
 {
   AIO_BLOCK *block, *next_block;
@@ -555,21 +553,14 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
 
     /* Remove references to descriptor */
 #ifdef USE_POLL
-    log_write(LL_WARN, "DEBUG: Closing slot");
     if (s_fd_array_size - 1 > slot->idx) {
-      log_write(LL_WARN, "DEBUG: Moving data, %d records",
-                s_fd_array_size - slot->idx - 1);
       memmove(&s_fd_array[slot->idx],
               &s_fd_array[slot->idx + 1],
               (s_fd_array_size - slot->idx - 1) * sizeof(struct pollfd));
       if (s_listen_fd_idx > slot->idx)
         s_listen_fd_idx--;
       for (h_slot = slot->next; h_slot != NULL; h_slot = h_slot->next)
-        {
-        log_write(LL_WARN, "DEBUG: Decrementing idx, %d -> %d",
-                  h_slot->idx, h_slot->idx - 1);
         h_slot->idx--;
-        }
     }
     s_fd_array_size--;
 #else
