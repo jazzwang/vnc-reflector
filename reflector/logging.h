@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: logging.h,v 1.4 2003/04/21 17:20:35 const Exp $
+ * $Id: logging.h,v 1.5 2003/10/09 15:09:19 const_k Exp $
  * Logging functionality
  */
 
@@ -28,6 +28,8 @@
 
 /* Functions */
 int log_open(char *filename, int file_level, int stderr_level);
+int log_set_file_level(int new_level);
+int log_set_stderr_level(int new_level);
 int log_reopen(void);
 int log_close(void);
 void log_write(int level, char *fmt, ...);

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: control.c,v 1.11 2003/04/21 17:20:35 const Exp $
+ * $Id: control.c,v 1.12 2003/10/09 15:09:19 const_k Exp $
  * Processing signals to control reflector
  */
 
@@ -35,6 +35,7 @@
 static void sh_disconnect_clients(int signo);
 static void sh_reconnect_noclose(int signo);
 static void sh_reconnect_close(int signo);
+static void sh_toggle_log_level(int signo);
 
 static void safe_disconnect_clients(void);
 static void safe_reconnect_noclose(void);
@@ -53,6 +54,7 @@ void set_control_signals(void)
   signal(SIGHUP, sh_disconnect_clients);
   signal(SIGUSR1, sh_reconnect_noclose);
   signal(SIGUSR2, sh_reconnect_close);
+  signal(SIGWINCH, sh_toggle_log_level);
 }
 
 /*
@@ -75,6 +77,36 @@ static void sh_reconnect_close(int signo)
 {
   aio_call_func(safe_reconnect_close, FUNC_HOST_RECONNECT);
   signal(signo, sh_reconnect_close);
+}
+
+/*
+ * sh_toggle_log_level() is called when the application handles
+ * the SIGWINCH signal (see set_control_signals() above).
+ *
+ * The first time sh_toggle_log_level() is called it will set the
+ * file and stderr log levels to LL_DEBUG. Subsequent calls will
+ * toggle between the original settings and debug settings.
+ *
+ * Usage: kill -SIGWINCH <vncreflector_pid>
+ *
+ */
+
+static void sh_toggle_log_level(int signo)
+{
+  /* Cache the previous/next level. */
+  static int next_file_level = LL_DEBUG;
+  static int next_stderr_level = LL_DEBUG;
+
+  /* Log the signal. */
+  log_write(LL_WARN, "Toggling log level: file => %d, stderr => %d",
+            next_file_level, next_stderr_level);
+
+  /* Set the new log levels, and cache the old ones. */
+  next_file_level = log_set_file_level(next_file_level);
+  next_stderr_level = log_set_stderr_level(next_stderr_level);
+
+  /* Reset the signal. */
+  signal(signo, sh_toggle_log_level);
 }
 
 /*

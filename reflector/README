@@ -144,3 +144,8 @@ Control signals
     specified there (or to start listening for reversed host connections). 
     Client connections would be preserved.
 
+  * SIGWINCH signal causes VNC Reflector to toggle verbose logging. The
+    first time this signal is caught both file and stderr log levels will
+    be set to 6 (debugging mode). Subsequent signals will toggle between
+    the original settings and debugging mode.
+

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: logging.c,v 1.5 2003/04/21 17:20:35 const Exp $
+ * $Id: logging.c,v 1.6 2003/10/09 15:09:19 const_k Exp $
  * Logging implementation
  */
 
@@ -66,6 +66,42 @@ int log_open(char *filename, int file_level, int stderr_level)
   fflush(log_fp);
 
   return 1;
+}
+
+/*******************************************************************
+ *
+ *  Set file log level on the fly.
+ *    new_level: log level, see LL_* constants.
+ *  Returns the previous level.
+ *
+ *******************************************************************/
+
+int log_set_file_level(int new_level)
+{
+  int previous_level;
+
+  previous_level = log_file_level;
+  log_file_level = new_level;
+
+  return previous_level;
+}
+
+/*******************************************************************
+ *
+ *  Set stderr log level on the fly.
+ *    new_level: log level, see LL_* constants.
+ *  Returns the previous level.
+ *
+ *******************************************************************/
+
+int log_set_stderr_level(int new_level)
+{
+  int previous_level;
+
+  previous_level = log_stderr_level;
+  log_stderr_level = new_level;
+
+  return previous_level;
 }
 
 /*******************************************************************
