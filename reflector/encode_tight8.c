@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight8.c,v 1.1 2001/10/05 10:36:19 const Exp $
+ * $Id: encode_tight8.c,v 1.2 2001/10/11 08:58:12 const Exp $
  * Tight encoder.
  */
 
@@ -55,11 +55,11 @@ static TIGHT_CONF s_tight_conf[10] = {
     { 65536, 2048,  32, 9, 9 }
 };
 
-/* Data buffers for translated pixel data and for data to compress. */
+/* Data buffers for translated pixel data and for the data to compress. */
 static CARD8 s_buf_pixels[65536];
 
 /* Background and foreground colors in two-color rectangle. */
-static CARD8 s_bg, s_fg;
+static PALETTE2 s_pal;
 
 
 /*
@@ -72,14 +72,14 @@ static int encode_two_colors(CARD8 *buf, CL_SLOT *cl, int w, int h);
 static int encode_full_color(CARD8 *buf, CL_SLOT *cl, int w, int h);
 static int compress_data(CARD8 *buf, CL_SLOT *cl,
                          int stream_id, int data_len, int zlib_level);
-static int detect_colors(CARD8 *data, int data_size, int max_colors);
-static void encode_mono_rect(CARD8 *buf, int w, int h);
+static void detect_colors(CARD8 *data, PALETTE2 *pal, FB_RECT *r);
+static void encode_mono_rect(CARD8 *buf, CARD8 bg_color, int w, int h);
 
 
 /*
  * Tight encoding implementation. This particular function splits
- * large rectangles into smaller ones and calls lower-level encoding
- * function for each of them.
+ * large rectangles into smaller ones depending on compression setting
+ * and calls lower-level encoding function for each of them.
  */
 
 int rfb_encode_tight8(CL_SLOT *cl, FB_RECT *r)
@@ -126,7 +126,6 @@ int rfb_encode_tight8(CL_SLOT *cl, FB_RECT *r)
 static AIO_BLOCK *encode_tight8_block(CL_SLOT *cl, FB_RECT *r)
 {
   AIO_BLOCK *block;
-  int max_colors, num_colors;
   int size;
 
   /* Allocate a memory block of maximum possible size: 12 bytes
@@ -144,23 +143,21 @@ static AIO_BLOCK *encode_tight8_block(CL_SLOT *cl, FB_RECT *r)
   block->data_size = put_rect_header(block->data, r, RFB_ENCODING_TIGHT);
 
   /* Get number of colors in this rectangle. */
-  if (r->w * r->h >= s_tight_conf[cl->compress_level].min_mono_rect_size) {
-    max_colors = 2;
-  } else {
-    max_colors = 0;
-  }
-  num_colors = detect_colors(s_buf_pixels, r->w * r->h, max_colors);
+  detect_colors(s_buf_pixels, &s_pal, r);
 
   /* Encode data. */
-  switch (num_colors) {
+  switch (s_pal.num_colors) {
   case 1:
     /* Solid-color rectangle */
     size = encode_solid_color(&block->data[block->data_size], cl);
     break;
   case 2:
     /* Two-color rectangle */
-    size = encode_two_colors(&block->data[block->data_size], cl, r->w, r->h);
-    break;
+    if (r->w * r->h >= s_tight_conf[cl->compress_level].min_mono_rect_size) {
+      size = encode_two_colors(&block->data[block->data_size], cl, r->w, r->h);
+      break;
+    }
+    /* PASS THROUGH */
   case 0:
     /* Truecolor image */
     size = encode_full_color(&block->data[block->data_size], cl, r->w, r->h);
@@ -207,11 +204,11 @@ static int encode_two_colors(CARD8 *buf, CL_SLOT *cl, int w, int h)
 
   buf[0] = stream_id << 4 | RFB_TIGHT_EXPLICIT_FILTER;
   buf[1] = RFB_TIGHT_FILTER_PALETTE;
-  buf[2] = 1;                 /* Number of colors minus one */
-  buf[3] = s_bg;
-  buf[4] = s_fg;
+  buf[2] = 1;                   /* Number of colors minus one */
+  buf[3] = s_pal.bg;
+  buf[4] = s_pal.fg;
 
-  encode_mono_rect(s_buf_pixels, w, h);
+  encode_mono_rect(s_buf_pixels, s_pal.bg, w, h);
 
   size = compress_data(&buf[5], cl, stream_id, data_len,
                        s_tight_conf[cl->compress_level].mono_zlib_level);
@@ -311,18 +308,18 @@ static int compress_data(CARD8 *buf, CL_SLOT *cl,
  * Code to determine how many different colors are used in a rectangle.
  */
 
-static int detect_colors(CARD8 *data, int data_size, int max_colors)
+static void detect_colors(CARD8 *data, PALETTE2 *pal, FB_RECT *r)
 {
   CARD8 c0, c1;
   int i, n0, n1;
+  int data_size = r->w * r->h;
 
   c0 = data[0];
   for (i = 1; i < data_size && data[i] == c0; i++);
-  if (i == data_size)
-    return 1;                   /* Solid rectangle */
-
-  if (max_colors < 2)
-    return 0;
+  if (i == data_size) {
+    pal->num_colors = 1;        /* Solid-color rectangle */
+    return;
+  }
 
   n0 = i;
   c1 = data[i];
@@ -337,17 +334,17 @@ static int detect_colors(CARD8 *data, int data_size, int max_colors)
   }
   if (i == data_size) {
     if (n0 > n1) {
-      s_bg = c0; s_fg = c1;
+      pal->bg = c0; pal->fg = c1;
     } else {
-      s_bg = c1; s_fg = c0;
+      pal->bg = c1; pal->fg = c0;
     }
-    return 2;                   /* Two colors */
+    pal->num_colors = 2;        /* Two colors */
+  } else {
+    pal->num_colors = 0;        /* More than two colors */
   }
-
-  return 0;                     /* More than two colors */
 }
 
-static void encode_mono_rect(CARD8 *buf, int w, int h)
+static void encode_mono_rect(CARD8 *buf, CARD8 bg_color, int w, int h)
 {
   CARD8 *ptr = buf;
   unsigned int value, mask;
@@ -359,7 +356,7 @@ static void encode_mono_rect(CARD8 *buf, int w, int h)
   for (y = 0; y < h; y++) {
     for (x = 0; x < aligned_width; x += 8) {
       for (bg_bits = 0; bg_bits < 8; bg_bits++) {
-        if (*ptr++ != s_bg)
+        if (*ptr++ != bg_color)
           break;
       }
       if (bg_bits == 8) {
@@ -370,7 +367,7 @@ static void encode_mono_rect(CARD8 *buf, int w, int h)
       value = mask;
       for (bg_bits++; bg_bits < 8; bg_bits++) {
         mask >>= 1;
-        if (*ptr++ != s_bg) {
+        if (*ptr++ != bg_color) {
           value |= mask;
         }
       }
@@ -383,7 +380,7 @@ static void encode_mono_rect(CARD8 *buf, int w, int h)
       continue;
 
     for (; x < w; x++) {
-      if (*ptr++ != s_bg) {
+      if (*ptr++ != bg_color) {
         value |= mask;
       }
       mask >>= 1;
