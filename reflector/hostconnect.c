@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: hostconnect.c,v 1.1 2001/08/01 04:58:39 const Exp $
+ * $Id: hostconnect.c,v 1.2 2001/08/01 16:06:07 const Exp $
  * Connecting to a VNC host
  */
 
@@ -23,9 +23,8 @@
 static int negotiate_ver(int fd, int major, int minor);
 static int vnc_authenticate(int fd, char *password);
 static int set_data_formats(int fd);
+static int request_full_update(int fd, int fb_width, int fb_height);
 
-static CARD16 buf_CARD16(unsigned char *buf);
-static CARD32 buf_CARD32(unsigned char *buf);
 static int recv_data(int fd, void *buf, size_t len);
 static int send_data(int fd, void *buf, size_t len);
 static int send_CARD8(int fd, CARD8 data);
@@ -113,7 +112,6 @@ int setup_session(int host_fd, char *password, RFB_DESKTOP_INFO *di)
     CARD8 pixfmt_buf[16];
 
     log_write(LL_DEBUG, "Receiving host desktop parameters");
-
     if ( recv_CARD16(host_fd, &fb_width) &&
          recv_CARD16(host_fd, &fb_height) &&
          recv_data(host_fd, pixfmt_buf, 16) &&
@@ -130,8 +128,13 @@ int setup_session(int host_fd, char *password, RFB_DESKTOP_INFO *di)
 
   if (success) {
     log_write(LL_DEBUG, "Setting up pixel format and encodings");
-
     if (!set_data_formats(host_fd))
+      success = 0;
+  }
+
+  if (success) {
+    log_write(LL_DEBUG, "Requesting full framebuffer update");
+    if (!request_full_update(host_fd, di->width, di->height))
       success = 0;
   }
 
@@ -257,30 +260,33 @@ static int set_data_formats(int fd)
   }
 
   log_write(LL_DEBUG, "Sending SetPixelFormat message");
-
   if (!send_data(fd, setpixfmt_msg, sizeof(setpixfmt_msg)))
     return 0;
 
   log_write(LL_DEBUG, "Sending SetEncodings message");
-
   if (!send_data(fd, setencodings_msg, sizeof(setencodings_msg)))
     return 0;
 
   return 1;
 }
 
-static CARD16 buf_CARD16(unsigned char *buf)
+static int request_full_update(int fd, int fb_width, int fb_height)
 {
-  return ((CARD16)buf[0] << 8 |
-          (CARD16)buf[1]);
-}
+  unsigned char fbupdatereq_msg[] = {
+    3,                          /* Message id */
+    0,                          /* Incremental if 1 */
+    0, 0, 0, 0,                 /* X position, Y position */
+    0, 0, 0, 0                  /* Width, height */
+  };
 
-static CARD32 buf_CARD32(unsigned char *buf)
-{
-  return ((CARD32)buf[0] << 24 |
-          (CARD32)buf[1] << 16 |
-          (CARD32)buf[2] << 8  |
-          (CARD32)buf[3]);
+  buf_put_CARD16(&fbupdatereq_msg[6], (CARD16)fb_width);
+  buf_put_CARD16(&fbupdatereq_msg[8], (CARD16)fb_height);
+
+  log_write(LL_DEBUG, "Sending FramebufferUpdateRequest message");
+  if (!send_data(fd, fbupdatereq_msg, sizeof(fbupdatereq_msg)))
+    return 0;
+
+  return 1;
 }
 
 static int recv_data(int fd, void *buf, size_t len)
@@ -315,7 +321,7 @@ static int recv_CARD16(int fd, CARD16 *result)
   if (!recv_data(fd, buf, 2))
     return 0;
 
-  *result = buf_CARD16(buf);
+  *result = buf_get_CARD16(buf);
   return 1;
 }
 
@@ -326,7 +332,7 @@ static int recv_CARD32(int fd, CARD32 *result)
   if (!recv_data(fd, buf, 4))
     return 0;
 
-  *result = buf_CARD32(buf);
+  *result = buf_get_CARD32(buf);
   return 1;
 }
 

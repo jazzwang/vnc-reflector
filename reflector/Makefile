@@ -9,9 +9,9 @@ LDFLAGS =
 
 PROG = 	vncreflector
 
-OBJS = 	main.o logging.o hostconnect.o d3des.o dispatch.o
+OBJS = 	main.o logging.o hostconnect.o d3des.o dispatch.o rfblib.o
 
-SRCS =	main.c logging.c hostconnect.c d3des.c dispatch.c
+SRCS =	main.c logging.c hostconnect.c d3des.c dispatch.c rfblib.c
 
 CC = gcc
 
@@ -34,7 +34,9 @@ depend: $(SRCS)
 
 
 d3des.o: d3des.h
-dispatch.o: dispatch.h
+dispatch.o: dispatch.h logging.h rfblib.h reflector.h
 hostconnect.o: d3des.h hostconnect.h logging.h rfblib.h
 logging.o: logging.h
 main.o: dispatch.h hostconnect.h logging.h reflector.h rfblib.h
+rfblib.o: rfblib.h
+

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.2 2001/08/01 11:29:36 const Exp $
+ * $Id: rfblib.h,v 1.3 2001/08/01 16:06:07 const Exp $
  * RFB protocol definitions
  */
 
@@ -25,5 +25,10 @@ typedef struct _RFB_DESKTOP_INFO {
   int bytes_row;
   char *name;
 } RFB_DESKTOP_INFO;
+
+CARD16 buf_get_CARD16(void *buf);
+CARD32 buf_get_CARD32(void *buf);
+void buf_put_CARD16(void *buf, CARD16 value);
+void buf_put_CARD32(void *buf, CARD32 value);
 
 #endif /* _REFLIB_RFBLIB_H */
