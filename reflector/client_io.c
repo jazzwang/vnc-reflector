@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.26 2001/08/22 17:53:53 const Exp $
+ * $Id: client_io.c,v 1.27 2001/08/24 00:50:47 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -199,6 +199,7 @@ static void rf_client_initmsg(void)
   /* Set up initial pixel format */
   memcpy(&cl->format, &g_screen_info->pixformat, sizeof(RFB_PIXEL_FORMAT));
   cl->trans_func = transfunc_null;
+  cl->bgr233_f = 0;
 
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
@@ -481,6 +482,8 @@ static void set_trans_func(CL_SLOT *cl)
     cl->trans_func = transfunc_null;
   }
 
+  cl->bgr233_f = 0;
+
   if ( cl->format.bits_pixel != g_screen_info->pixformat.bits_pixel ||
        cl->format.color_depth != g_screen_info->pixformat.color_depth ||
        cl->format.big_endian != g_screen_info->pixformat.big_endian ||
@@ -497,6 +500,12 @@ static void set_trans_func(CL_SLOT *cl)
     switch(cl->format.bits_pixel) {
     case 8:
       cl->trans_func = transfunc8;
+      if ( cl->format.r_max == 7 && cl->format.g_max == 7 &&
+           cl->format.b_max == 3 && cl->format.r_shift == 0 &&
+           cl->format.g_shift == 3 && cl->format.b_shift == 6 &&
+           cl->format.true_color != 0 ) {
+        cl->bgr233_f = 1;
+      }
       break;
     case 16:
       cl->trans_func = transfunc16;

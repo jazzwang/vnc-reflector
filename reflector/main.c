@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.24 2001/08/23 21:19:44 const Exp $
+ * $Id: main.c,v 1.25 2001/08/24 00:50:47 const Exp $
  * Main module
  */
 
@@ -49,6 +49,8 @@ static char *opt_host_info_file;
 /* FIXME: allocate desktop name only, not the whole g_screen_info. */
 RFB_SCREEN_INFO *g_screen_info;
 CARD32 *g_framebuffer;
+TILE_HINTS *g_hints;
+CARD8 *g_cache8;
 
 /*
  * Functions local to this file
@@ -112,8 +114,10 @@ int main(int argc, char **argv)
 
   /* Cleanup */
   if (g_framebuffer != NULL) {
-    log_write(LL_DEBUG, "Freeing framebuffer");
+    log_write(LL_DETAIL, "Freeing framebuffer and associated structures");
     free(g_framebuffer);
+    free(g_hints);
+    free(g_cache8);
   }
   free(g_screen_info);
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.12 2001/08/23 15:24:51 const Exp $
+ * $Id: host_connect.c,v 1.13 2001/08/24 00:50:47 const Exp $
  * Connecting to a VNC host
  */
 
@@ -23,6 +23,7 @@
 #include "rect.h"
 #include "translate.h"
 #include "client_io.h"
+#include "encode.h"
 #include "host_connect.h"
 
 static int parse_host_info(void);
@@ -375,16 +376,41 @@ static void rf_host_set_formats(void)
 
 static int allocate_framebuffer(void)
 {
-  int fb_size;
+  int fb_size, tiles_x, tiles_y;
 
-  fb_size = (int)g_screen_info->width * (int)g_screen_info->height * 4;
-  g_framebuffer = malloc(fb_size);
+  fb_size = (int)g_screen_info->width * (int)g_screen_info->height;
+  g_framebuffer = malloc(fb_size * sizeof(CARD32));
   if (g_framebuffer == NULL) {
     log_write(LL_ERROR, "Error allocating framebuffer");
     return 0;
   }
+  log_write(LL_INFO, "Allocated framebuffer, %d bytes",
+            fb_size * sizeof(CARD32));
 
-  log_write(LL_INFO, "Allocated framebuffer, %d bytes", fb_size);
+  tiles_x = ((int)g_screen_info->width + 15) / 16;
+  tiles_y = ((int)g_screen_info->height + 15) / 16;
+  g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
+  if (g_hints == NULL) {
+    log_write(LL_ERROR, "Error allocating memory for hextile hints");
+    free(g_framebuffer);
+    g_framebuffer = NULL;
+    return 0;
+  }
+  log_write(LL_INFO, "Allocated memory for hextile hints, %d bytes",
+            tiles_x * tiles_y * sizeof(TILE_HINTS));
+
+  g_cache8 = malloc(fb_size);
+  if (g_cache8 == NULL) {
+    log_write(LL_ERROR, "Error allocating memory for hextile BGR233 cache");
+    free(g_hints);
+    g_hints = NULL;
+    free(g_framebuffer);
+    g_framebuffer = NULL;
+    return 0;
+  }
+  log_write(LL_INFO, "Allocated memory for hextile BGR233 cache, %d bytes",
+            fb_size);
+
   return 1;
 }
 
