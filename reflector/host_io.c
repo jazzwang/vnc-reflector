@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.50 2004/08/08 15:23:35 const_k Exp $
+ * $Id: host_io.c,v 1.51 2004/10/14 20:05:40 grolloj Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -114,6 +114,7 @@ void host_close_hook(void)
     if (g_framebuffer == NULL)
       aio_close(1);
     remove_active_file();
+    perform_action("host_deactivate");
   } else {
     log_write(LL_INFO, "Closing previous connection to host");
     host_really_activate(s_new_slot);
@@ -308,9 +309,9 @@ static void rf_host_fbupdate_recthdr(void)
   /* Prevent overflow of the framebuffer */
   if (cur_rect.x >= g_fb_width || cur_rect.x + cur_rect.w > g_fb_width ||
       cur_rect.y >= g_fb_height || cur_rect.y + cur_rect.h > g_fb_height) {
-    log_write(LL_ERROR, "Rectangle out of framebuffer bounds: %dx%d at %d,%d",
+    log_write(LL_ERROR, "Rectangle out of framebuffer bounds: %dx%d at %d,%d enc %x",
               (int)cur_rect.w, (int)cur_rect.h,
-              (int)cur_rect.x, (int)cur_rect.y);
+              (int)cur_rect.x, (int)cur_rect.y, (int)cur_rect.enc);
     aio_close(0);
     return;
   }
