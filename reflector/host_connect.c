@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.19 2001/10/05 10:36:19 const Exp $
+ * $Id: host_connect.c,v 1.20 2001/10/10 06:33:46 const Exp $
  * Connecting to a VNC host
  */
 
@@ -409,7 +409,7 @@ static void rf_host_set_formats(void)
 
 static int allocate_framebuffer(void)
 {
-  int fb_size, tiles_x, tiles_y;
+  int fb_size;
 
   g_fb_width = g_screen_info.width;
   g_fb_height = g_screen_info.height;
@@ -423,29 +423,15 @@ static int allocate_framebuffer(void)
   log_write(LL_INFO, "Allocated framebuffer, %d bytes",
             fb_size * sizeof(CARD32));
 
-  tiles_x = ((int)g_fb_width + 15) / 16;
-  tiles_y = ((int)g_fb_height + 15) / 16;
-  g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
-  if (g_hints == NULL) {
-    log_write(LL_ERROR, "Error allocating memory for hextile hints");
+  /* FIXME: Allocate cache in encoder on demand. */
+  if (!allocate_encoders_cache()) {
     free(g_framebuffer);
     g_framebuffer = NULL;
+    log_write(LL_ERROR, "Error allocating cache for encoded data");
     return 0;
   }
-  log_write(LL_INFO, "Allocated memory for hextile hints, %d bytes",
-            tiles_x * tiles_y * sizeof(TILE_HINTS));
-
-  g_cache8 = malloc(fb_size);
-  if (g_cache8 == NULL) {
-    log_write(LL_ERROR, "Error allocating memory for hextile BGR233 cache");
-    free(g_hints);
-    g_hints = NULL;
-    free(g_framebuffer);
-    g_framebuffer = NULL;
-    return 0;
-  }
-  log_write(LL_INFO, "Allocated memory for hextile BGR233 cache, %d bytes",
-            fb_size);
+  log_write(LL_INFO, "Allocated cache for encoded data, %d bytes",
+            sizeof_encoders_cache());
 
   return 1;
 }

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.29 2001/10/05 10:36:19 const Exp $
+ * $Id: host_io.c,v 1.30 2001/10/10 06:33:46 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -30,6 +30,7 @@
 #include "translate.h"
 #include "client_io.h"
 #include "host_io.h"
+#include "encode.h"
 
 static void host_really_activate(AIO_SLOT *slot);
 
@@ -62,7 +63,6 @@ static void hextile_next_tile(void);
 
 static void reset_framebuffer(void);
 static void fbupdate_rect_done(void);
-static void invalidate_cache(FB_RECT *r);
 static void request_update(int incr);
 
 /*
@@ -792,22 +792,16 @@ static void hextile_next_tile(void)
 
 static void reset_framebuffer(void)
 {
-  int i, fb_size, hints_size;
 
   log_write(LL_DETAIL, "Clearing framebuffer and cache");
-
-  fb_size = g_fb_width * g_fb_height;
-  for (i = 0; i < fb_size; i++)
-    g_framebuffer[i] = 0;
-
-  hints_size = ((g_fb_width + 15) / 16) * ((g_fb_height + 15) / 16);
-  for (i = 0; i < hints_size; i++)
-    g_hints[i].subenc8 = 0;
+  memset(g_framebuffer, 0, g_fb_width * g_fb_height * sizeof(CARD32));
 
   cur_rect.x = 0;
   cur_rect.y = 0;
   cur_rect.w = g_fb_width;
   cur_rect.h = g_fb_height;
+
+  invalidate_encoders_cache(&cur_rect);
 
   /* Queue changed rectangle (the whole screen) for each client */
   aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
@@ -818,7 +812,7 @@ static void fbupdate_rect_done(void)
   log_write(LL_DEBUG, "Received rectangle ok");
 
   /* Cached data for this rectangle is not valid any more */
-  invalidate_cache(&cur_rect);
+  invalidate_encoders_cache(&cur_rect);
 
   /* Save data in a file if necessary */
   if (s_fbs_fp != NULL)
@@ -838,25 +832,10 @@ static void fbupdate_rect_done(void)
   }
 }
 
-static void invalidate_cache(FB_RECT *r)
-{
-  int tiles_in_row;
-  int tile_x0, tile_y0, tile_x1, tile_y1;
-  int x, y;
+/*
+ * Send a FramebufferUpdateRequest for the whole screen
+ */
 
-  tiles_in_row = ((int)g_fb_width + 15) / 16;
-
-  tile_x0 = r->x / 16;
-  tile_y0 = r->y / 16;
-  tile_x1 = (r->x + r->w - 1) / 16;
-  tile_y1 = (r->y + r->h - 1) / 16;
-
-  for (y = tile_y0; y <= tile_y1; y++)
-    for (x = tile_x0; x <= tile_x1; x++)
-      g_hints[y * tiles_in_row + x].subenc8 = 0;
-}
-
-/* Send a FramebufferUpdateRequest for the whole screen */
 static void request_update(int incr)
 {
   CARD16 w, h;

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.14 2001/10/09 15:22:36 const Exp $
+ * $Id: encode.c,v 1.15 2001/10/10 06:33:46 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -27,6 +27,74 @@
 #include "translate.h"
 #include "client_io.h"
 #include "encode.h"
+
+
+/* Cache for encoded data */
+TILE_HINTS *g_hints = NULL;
+CARD8 *g_cache8 = NULL;
+
+/********************************************************************/
+/*                     Initialization / cleanup                     */
+/********************************************************************/
+
+static int s_cache_size;
+
+/* FIXME: Allocate cache in encoder on demand. */
+/* FIXME: Bad function naming. */
+
+int allocate_encoders_cache(void)
+{
+  int tiles_x, tiles_y;
+
+  tiles_x = ((int)g_fb_width + 15) / 16;
+  tiles_y = ((int)g_fb_height + 15) / 16;
+  g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
+  if (g_hints == NULL) {
+    return 0;
+  }
+  s_cache_size = tiles_x * tiles_y * sizeof(TILE_HINTS);
+
+  g_cache8 = malloc(g_fb_width * g_fb_height);
+  if (g_cache8 == NULL) {
+    free(g_hints);
+    g_hints = NULL;
+    return 0;
+  }
+  s_cache_size += g_fb_width * g_fb_height;
+
+  return 1;
+}
+
+int sizeof_encoders_cache(void)
+{
+  return s_cache_size;
+}
+
+void invalidate_encoders_cache(FB_RECT *r)
+{
+  int tiles_in_row;
+  int tile_x0, tile_y0, tile_x1, tile_y1;
+  int x, y;
+
+  tiles_in_row = ((int)g_fb_width + 15) / 16;
+
+  tile_x0 = r->x / 16;
+  tile_y0 = r->y / 16;
+  tile_x1 = (r->x + r->w - 1) / 16;
+  tile_y1 = (r->y + r->h - 1) / 16;
+
+  for (y = tile_y0; y <= tile_y1; y++)
+    for (x = tile_x0; x <= tile_x1; x++)
+      g_hints[y * tiles_in_row + x].subenc8 = 0;
+}
+
+void free_encoders_cache(void)
+{
+  if (g_hints != NULL)
+    free(g_hints);
+  if (g_cache8 != NULL)
+    free(g_cache8);
+}
 
 /********************************************************************/
 /*                        Simple "encoders"                         */

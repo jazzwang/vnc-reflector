@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.34 2001/10/09 15:32:16 const Exp $
+ * $Id: main.c,v 1.35 2001/10/10 06:33:46 const Exp $
  * Main module
  */
 
@@ -64,8 +64,6 @@ static char *opt_host_info_file;
 RFB_SCREEN_INFO g_screen_info;
 CARD32 *g_framebuffer;
 CARD16 g_fb_width, g_fb_height;
-TILE_HINTS *g_hints;
-CARD8 *g_cache8;
 
 /*
  * Functions local to this file
@@ -157,8 +155,7 @@ int main(int argc, char **argv)
     if (g_framebuffer != NULL) {
       log_write(LL_DETAIL, "Freeing framebuffer and associated structures");
       free(g_framebuffer);
-      free(g_hints);
-      free(g_cache8);
+      free_encoders_cache();
     }
     if (g_screen_info.name != NULL)
       free(g_screen_info.name);
