@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.16 2001/10/10 06:36:45 const Exp $
+ * $Id: encode.c,v 1.17 2001/10/10 11:18:52 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -46,21 +46,21 @@ int allocate_encoders_cache(void)
 {
   int tiles_x, tiles_y;
 
-  tiles_x = ((int)g_fb_width + 15) / 16;
-  tiles_y = ((int)g_fb_height + 15) / 16;
+  tiles_x = (int)g_fb_width / 16;
+  tiles_y = (int)g_fb_height / 16;
   g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
   if (g_hints == NULL) {
     return 0;
   }
   s_cache_size = tiles_x * tiles_y * sizeof(TILE_HINTS);
 
-  g_cache8 = malloc(g_fb_width * g_fb_height);
+  g_cache8 = malloc(tiles_x * tiles_y * HEXTILE_MAX_TILE_DATASIZE);
   if (g_cache8 == NULL) {
     free(g_hints);
     g_hints = NULL;
     return 0;
   }
-  s_cache_size += g_fb_width * g_fb_height;
+  s_cache_size += tiles_x * tiles_y * HEXTILE_MAX_TILE_DATASIZE;
 
   return 1;
 }
@@ -76,16 +76,20 @@ void invalidate_encoders_cache(FB_RECT *r)
   int tile_x0, tile_y0, tile_x1, tile_y1;
   int x, y;
 
-  tiles_in_row = ((int)g_fb_width + 15) / 16;
+  tiles_in_row = (int)g_fb_width / 16;
 
   tile_x0 = r->x / 16;
   tile_y0 = r->y / 16;
   tile_x1 = (r->x + r->w - 1) / 16;
+  if (tile_x1 >= tiles_in_row)
+    tile_x1 = tiles_in_row - 1;
   tile_y1 = (r->y + r->h - 1) / 16;
+  if (tile_y1 >= (int)g_fb_height / 16)
+    tile_y1 = (int)g_fb_height / 16 - 1;
 
   for (y = tile_y0; y <= tile_y1; y++)
     for (x = tile_x0; x <= tile_x1; x++)
-      g_hints[y * tiles_in_row + x].subenc8 = 0;
+      g_hints[y * tiles_in_row + x].valid_f = 0;
 }
 
 void free_encoders_cache(void)
@@ -249,16 +253,10 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
   return realloc(block, sizeof(AIO_BLOCK) + block->data_size);
 }
 
-/*
- * Some statistics for cache utilization.
- */
-
-static long s_cache_hits = 0, s_cache_misses = 0;
-
+static long s_cache_hits, s_cache_misses;
 void get_hextile_caching_stats(long *hits, long *misses)
 {
-  *hits = s_cache_hits;
-  *misses = s_cache_misses;
+  *hits = s_cache_hits; *misses = s_cache_misses;
 }
 
 /********************************************************************/
@@ -275,63 +273,83 @@ static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 {
   int tiles_in_row, tile_ord;
   TILE_HINTS *hints;
+  CARD8 *cache;
   CARD8 *dst = dst_buf;
-  size_t data_size;
+  CARD8 tile_buf[256];
+  PALETTE2 pal;
   int dst_bytes;
 
-  tiles_in_row = ((int)g_fb_width + 15) / 16;
+  tiles_in_row = (int)g_fb_width / 16;
   tile_ord = (r->y / 16) * tiles_in_row + (r->x / 16);
   hints = &g_hints[tile_ord];
+  cache = &g_cache8[tile_ord * HEXTILE_MAX_TILE_DATASIZE];
 
-  if (hints->subenc8 != 0) {    /* Cache hit */
+  if (hints->valid_f && hints->hextile_datasize != 0) {
+
+    /* Cache hit! */
     s_cache_hits++;
 
-    *dst++ = hints->subenc8;
-    if (hints->subenc8 & RFB_HEXTILE_RAW) {
-        prev_bg_set = 0;
-        memcpy(dst, &g_cache8[tile_ord * 256], 256);
-        dst += 256;
+    if (cache[0] & RFB_HEXTILE_RAW) {
+      /* Raw sub-encoding: copy cached data, forget previous background. */
+      memcpy(dst, cache, hints->hextile_datasize);
+      dst += hints->hextile_datasize;
+      prev_bg_set = 0;
     } else {
-      if (prev_bg != (CARD32)hints->bg8 || !prev_bg_set) {
-        *dst++ = hints->bg8;
+      if (prev_bg != hints->bg || !prev_bg_set) {
+        /* Just copy cached data. */
+        memcpy(dst, cache, hints->hextile_datasize);
+        dst += hints->hextile_datasize;
       } else {
-        *dst_buf &= ~RFB_HEXTILE_BG_SPECIFIED;
+        /* The same background color as in the previous tile: do not copy
+           second byte from the cache, clear RFB_HEXTILE_BG_SPECIFIED. */
+        *dst++ = (cache[0] & ~RFB_HEXTILE_BG_SPECIFIED);
+        memcpy(dst, &cache[2], hints->hextile_datasize);
+        dst += (hints->hextile_datasize - 2);
       }
-      prev_bg = (CARD32)hints->bg8;
+      /* Remember previous background color. */
+      prev_bg = hints->bg;
       prev_bg_set = 1;
-      if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
-        *dst++ = hints->fg8;
-      if (hints->subenc8 & RFB_HEXTILE_ANY_SUBRECTS) {
-        data_size = (size_t)hints->datasize8 + 1;
-        memcpy(dst, &g_cache8[tile_ord * 256], data_size);
-        dst += data_size;
-      }
     }
     dst_bytes = dst - dst_buf;
 
   } else {                      /* Cache miss */
+
     s_cache_misses++;
 
-    /* Encode tile... */
-    dst_bytes = encode_tile8(dst_buf, cl, r);
-
-    /* ... and save encoded data in the cache. */
-    hints->subenc8 = *dst++;
-    if (hints->subenc8 & RFB_HEXTILE_RAW) {
-      memcpy(&g_cache8[tile_ord * 256], dst, 256);
+    /* Step 1: Encode tile. */
+    (*cl->trans_func)(tile_buf, r, cl->trans_table);
+    if (hints->valid_f) {
+      /* Here we can save one analyze_rect8() call. */
+      pal.num_colors = (int)hints->num_colors;
+      pal.bg = (CARD32)hints->bg;
+      pal.fg = (CARD32)hints->fg;
     } else {
-      if (hints->subenc8 & RFB_HEXTILE_BG_SPECIFIED) {
-        hints->bg8 = *dst++;
+      analyze_rect8(tile_buf, &pal, r);
+    }
+    dst_bytes = encode_tile_ht8(dst_buf, tile_buf, &pal, r);
+    if (dst_bytes < 0)
+      dst_bytes = encode_tile_raw8(dst_buf, cl, r);
+
+    /* Step 2: Save meta-data in the cache. */
+    hints->num_colors = (CARD8)pal.num_colors;
+    hints->bg = (CARD8)pal.bg;
+    hints->fg = (CARD8)pal.fg;
+    hints->valid_f = 1;
+
+    /* Step 3: Save encoded data in the cache. */
+    if (dst_buf[0] & RFB_HEXTILE_RAW) {
+      memcpy(cache, dst_buf, dst_bytes);
+      hints->hextile_datasize = dst_bytes;
+    } else {
+      if (dst_buf[0] & RFB_HEXTILE_BG_SPECIFIED) {
+        memcpy(cache, dst_buf, dst_bytes);
+        hints->hextile_datasize = dst_bytes;
       } else {
-        hints->bg8 = (CARD8)prev_bg;
-        hints->subenc8 |= RFB_HEXTILE_BG_SPECIFIED;
-      }
-      if (hints->subenc8 & RFB_HEXTILE_FG_SPECIFIED)
-        hints->fg8 = *dst++;
-      if (hints->subenc8 & RFB_HEXTILE_ANY_SUBRECTS) {
-        data_size = (dst_buf + dst_bytes) - dst;
-        hints->datasize8 = (CARD8)(data_size - 1);
-        memcpy(&g_cache8[tile_ord * 256], dst, data_size);
+        /* Insert background color into the cached data. */
+        cache[0] = (dst_buf[0] | RFB_HEXTILE_BG_SPECIFIED);
+        cache[1] = (CARD8)pal.bg;
+        memcpy(&cache[2], &dst_buf[1], dst_bytes - 1);
+        hints->hextile_datasize = dst_bytes + 1;
       }
     }
 
@@ -356,7 +374,7 @@ static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
   (*cl->trans_func)(tile_buf, r, cl->trans_table);                      \
                                                                         \
   /* Count number of colors, consider background & foreground. */       \
-  analyze_rect##bpp(tile_buf, r, &pal);                                 \
+  analyze_rect##bpp(tile_buf, &pal, r);                                 \
                                                                         \
   /* Try to encode tile representing it as a set of subrects. */        \
   bytes = encode_tile_ht##bpp(dst_buf, tile_buf, &pal, r);              \
@@ -531,7 +549,7 @@ DEFINE_ENCODE_TILE_RAW(32)
 
 #define DEFINE_ANALYZE_RECT(bpp)                                             \
                                                                              \
-void analyze_rect##bpp(CARD##bpp *buf, FB_RECT *r, PALETTE2 *pal)            \
+void analyze_rect##bpp(CARD##bpp *buf, PALETTE2 *pal, FB_RECT *r)            \
 {                                                                            \
   int i;                                                                     \
   int bg_count = 0, fg_count = 0;                                            \

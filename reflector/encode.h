@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.h,v 1.9 2001/10/10 06:33:46 const Exp $
+ * $Id: encode.h,v 1.10 2001/10/10 11:18:52 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -23,12 +23,22 @@ typedef struct _PALETTE2 {
   CARD32 fg;
 } PALETTE2;
 
+/* This structure describes cached data for a properly-aligned 16x16 tile. */
+/* NOTE: If hextile_datasize is not 0 then valid_f should be non-zero too, */
+/* but if valid_f is not 0, do not expect hextile_datasize to be non-zero. */
 typedef struct _TILE_HINTS {
-  CARD8 subenc8;
-  CARD8 bg8;
-  CARD8 fg8;
-  CARD8 datasize8;
+  CARD8 valid_f;                /* At least meta-data available if not 0   */
+  CARD8 num_colors;             /* Meta-data: number of colors (1, 2 or 0) */
+  CARD8 bg;                     /* Meta-data: background color             */
+  CARD8 fg;                     /* Meta-data: foreground color             */
+  CARD16 hextile_datasize;      /* Hextile-encoded data available if not 0 */
 } TILE_HINTS;
+
+/* Max size of hextile-encoded data per one 16x16 tile */
+/* FIXME: Bad name? */
+#define HEXTILE_MAX_TILE_DATASIZE  260
+
+/* Macros to place pixel values to a byte-aligned memory location */
 
 #define BUF_PUT_PIXEL8(buf, pixel)  *(buf) = (pixel)
 
@@ -64,9 +74,9 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r);
 
 void get_hextile_caching_stats(long *hits, long *misses);
 
-void analyze_rect8(CARD8 *buf, FB_RECT *r, PALETTE2 *pal);
-void analyze_rect16(CARD16 *buf, FB_RECT *r, PALETTE2 *pal);
-void analyze_rect32(CARD32 *buf, FB_RECT *r, PALETTE2 *pal);
+void analyze_rect8(CARD8 *buf, PALETTE2 *pal, FB_RECT *r);
+void analyze_rect16(CARD16 *buf, PALETTE2 *pal, FB_RECT *r);
+void analyze_rect32(CARD32 *buf, PALETTE2 *pal, FB_RECT *r);
 
 /* encode-tight8.c */
 
