@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.9 2001/08/22 22:35:40 const Exp $
+ * $Id: host_connect.c,v 1.10 2001/08/23 09:27:11 const Exp $
  * Connecting to a VNC host
  */
 
@@ -297,7 +297,7 @@ static int allocate_framebuffer(void)
     return 0;
   }
 
-  log_write(LL_DEBUG, "Allocated framebuffer, %d bytes", fb_size);
+  log_write(LL_INFO, "Allocated framebuffer, %d bytes", fb_size);
   return 1;
 }
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.17 2001/08/22 22:35:40 const Exp $
+ * $Id: host_io.c,v 1.18 2001/08/23 09:27:11 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -88,8 +88,9 @@ void host_close_hook(void)
     log_write(LL_ERROR, "Host I/O error");
   }
 
+  /* Close host connection, exit if framebuffer was not allocated. */
   log_write(LL_WARN, "Closing connection to host");
-  aio_close(1);
+  aio_close(g_framebuffer == NULL);
 }
 
 /* Processing RFB messages */

@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.20 2001/08/22 22:35:40 const Exp $
+ * $Id: main.c,v 1.21 2001/08/23 09:27:11 const Exp $
  * Main module
  */
 
@@ -12,6 +12,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "rfblib.h"
 #include "async_io.h"
@@ -32,6 +34,7 @@ static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
 static char  opt_hostname[256];
 static int   opt_hostport;
+static char  opt_pidfile[256];
 
 static unsigned char opt_host_password[9];
 static unsigned char opt_client_password[9];
@@ -53,6 +56,8 @@ static void parse_args(int argc, char **argv);
 static void report_usage(char *program_name);
 static int read_password_file(void);
 static int init_screen_info(void);
+static int write_pid_file(void);
+static int remove_pid_file(void);
 
 /*
  * Implementation
@@ -95,8 +100,12 @@ int main(int argc, char **argv)
 
   /* Main work */
   if (connect_to_host(opt_hostname, opt_hostport, opt_cl_listen_port,
-                      opt_host_password))
-    aio_mainloop();
+                      opt_host_password)) {
+    if (write_pid_file()) {
+      aio_mainloop();
+      remove_pid_file();
+    }
+  }
 
   /* Free everything */
   if (g_framebuffer != NULL) {
@@ -122,6 +131,8 @@ static void parse_args(int argc, char **argv)
   int err = 0;
   int c, len;
   char *pos;
+  char *temp_pidfile = NULL;
+  char temp_buf[32];            /* 32 bytes should be more than enough */
 
   opt_foreground = 0;
   opt_stderr_loglevel = -1;
@@ -129,8 +140,9 @@ static void parse_args(int argc, char **argv)
   opt_passwd_filename = NULL;
   opt_log_filename = NULL;
   opt_cl_listen_port = -1;
+  opt_pidfile[0] = '\0';
 
-  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:i:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -169,6 +181,12 @@ static void parse_args(int argc, char **argv)
           err = 1;
       }
       break;
+    case 'i':
+      if (temp_pidfile != NULL)
+        err = 1;
+      else
+        temp_pidfile = optarg;
+      break;
     default:
       err = 1;
     }
@@ -180,7 +198,7 @@ static void parse_args(int argc, char **argv)
     exit(1);
   }
 
-  /* Provide reasonable defaults for options */
+  /* Provide reasonable defaults for some options */
   if (opt_file_loglevel == -1)
     opt_file_loglevel = LL_INFO;
   if (opt_passwd_filename == NULL)
@@ -189,6 +207,13 @@ static void parse_args(int argc, char **argv)
     opt_log_filename = "reflector.log";
   if (opt_cl_listen_port == -1)
     opt_cl_listen_port = 5999;
+
+  /* Append listening port number to pid filename */
+  if (temp_pidfile != NULL) {
+    sprintf(temp_buf, "%d", opt_cl_listen_port);
+    sprintf(opt_pidfile, "%.*s.%s", 255 - strlen(temp_buf) - 1,
+            temp_pidfile, temp_buf);
+  }
 
   /* Separate host name and host display number if exists */
   pos = strchr(argv[optind], ':');
@@ -221,6 +246,8 @@ static void report_usage(char *program_name)
 
   fprintf(stderr,
           "Options:\n"
+          "  -i PID_FILE     - write pid file, appending listening port"
+          " to filename\n"
           "  -p PASSWD_FILE  - read plaintext password file"
           " [default: passwd]\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
@@ -365,5 +392,44 @@ static int init_screen_info(void)
   g_framebuffer = NULL;
 
   return 1;
+}
+
+static int write_pid_file(void)
+{
+  int pid_fd, len;
+  char buf[32];                 /* 32 bytes should be more than enough */
+
+  if (opt_pidfile[0] == '\0')
+    return 1;
+
+  pid_fd = open(opt_pidfile, O_WRONLY | O_CREAT | O_EXCL, 0644);
+  if (pid_fd == -1) {
+    log_write(LL_ERROR, "Pid file exists, another instance may be running");
+    return 0;
+  }
+  sprintf(buf, "%d\n", (int)getpid());
+  len = strlen(buf);
+  if (write(pid_fd, buf, len) != len) {
+    close(pid_fd);
+    log_write(LL_ERROR, "Error writing to pid file");
+    return 0;
+  }
+
+  log_write(LL_DEBUG, "Wrote pid file: %s", opt_pidfile);
+
+  close(pid_fd);
+  return 1;
+}
+
+static int remove_pid_file(void)
+{
+  if (opt_pidfile[0] == '\0')
+    return 1;
+
+  if (unlink(opt_pidfile) == 0) {
+    log_write(LL_DEBUG, "Removed pid file", opt_pidfile);
+  } else {
+    log_write(LL_WARN, "Error removing pid file: %s", opt_pidfile);
+  }
 }
 
