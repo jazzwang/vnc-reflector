@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.h,v 1.10 2001/10/10 11:18:52 const Exp $
+ * $Id: encode.h,v 1.11 2001/10/11 08:56:30 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -61,22 +61,17 @@ typedef struct _TILE_HINTS {
 extern TILE_HINTS *g_hints;
 extern CARD8 *g_cache8;
 
-int allocate_encoders_cache(void);
-int sizeof_encoders_cache(void);
-void invalidate_encoders_cache(FB_RECT *r);
-void free_encoders_cache(void);
+int allocate_enc_cache(void);
+int sizeof_enc_cache(void);
+void invalidate_enc_cache(FB_RECT *r);
+void free_enc_cache(void);
 
 int put_rect_header(CARD8 *buf, FB_RECT *r, CARD32 enc);
+void get_hextile_caching_stats(long *hits, long *misses);
 
 AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r);
 AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r);
 AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r);
-
-void get_hextile_caching_stats(long *hits, long *misses);
-
-void analyze_rect8(CARD8 *buf, PALETTE2 *pal, FB_RECT *r);
-void analyze_rect16(CARD16 *buf, PALETTE2 *pal, FB_RECT *r);
-void analyze_rect32(CARD32 *buf, PALETTE2 *pal, FB_RECT *r);
 
 /* encode-tight8.c */
 

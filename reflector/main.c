@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.35 2001/10/10 06:33:46 const Exp $
+ * $Id: main.c,v 1.36 2001/10/11 08:56:30 const Exp $
  * Main module
  */
 
@@ -155,7 +155,7 @@ int main(int argc, char **argv)
     if (g_framebuffer != NULL) {
       log_write(LL_DETAIL, "Freeing framebuffer and associated structures");
       free(g_framebuffer);
-      free_encoders_cache();
+      free_enc_cache();
     }
     if (g_screen_info.name != NULL)
       free(g_screen_info.name);

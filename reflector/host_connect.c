@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.20 2001/10/10 06:33:46 const Exp $
+ * $Id: host_connect.c,v 1.21 2001/10/11 08:56:30 const Exp $
  * Connecting to a VNC host
  */
 
@@ -424,14 +424,14 @@ static int allocate_framebuffer(void)
             fb_size * sizeof(CARD32));
 
   /* FIXME: Allocate cache in encoder on demand. */
-  if (!allocate_encoders_cache()) {
+  if (!allocate_enc_cache()) {
     free(g_framebuffer);
     g_framebuffer = NULL;
     log_write(LL_ERROR, "Error allocating cache for encoded data");
     return 0;
   }
   log_write(LL_INFO, "Allocated cache for encoded data, %d bytes",
-            sizeof_encoders_cache());
+            sizeof_enc_cache());
 
   return 1;
 }

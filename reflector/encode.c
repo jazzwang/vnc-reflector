@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.17 2001/10/10 11:18:52 const Exp $
+ * $Id: encode.c,v 1.18 2001/10/11 08:56:30 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -42,7 +42,7 @@ static int s_cache_size;
 /* FIXME: Allocate cache on demand. */
 /* FIXME: Bad function naming. */
 
-int allocate_encoders_cache(void)
+int allocate_enc_cache(void)
 {
   int tiles_x, tiles_y;
 
@@ -65,12 +65,12 @@ int allocate_encoders_cache(void)
   return 1;
 }
 
-int sizeof_encoders_cache(void)
+int sizeof_enc_cache(void)
 {
   return s_cache_size;
 }
 
-void invalidate_encoders_cache(FB_RECT *r)
+void invalidate_enc_cache(FB_RECT *r)
 {
   int tiles_in_row;
   int tile_x0, tile_y0, tile_x1, tile_y1;
@@ -92,7 +92,7 @@ void invalidate_encoders_cache(FB_RECT *r)
       g_hints[y * tiles_in_row + x].valid_f = 0;
 }
 
-void free_encoders_cache(void)
+void free_enc_cache(void)
 {
   if (g_hints != NULL)
     free(g_hints);
@@ -178,6 +178,9 @@ static int encode_tile_ht32(CARD8 *dst_buf, CARD32 *tile_buf,
 static int encode_tile_raw8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static void analyze_rect8(CARD8 *buf, PALETTE2 *pal, FB_RECT *r);
+static void analyze_rect16(CARD16 *buf, PALETTE2 *pal, FB_RECT *r);
+static void analyze_rect32(CARD32 *buf, PALETTE2 *pal, FB_RECT *r);
 
 /* Variables to keep background color of previous tile */
 static CARD32 prev_bg;
@@ -549,7 +552,7 @@ DEFINE_ENCODE_TILE_RAW(32)
 
 #define DEFINE_ANALYZE_RECT(bpp)                                             \
                                                                              \
-void analyze_rect##bpp(CARD##bpp *buf, PALETTE2 *pal, FB_RECT *r)            \
+static void analyze_rect##bpp(CARD##bpp *buf, PALETTE2 *pal, FB_RECT *r)     \
 {                                                                            \
   int i;                                                                     \
   int bg_count = 0, fg_count = 0;                                            \
