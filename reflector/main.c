@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.44 2002/09/03 19:57:28 const Exp $
+ * $Id: main.c,v 1.45 2002/09/07 06:10:41 const Exp $
  * Main module
  */
 
@@ -53,6 +53,8 @@ static char  opt_pid_file[256];
 static char *opt_fbs_prefix;
 static int   opt_join_sessions;
 static char *opt_bind_ip;
+static int   opt_request_tight;
+static int   opt_tight_level;
 
 static unsigned char opt_client_password[9];
 static unsigned char opt_client_ro_password[9];
@@ -130,6 +132,7 @@ int main(int argc, char **argv)
   /* Initialization */
   if (init_screen_info()) {
     read_password_file();
+    set_host_encodings(opt_request_tight, opt_tight_level);
     set_client_passwords(opt_client_password, opt_client_ro_password);
     fbs_set_prefix(opt_fbs_prefix, opt_join_sessions);
 
@@ -204,8 +207,11 @@ static void parse_args(int argc, char **argv)
   opt_fbs_prefix = NULL;
   opt_join_sessions = 0;
   opt_bind_ip = NULL;
+  opt_request_tight = 0;
+  opt_tight_level = -1;
 
-  while (!err && (c = getopt(argc, argv, "hqjv:f:p:a:c:g:l:i:s:b:")) != -1) {
+  while (!err &&
+         (c = getopt(argc, argv, "hqjv:f:p:a:c:g:l:i:s:b:tT:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -280,6 +286,22 @@ static void parse_args(int argc, char **argv)
       else
         opt_bind_ip = optarg;
       break;
+    case 't':
+      if (opt_request_tight)
+        err = 1;
+      else
+        opt_request_tight = 1;
+      break;
+    case 'T':
+      if (opt_request_tight) {
+        err = 1;
+      } else {
+        opt_request_tight = 1;
+        opt_tight_level = atoi(optarg);
+        if (opt_tight_level <= 0 || opt_tight_level > 9)
+          err = 1;
+      }
+      break;
     default:
       err = 1;
     }
@@ -345,9 +367,13 @@ static void report_usage(char *program_name)
           " -j option)\n"
           "  -j              - join saved sessions (see -s option) in one"
           " session file\n"
-          "  -g LOG_FILE     - write logs to the specified file"
-          " [default: reflector.log]\n");
+          "  -t              - use Tight encoding for host communications"
+          " if possible\n"
+          "  -T COMPR_LEVEL  - like -t, but use the specified compression"
+          " level (1..9)\n");
   fprintf(stderr,
+          "  -g LOG_FILE     - write logs to the specified file"
+          " [default: reflector.log]\n"
           "  -v LOG_LEVEL    - set verbosity level for the log file (0..%d)"
           " [default: %d]\n"
           "  -f LOG_LEVEL    - run in foreground, show logs on stderr"
@@ -359,10 +385,10 @@ static void report_usage(char *program_name)
           LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
 
   fprintf(stderr,
-          "Please refer to the README file for description of file formats"
-          " for\n"
-          "  HOST_INFO_FILE and PASSWD_FILE files mentioned above in the help"
-          " text.\n\n");
+          "Please refer to the README file for a description of the file"
+          " formats for\n"
+          "  HOST_INFO_FILE and PASSWD_FILE files mentioned above in this"
+          " help text.\n\n");
 }
 
 static int read_password_file(void)

@@ -21,12 +21,12 @@ geometries. It supports full-control and read-only client connections
 depending on which of two passwords was used to initiate a client
 session.
 
-Raw, Hextile and CopyRect encodings are suported both at the host side
-and at the client side. Additionally, Tight encoding is supported on
-the client side, but its current implementation is limited (supports
-only BGR233 pixel format) and inefficient (lacks caching capability).
+Raw, Hextile, Tight and CopyRect encodings are suported both at the
+host side and at the client side. Current implementation of Tight
+encoder is limited (supports only BGR233 pixel format) and inefficient
+(lacks caching capability).
 
-Please note that documentation is incomplete.
+Please note that the documentation is incomplete.
 
 
 Licensing terms
@@ -63,6 +63,8 @@ Options:
                     (optionally appending 3-digit session IDs to the
                     filename prefix, only if used without the -j option)
   -j              - join saved sessions (see -s option) in one session file
+  -t              - use Tight encoding for host communications if possible
+  -T COMPR_LEVEL  - like -t, but use the specified compression level (1..9)
   -g LOG_FILE     - write logs to the specified file [default: reflector.log]
   -v LOG_LEVEL    - set verbosity level for the log file (0..6) [default: 4]
   -f LOG_LEVEL    - run in foreground, show logs on stderr at the specified

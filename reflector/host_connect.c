@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.27 2002/09/03 19:57:28 const Exp $
+ * $Id: host_connect.c,v 1.28 2002/09/07 06:10:41 const Exp $
  * Connecting to a VNC host
  */
 
@@ -50,6 +50,9 @@ static void send_client_initmsg(void);
 static void rf_host_initmsg(void);
 static void rf_host_set_formats(void);
 
+static int s_request_tight;
+static int s_tight_level;
+
 static char *s_host_info_file;
 static int s_cl_listen_port;
 
@@ -57,7 +60,21 @@ static char s_hostname[256];
 static int s_host_port;
 static unsigned char s_host_password[9];
 
-/* Connect to remote RFB host */
+/*
+ * Set preferred encoding (Hextile or Tight) and compression level
+ * for the Tight encoding.
+ */
+
+void set_host_encodings(int request_tight, int tight_level)
+{
+  s_request_tight = request_tight;
+  s_tight_level = tight_level;
+}
+
+/*
+ * Connect to a remote RFB host
+ */
+
 int connect_to_host(char *host_info_file, int cl_listen_port)
 {
   int host_fd;
@@ -352,17 +369,12 @@ static void rf_host_set_formats(void)
   HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
   CARD8 *new_name;
   unsigned char setpixfmt_msg[4 + SZ_RFB_PIXEL_FORMAT];
-  unsigned char setencodings_msg[] = {
+  unsigned char setenc_msg[32] = {
     2,                          /* Message id */
     0,                          /* Padding -- not used */
-    0, 6,                       /* Number of encodings */
-    0, 0, 0, 7,                 /* Tight encoding */
-    0, 0, 0, 5,                 /* Hextile encoding */
-    0, 0, 0, 1,                 /* CopyRect encoding */
-    0, 0, 0, 0,                 /* Raw encoding */
-    0xFF, 0xFF, 0xFF, 0x20,     /* LastRect "encoding" */
-    0xFF, 0xFF, 0xFF, 0x21      /* NewFBSize "encoding" */
+    0, 0                        /* Number of encodings */
   };
+  int setenc_msg_size;
 
   /* FIXME: Don't change g_screen_info while there is an active host
      connection! */
@@ -381,15 +393,43 @@ static void rf_host_set_formats(void)
     g_screen_info.name[hs->temp_len] = '\0';
   }
 
-  log_write(LL_DETAIL, "Setting up pixel format and encodings");
+  log_write(LL_DETAIL, "Setting up pixel format");
 
-  log_write(LL_DEBUG, "Sending SetPixelFormat message");
   memset(setpixfmt_msg, 0, 4);
   buf_put_pixfmt(&setpixfmt_msg[4], &g_screen_info.pixformat);
+  log_write(LL_DEBUG, "Sending SetPixelFormat message");
   aio_write(NULL, setpixfmt_msg, sizeof(setpixfmt_msg));
 
+  if (s_request_tight) {
+    log_write(LL_DETAIL, "Requesting Tight encoding");
+    buf_put_CARD32(&setenc_msg[4],  RFB_ENCODING_TIGHT);
+    buf_put_CARD32(&setenc_msg[8],  RFB_ENCODING_HEXTILE);
+    buf_put_CARD32(&setenc_msg[12], RFB_ENCODING_COPYRECT);
+    buf_put_CARD32(&setenc_msg[16], RFB_ENCODING_RAW);
+    buf_put_CARD32(&setenc_msg[20], RFB_ENCODING_LASTRECT);
+    buf_put_CARD32(&setenc_msg[24], RFB_ENCODING_NEWFBSIZE);
+    if (s_tight_level >= 0 && s_tight_level <= 9) {
+      log_write(LL_DETAIL, "Requesting compression level %d", s_tight_level);
+      buf_put_CARD32(&setenc_msg[28], (RFB_ENCODING_COMPESSLEVEL0 +
+                                       (CARD32)s_tight_level));
+      buf_put_CARD16(&setenc_msg[2], 7);
+      setenc_msg_size = 32;
+    } else {
+      buf_put_CARD16(&setenc_msg[2], 6);
+      setenc_msg_size = 28;
+    }
+  } else {
+    log_write(LL_DETAIL, "Requesting Hextile encoding");
+    buf_put_CARD32(&setenc_msg[4],  RFB_ENCODING_HEXTILE);
+    buf_put_CARD32(&setenc_msg[8],  RFB_ENCODING_COPYRECT);
+    buf_put_CARD32(&setenc_msg[12], RFB_ENCODING_RAW);
+    buf_put_CARD32(&setenc_msg[16], RFB_ENCODING_NEWFBSIZE);
+    buf_put_CARD16(&setenc_msg[2], 4);
+    setenc_msg_size = 20;
+  }
+
   log_write(LL_DEBUG, "Sending SetEncodings message");
-  aio_write(NULL, setencodings_msg, sizeof(setencodings_msg));
+  aio_write(NULL, setenc_msg, setenc_msg_size);
 
   /* If there was no local framebuffer yet, start listening for client
      connections, assuming we are mostly ready to serve clients. */
