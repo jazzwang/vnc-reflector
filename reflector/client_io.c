@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.27 2001/08/24 00:50:47 const Exp $
+ * $Id: client_io.c,v 1.28 2001/08/24 05:55:50 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -338,9 +338,12 @@ static void rf_client_updatereq(void)
   rect.src_y = 0xFFFF;
 
   if (!cur_slot->readbuf[0]) {
-    rlist_add_rect(&cl->pending_rects, &rect);
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
               cur_slot->name);
+    if (cl->bgr233_f)
+      rlist_add_rect(&cl->pending_rects, &rect);
+    else
+      rlist_push_rect(&cl->pending_rects, &rect);
   } else {
     log_write(LL_DEBUG, "Received framebuffer update request from %s",
               cur_slot->name);
@@ -429,8 +432,12 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
 
-  if (cl->connected)
-    rlist_add_rect(&cl->pending_rects, rect);
+  if (cl->connected) {
+    if (cl->bgr233_f)
+      rlist_add_rect(&cl->pending_rects, rect);
+    else
+      rlist_push_rect(&cl->pending_rects, rect);
+  }
 }
 
 void fn_client_send_rects(AIO_SLOT *slot)

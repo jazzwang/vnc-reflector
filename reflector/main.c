@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.25 2001/08/24 00:50:47 const Exp $
+ * $Id: main.c,v 1.26 2001/08/24 05:55:50 const Exp $
  * Main module
  */
 
@@ -21,6 +21,10 @@
 #include "reflector.h"
 #include "host_connect.h"
 #include "control.h"
+#include "rect.h"
+#include "translate.h"
+#include "client_io.h"
+#include "encode.h"
 
 /*
  * Configuration options
@@ -69,6 +73,7 @@ static int remove_pid_file(void);
 
 int main(int argc, char **argv)
 {
+  long cache_hits, cache_misses;
 
   /* Parse command line, exit on error */
   parse_args(argc, argv);
@@ -120,6 +125,13 @@ int main(int argc, char **argv)
     free(g_cache8);
   }
   free(g_screen_info);
+
+  get_hextile_caching_stats(&cache_hits, &cache_misses);
+  if (cache_hits + cache_misses != 0) {
+    log_write(LL_INFO, "Caching stats for 16x16 tiles: %d%% hits (%ld/%ld)",
+              (int)(cache_hits * 100 / (cache_hits + cache_misses)),
+              cache_hits, cache_hits + cache_misses);
+  }
 
   log_write(LL_MSG, "Terminating");
 

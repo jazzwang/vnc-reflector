@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rect.c,v 1.3 2001/08/20 11:58:48 const Exp $
+ * $Id: rect.c,v 1.4 2001/08/24 05:55:50 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -12,6 +12,7 @@
 #include "rfblib.h"
 #include "rect.h"
 
+/* NOTE: These constants are not used yet */
 #define COMBINE_RECTS_LIMIT   16
 #define COMBINE_MAX_OVERHEAD  16
 
@@ -69,13 +70,45 @@ void rlist_push_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
 }
 
 /*
- * Add a rectangle to a rectangle list trying to combine rectangle
- * with another existing in the list.
+ * Add a rectangle to a rectangle list splitting it the way that would
+ * help to cache hextile-encoded data.
  */
 
 void rlist_add_rect(FB_RECT_LIST *rlist, FB_RECT *rect)
 {
-  /* FIXME: Implement that. */
+  CARD16 x_aligned, y_aligned;
+  FB_RECT temp;
+
+  if (rect->src_x == 0xFFFF && rect->w * rect->h > 256) {
+    x_aligned = (rect->x + 15) & 0xFFF0;
+    y_aligned = (rect->y + 15) & 0xFFF0;
+
+    if ( rect->w - (x_aligned - rect->x) >= 16 &&
+         rect->h - (y_aligned - rect->y) >= 16 ) {
+      temp.src_x = temp.src_y = 0xFFFF;
+      if (y_aligned != rect->y) {
+        temp.x = rect->x;
+        temp.y = rect->y;
+        temp.w = rect->w;
+        temp.h = y_aligned - rect->y;
+        rlist_push_rect(rlist, &temp);
+      }
+      if (x_aligned != rect->x) {
+        temp.x = rect->x;
+        temp.y = y_aligned;
+        temp.w = x_aligned - rect->x;
+        temp.h = rect->h - (y_aligned - rect->y);
+        rlist_push_rect(rlist, &temp);
+      }
+      temp.x = x_aligned;
+      temp.y = y_aligned;
+      temp.w = rect->w - (x_aligned - rect->x);
+      temp.h = rect->h - (y_aligned - rect->y);
+      rlist_push_rect(rlist, &temp);
+      return;
+    }
+  }
+
   rlist_push_rect(rlist, rect);
 }
 

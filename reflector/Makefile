@@ -1,7 +1,7 @@
 # VNC Reflector
 # Copyright (C) 2001 Const Kaplinsky
 #
-# $Id: Makefile,v 1.23 2001/08/23 10:52:32 const Exp $
+# $Id: Makefile,v 1.24 2001/08/24 05:55:50 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS.
 
@@ -49,10 +49,10 @@ depend: $(SRCS)
 
 # DO NOT DELETE
 main.o: main.c rfblib.h async_io.h logging.h reflector.h host_connect.h \
-  control.h
+  control.h rect.h translate.h client_io.h encode.h
 logging.o: logging.c logging.h
 host_connect.o: host_connect.c rfblib.h reflector.h logging.h async_io.h \
-  host_io.h rect.h translate.h client_io.h host_connect.h
+  host_io.h rect.h translate.h client_io.h encode.h host_connect.h
 d3des.o: d3des.c d3des.h
 rfblib.o: rfblib.c rfblib.h d3des.h
 async_io.o: async_io.c async_io.h

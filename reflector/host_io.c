@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.20 2001/08/23 21:19:44 const Exp $
+ * $Id: host_io.c,v 1.21 2001/08/24 05:55:50 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -48,6 +48,7 @@ static void hextile_fill_tile(void);
 static void hextile_fill_subrect(CARD8 pos, CARD8 dim);
 static void hextile_next_tile(void);
 static void fbupdate_rect_done(void);
+static void invalidate_cache(FB_RECT *r);
 static void request_update(int incr);
 
 /*
@@ -726,6 +727,9 @@ static void fbupdate_rect_done(void)
 {
   log_write(LL_DEBUG, "Received rectangle ok");
 
+  /* Cached data for this rectangle is not valid any more */
+  invalidate_cache(&cur_rect);
+
   /* Save data in a file if necessary */
   if (s_fbs_fp != NULL)
     fbs_write_data(s_fbs_buffer, s_fbs_buffer_ptr - s_fbs_buffer);
@@ -742,6 +746,24 @@ static void fbupdate_rect_done(void)
     request_update(1);
     aio_setread(rf_host_msg, NULL, 1);
   }
+}
+
+static void invalidate_cache(FB_RECT *r)
+{
+  int tiles_in_row;
+  int tile_x0, tile_y0, tile_x1, tile_y1;
+  int x, y;
+
+  tiles_in_row = ((int)g_screen_info->width + 15) / 16;
+
+  tile_x0 = r->x / 16;
+  tile_y0 = r->y / 16;
+  tile_x1 = (r->x + r->w - 1) / 16;
+  tile_y1 = (r->y + r->h - 1) / 16;
+
+  for (y = tile_y0; y <= tile_y1; y++)
+    for (x = tile_x0; x <= tile_x1; x++)
+      g_hints[y * tiles_in_row + x].subenc8 = 0;
 }
 
 /* Send a FramebufferUpdateRequest for the whole screen */

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: encode.c,v 1.4 2001/08/19 13:56:42 const Exp $
+ * $Id: encode.c,v 1.5 2001/08/24 05:55:50 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -39,6 +39,7 @@ AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r)
  * Hextile encoder
  */
 
+static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile16(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
@@ -58,12 +59,16 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
 {
   AIO_BLOCK *block;
   int num_tiles;
+  int aligned_f;
   int rx1, ry1;
   FB_RECT tile_r;
   CARD8 *data_ptr;
 
   /* Calculate number of tiles per this rectangle */
   num_tiles = ((r->w + 15) / 16) * ((r->h + 15) / 16);
+
+  /* Check if tiles are aligned on 16-pixel boundary */
+  aligned_f = (r->x & 0x0F) == 0 && (r->y & 0x0F) == 0;
 
   /* Allocate a memory block of maximum possible size */
   block = malloc(sizeof(AIO_BLOCK) +
@@ -87,7 +92,11 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
         tile_r.w = rx1 - tile_r.x;
       switch (cl->format.bits_pixel) {
       case 8:
-        data_ptr += encode_tile8(data_ptr, cl, &tile_r);
+        /* Can we use caching for this tile? */
+        if (aligned_f && cl->bgr233_f && tile_r.w == 16 && tile_r.h == 16)
+          data_ptr += encode_tile_bgr233(data_ptr, cl, &tile_r);
+        else
+          data_ptr += encode_tile8(data_ptr, cl, &tile_r);
         break;
       case 16:
         data_ptr += encode_tile16(data_ptr, cl, &tile_r);
@@ -101,6 +110,91 @@ AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r)
 
   block->data_size = data_ptr - (CARD8 *)block->data;
   return realloc(block, sizeof(AIO_BLOCK) + block->data_size);
+}
+
+/*
+ * Some statistics
+ */
+
+static long s_cache_hits = 0, s_cache_misses = 0;
+
+void get_hextile_caching_stats(long *hits, long *misses)
+{
+  *hits = s_cache_hits;
+  *misses = s_cache_misses;
+}
+
+/*
+ * Encode properly-aligned 16x16 BGR233 tile, using data from cache if
+ * available, or saving encoded data in cache otherwise.
+ */
+
+static int encode_tile_bgr233(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
+{
+  int tiles_in_row, tile_ord;
+  TILE_HINTS *hints;
+  CARD8 *dst = dst_buf;
+  size_t data_size;
+  int dst_bytes;
+
+  tiles_in_row = ((int)g_screen_info->width + 15) / 16;
+  tile_ord = (r->y / 16) * tiles_in_row + (r->x / 16);
+  hints = &g_hints[tile_ord];
+
+  if (hints->subenc8 != 0) {    /* Cache hit */
+    s_cache_hits++;
+
+    *dst++ = hints->subenc8;
+    if (hints->subenc8 & HEXTILE_RAW) {
+        prev_bg_set = 0;
+        memcpy(dst, &g_cache8[tile_ord * 256], 256);
+        dst += 256;
+    } else {
+      bg = (CARD32)hints->bg8;
+      if (prev_bg != bg || !prev_bg_set) {
+        *dst++ = hints->bg8;
+      } else {
+        *dst_buf &= ~HEXTILE_BG_SPECIFIED;
+      }
+      prev_bg = bg;                                                         \
+      prev_bg_set = 1;                                                      \
+      if (hints->subenc8 & HEXTILE_FG_SPECIFIED)
+        *dst++ = hints->fg8;
+      if (hints->subenc8 & HEXTILE_ANY_SUBRECTS) {
+        data_size = (size_t)hints->datasize8 + 1;
+        memcpy(dst, &g_cache8[tile_ord * 256], data_size);
+        dst += data_size;
+      }
+    }
+    dst_bytes = dst - dst_buf;
+
+  } else {                      /* Cache miss */
+    s_cache_misses++;
+
+    dst_bytes = encode_tile8(dst_buf, cl, r);
+
+    hints->subenc8 = *dst++;
+    if (hints->subenc8 & HEXTILE_RAW) {
+      memcpy(&g_cache8[tile_ord * 256], dst, 256);
+    } else {
+      if (hints->subenc8 & HEXTILE_BG_SPECIFIED) {
+        hints->bg8 = *dst++;
+      } else {
+        hints->bg8 = (CARD8)bg;
+        hints->subenc8 |= HEXTILE_BG_SPECIFIED;
+      }
+      if (hints->subenc8 & HEXTILE_FG_SPECIFIED)
+        hints->fg8 = *dst++;
+      if (hints->subenc8 & HEXTILE_ANY_SUBRECTS) {
+        data_size = (dst_buf + dst_bytes) - dst;
+        hints->datasize8 = (CARD8)(data_size - 1);
+        memcpy(&g_cache8[tile_ord * 256], dst, data_size);
+      }
+    }
+
+  }
+
+  return dst_bytes;
 }
 
 /*
