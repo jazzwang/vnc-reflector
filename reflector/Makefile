@@ -1,5 +1,5 @@
 # VNC Reflector
-# Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
+# Copyright (C) 2001-2003 HorizonLive.com, Inc.  All rights reserved.
 #
 # This software is released under the terms specified in the file LICENSE,
 # included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.34 2003/01/06 04:38:25 const Exp $
+# $Id: Makefile,v 1.35 2003/04/09 18:44:43 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
@@ -35,11 +35,13 @@ PROG = 	vncreflector
 
 OBJS = 	main.o logging.o active.o actions.o host_connect.o d3des.o rfblib.o \
 	async_io.o host_io.o client_io.o encode.o region.o translate.o \
-	control.o encode_tight.o decode_hextile.o decode_tight.o fbs_files.o
+	control.o encode_tight.o decode_hextile.o decode_tight.o fbs_files.o \
+	region_more.o
 
 SRCS =	main.c logging.c active.c actions.c host_connect.c d3des.c rfblib.c \
 	async_io.c host_io.c client_io.c encode.c region.c translate.c \
-	control.c encode_tight.c decode_hextile.c decode_tight.c fbs_files.c
+	control.c encode_tight.c decode_hextile.c decode_tight.c fbs_files.c \
+	region_more.c
 
 CC = gcc
 MAKEDEPEND = makedepend
@@ -87,3 +89,4 @@ encode_tight.o: region.h encode.h
 decode_hextile.o: rfblib.h reflector.h async_io.h logging.h host_io.h
 decode_tight.o: rfblib.h reflector.h async_io.h logging.h host_io.h
 fbs_files.o: rfblib.h reflector.h logging.h
+region_more.o: rfblib.h region.h logging.h

@@ -281,4 +281,8 @@ extern BoxPtr miRegionExtents(RegionPtr pReg);
 extern int miPrintRegion(RegionPtr rgn);
 #endif
 
+/* one more operation, from region_more.c of VNC Reflector */
+
+void region_pack(RegionPtr pregion, int threshold);
+
 #endif /* REGIONSTRUCT_H */

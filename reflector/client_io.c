@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.51 2003/01/11 09:44:02 const Exp $
+ * $Id: client_io.c,v 1.52 2003/04/09 18:44:43 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -756,6 +756,13 @@ static void send_update(void)
     REGION_UNINIT(&outer_region);
   }
   REGION_UNINIT(&clip_region);
+
+  /* Reduce the number of rectangles if possible. */
+  if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
+    region_pack(&cl->pending_region, 32);
+  } else {
+    region_pack(&cl->pending_region, 12);
+  }
 
   /* Compute the number of rectangles in regions. */
   num_penging_rects = REGION_NUM_RECTS(&cl->pending_region);
