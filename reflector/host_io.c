@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.51 2004/10/14 20:05:40 grolloj Exp $
+ * $Id: host_io.c,v 1.52 2004/11/16 18:02:24 grolloj Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -466,9 +466,6 @@ void fbupdate_rect_done(void)
     /* Cached data for this rectangle is not valid any more */
     invalidate_enc_cache(&cur_rect);
 
-    /* Save data in a file if necessary */
-    fbs_flush_data();
-
     /* Queue this rectangle for each client */
     aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
   }
@@ -477,6 +474,7 @@ void fbupdate_rect_done(void)
     aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
   } else {
     /* Done with the whole update */
+    fbs_flush_data();
     aio_walk_slots(fn_client_send_rects, TYPE_CL_SLOT);
     log_write(LL_DEBUG, "Requesting incremental framebuffer update");
     request_update(1);

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: fbs_files.c,v 1.5 2004/08/08 15:23:35 const_k Exp $
+ * $Id: fbs_files.c,v 1.6 2004/11/16 18:02:24 grolloj Exp $
  * Saving "framebuffer streams" in files.
  */
 
@@ -32,6 +32,7 @@ static CARD8 *s_fbs_buffer, *s_fbs_buffer_ptr;
 static struct timeval s_fbs_start_time, s_fbs_time;
 static struct timezone s_fbs_timezone;
 static CARD16 s_fbs_fb_width, s_fbs_fb_height;
+static long s_spool_size = 0;
 
 void fbs_set_prefix(char *fbs_prefix, int join_sessions)
 {
@@ -146,6 +147,7 @@ void fbs_open_file(CARD16 fb_width, CARD16 fb_height)
     w = (int)fb_width;
     h = (int)fb_height;
     max_rect_size = 12 + (w * h * 4) + ((w + 15) / 16) * ((h + 15) / 16);
+    s_spool_size = max_rect_size;
     s_fbs_buffer = malloc(max_rect_size);
     if (s_fbs_buffer == NULL) {
       log_write(LL_WARN, "Memory allocation error, closing FBS file");
@@ -204,7 +206,28 @@ void fbs_spool_byte(CARD8 b)
 
 void fbs_spool_data(void *buf, size_t len)
 {
+  size_t used;
   if (s_fbs_fp != NULL) {
+
+    /* realloc spool buffer if necessary */
+    used = s_fbs_buffer_ptr - s_fbs_buffer; 
+    if (used + len > s_spool_size) {
+      log_write(LL_DETAIL, "Spool isn't large enough, reallocing");
+      s_fbs_buffer = realloc(s_fbs_buffer,  s_spool_size * 2);
+      if (s_fbs_buffer == NULL) {
+	log_write(LL_WARN, "Memory allocation error, closing FBS file");
+	fclose(s_fbs_fp);
+	s_fbs_fp = NULL;
+	return;
+      } else {
+	s_spool_size *= 2;
+	log_write(LL_DETAIL, "Allocated buffer to cache FBS data, %d bytes",
+	         s_spool_size);
+	s_fbs_buffer_ptr = s_fbs_buffer + used;
+      }
+    }
+
+    /* copy data to spool */
     memcpy(s_fbs_buffer_ptr, buf, len);
     s_fbs_buffer_ptr += len;
   }
