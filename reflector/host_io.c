@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.5 2001/08/03 06:52:54 const Exp $
+ * $Id: host_io.c,v 1.6 2001/08/03 13:06:59 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -136,7 +136,7 @@ static void rf_host_fbupdate_recthdr(void)
               rect_w * rect_h * sizeof(CARD32));
     rect_cur_row = 0;
     aio_setread(rf_host_fbupdate_raw,
-                &framebuffer[rect_y * desktop_info.width + rect_x],
+                &g_framebuffer[rect_y * (int)g_screen_info->width + rect_x],
                 rect_w * sizeof(CARD32));
     break;
   default:
@@ -151,8 +151,8 @@ static void rf_host_fbupdate_raw(void)
 
   if (++rect_cur_row < rect_h) {
     /* Read next row */
-    idx = (rect_y + rect_cur_row) * desktop_info.width + rect_x;
-    aio_setread(rf_host_fbupdate_raw, &framebuffer[idx],
+    idx = (rect_y + rect_cur_row) * (int)g_screen_info->width + rect_x;
+    aio_setread(rf_host_fbupdate_raw, &g_framebuffer[idx],
                 rect_w * sizeof(CARD32));
   } else {
     /* Done with this rectangle */
@@ -233,8 +233,8 @@ static void request_update(int incr)
   };
 
   fbupdatereq_msg[1] = (incr) ? 1 : 0;
-  buf_put_CARD16(&fbupdatereq_msg[6], (CARD16)desktop_info.width);
-  buf_put_CARD16(&fbupdatereq_msg[8], (CARD16)desktop_info.height);
+  buf_put_CARD16(&fbupdatereq_msg[6], g_screen_info->width);
+  buf_put_CARD16(&fbupdatereq_msg[8], g_screen_info->height);
 
   log_write(LL_DEBUG, "Sending FramebufferUpdateRequest message");
   aio_write(NULL, fbupdatereq_msg, sizeof(fbupdatereq_msg));

@@ -38,7 +38,7 @@ depend: $(SRCS)
 
 
 async_io.o: async_io.h
-client_io.o: async_io.h client_io.h d3des.h logging.h rfblib.h
+client_io.o: async_io.h client_io.h d3des.h logging.h reflector.h rfblib.h
 d3des.o: d3des.h
 host_connect.o: d3des.h host_connect.h logging.h rfblib.h
 host_io.o: async_io.h host_io.h logging.h reflector.h rfblib.h

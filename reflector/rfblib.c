@@ -1,10 +1,11 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.c,v 1.1 2001/08/01 16:06:07 const Exp $
+ * $Id: rfblib.c,v 1.2 2001/08/03 13:06:59 const Exp $
  * RFB protocol helper functions
  */
 
+#include <string.h>
 #include <sys/types.h>
 
 #include "rfblib.h"
@@ -43,5 +44,25 @@ void buf_put_CARD32(void *buf, CARD32 value)
   bbuf[1] = (unsigned char)(value >> 16);
   bbuf[2] = (unsigned char)(value >> 8);
   bbuf[3] = (unsigned char)value;
+}
+
+void buf_get_pixfmt(void *buf, RFB_PIXEL_FORMAT *format)
+{
+  unsigned char *bbuf = buf;
+
+  memcpy(format, buf, SZ_RFB_PIXEL_FORMAT);
+  format->r_max = buf_get_CARD16(&bbuf[4]);
+  format->g_max = buf_get_CARD16(&bbuf[6]);
+  format->b_max = buf_get_CARD16(&bbuf[8]);
+}
+
+void buf_put_pixfmt(void *buf, RFB_PIXEL_FORMAT *format)
+{
+  unsigned char *bbuf = buf;
+
+  memcpy(buf, format, SZ_RFB_PIXEL_FORMAT);
+  buf_put_CARD16(&bbuf[4], format->r_max);
+  buf_put_CARD16(&bbuf[6], format->g_max);
+  buf_put_CARD16(&bbuf[8], format->b_max);
 }
 

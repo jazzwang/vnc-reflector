@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.14 2001/08/03 07:34:57 const Exp $
+ * $Id: main.c,v 1.15 2001/08/03 13:06:59 const Exp $
  * Main module
  */
 
@@ -33,17 +33,20 @@ static int   opt_hostport;
 static char  opt_password[9];
 
 /* Framebuffer */
-RFB_DESKTOP_INFO desktop_info;
-CARD32 *framebuffer;
+/* FIXME: allocate desktop name only, not the whole g_screen_info. */
+RFB_SCREEN_INFO *g_screen_info;
+CARD32 *g_framebuffer;
 
 /* Functions local to this file */
 static void parse_args(int argc, char **argv);
 static void report_usage(char *program_name);
 static int read_pasword_file(void);
+static int init_screen_info(void);
 
 int main(int argc, char **argv)
 {
   int host_fd;
+  int fb_size;
 
   /* Parse command line, exit on error */
   parse_args(argc, argv);
@@ -73,37 +76,38 @@ int main(int argc, char **argv)
 
   read_pasword_file();
 
-  /* FIXME: The code is ugly. */
+  /* FIXME: This part of code looks ugly. */
 
   host_fd = connect_to_host(opt_hostname, opt_hostport);
-  if (host_fd != -1 && setup_session(host_fd, opt_password, &desktop_info)) {
-    /* Allocate framebuffer */
-    framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
-    if (framebuffer == NULL) {
-      log_write(LL_ERROR, "Error allocating framebuffer");
-      /* FIXME: Make function in host_connect.c to close fd,
-         report into logs on closing connection. */
-      close(host_fd);
-    } else {
-      log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
-                desktop_info.width * desktop_info.height * 4);
+  if (host_fd != -1 && init_screen_info()) {
+    if (setup_session(host_fd, opt_password, &g_screen_info)) {
 
-      set_client_password((unsigned char *)opt_password);
-
-      aio_init();
-
-      if (!aio_listen(opt_listen_port, af_client_accept, sizeof(CL_SLOT))) {
-        log_write(LL_ERROR, "Error creating listening socket: %s",
-                  strerror(errno));
+      /* Allocate framebuffer */
+      fb_size = (int)g_screen_info->width * (int)g_screen_info->height * 4;
+      g_framebuffer = malloc(fb_size);
+      if (g_framebuffer == NULL) {
+        log_write(LL_ERROR, "Error allocating framebuffer");
+        /* FIXME: Make function in host_connect.c to close fd,
+           report into logs on closing connection. */
         close(host_fd);
       } else {
-        init_host_io(host_fd);
-        aio_mainloop();
+        log_write(LL_DEBUG, "Allocated framebuffer, %d bytes", fb_size);
+        aio_init();
+        set_client_password((unsigned char *)opt_password);
+        if (!aio_listen(opt_listen_port, af_client_accept, sizeof(CL_SLOT))) {
+          log_write(LL_ERROR, "Error creating listening socket: %s",
+                    strerror(errno));
+          close(host_fd);
+        } else {
+          init_host_io(host_fd);
+          aio_mainloop();
+        }
+        log_write(LL_DEBUG, "Freeing framebuffer");
+        free(g_framebuffer);
       }
-      log_write(LL_DEBUG, "Freeing framebuffer");
-      free(framebuffer);
+
     }
-    free(desktop_info.name);
+    free(g_screen_info);
   }
 
   log_write(LL_MSG, "Terminating");
@@ -115,7 +119,7 @@ int main(int argc, char **argv)
   }
 
   /* Done */
-  exit(0);
+  exit(1);
 }
 
 static void parse_args(int argc, char **argv)
@@ -270,3 +274,37 @@ static int read_pasword_file(void)
   return 1;
 }
 
+static int init_screen_info(void)
+{
+  union _LITTLE_ENDIAN {
+    CARD32 value32;
+    CARD8 test;
+  } little_endian;
+
+  /* Allocate memory making sure all fields are zeroed */
+  g_screen_info = calloc(1, sizeof(RFB_SCREEN_INFO));
+  if (g_screen_info == NULL)
+    return 0;
+
+  /* Fill in PIXEL_FORMAT structure */
+  g_screen_info->pixformat.bits_pixel = 32;
+  g_screen_info->pixformat.color_depth = 24;
+  g_screen_info->pixformat.true_color = 1;
+  g_screen_info->pixformat.r_max = 255;
+  g_screen_info->pixformat.g_max = 255;
+  g_screen_info->pixformat.b_max = 255;
+  g_screen_info->pixformat.r_shift = 16;
+  g_screen_info->pixformat.g_shift = 8;
+  g_screen_info->pixformat.b_shift = 0;
+
+  /* Set correct endian flag in PIXEL_FORMAT */
+  little_endian.value32 = 1;
+  if (little_endian.test) {
+    log_write(LL_DEBUG, "Our machine is little endian");
+  } else {
+    log_write(LL_DEBUG, "Our machine is big endian");
+    g_screen_info->pixformat.big_endian = 1;
+  }
+
+  return 1;
+}

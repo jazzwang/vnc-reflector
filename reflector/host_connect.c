@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.1 2001/08/02 11:23:44 const Exp $
+ * $Id: host_connect.c,v 1.2 2001/08/03 13:06:59 const Exp $
  * Connecting to a VNC host
  */
 
@@ -22,7 +22,7 @@
 
 static int negotiate_ver(int fd, int major, int minor);
 static int vnc_authenticate(int fd, char *password);
-static int set_data_formats(int fd);
+static int set_data_formats(int fd, RFB_PIXEL_FORMAT *pixfmt);
 
 static int recv_data(int fd, void *buf, size_t len);
 static int send_data(int fd, void *buf, size_t len);
@@ -67,7 +67,7 @@ int connect_to_host(char *host, int port)
   return host_fd;
 }
 
-int setup_session(int host_fd, char *password, RFB_DESKTOP_INFO *di)
+int setup_session(int host_fd, char *password, RFB_SCREEN_INFO **scr)
 {
   int success = 1;
   char *reason;
@@ -107,19 +107,31 @@ int setup_session(int host_fd, char *password, RFB_DESKTOP_INFO *di)
   }
 
   if (success) {
-    CARD16 fb_width, fb_height;
     CARD8 pixfmt_buf[16];
+    CARD32 name_length;
+    CARD8 *name;
 
     log_write(LL_DEBUG, "Receiving host desktop parameters");
-    if ( recv_CARD16(host_fd, &fb_width) &&
-         recv_CARD16(host_fd, &fb_height) &&
-         recv_data(host_fd, pixfmt_buf, 16) &&
-         (di->name = recv_string(host_fd)) != NULL ) {
-      di->width = (int)fb_width;
-      di->height = (int)fb_height;
-      log_write(LL_INFO, "Remote desktop name: %s", di->name);
+    if ( recv_CARD16(host_fd, &(*scr)->width) &&
+         recv_CARD16(host_fd, &(*scr)->height) &&
+         recv_data(host_fd, pixfmt_buf, 16) ) {
       log_write(LL_MSG, "Remote desktop geometry is %dx%d",
-                di->width, di->height);
+                (int)(*scr)->width, (int)(*scr)->height);
+      if ((name = recv_string(host_fd)) != NULL) {
+        log_write(LL_INFO, "Remote desktop name: %s", name);
+        name_length = (CARD32)strlen(name);
+        *scr = realloc(*scr, sizeof(RFB_SCREEN_INFO) + name_length);
+        if (*scr != NULL) {
+          (*scr)->name_length = name_length;
+          memcpy((*scr)->name, name, name_length);
+        } else {
+          (*scr)->name_length = 1;
+          (*scr)->name[0] = '?';
+        }
+        free(name);
+      } else {
+        success = 0;
+      }
     } else {
       success = 0;
     }
@@ -127,7 +139,7 @@ int setup_session(int host_fd, char *password, RFB_DESKTOP_INFO *di)
 
   if (success) {
     log_write(LL_DEBUG, "Setting up pixel format and encodings");
-    if (!set_data_formats(host_fd))
+    if (!set_data_formats(host_fd, &(*scr)->pixformat))
       success = 0;
   }
 
@@ -219,44 +231,25 @@ static int vnc_authenticate(int fd, char *password)
   return 1;
 }
 
-static int set_data_formats(int fd)
+static int set_data_formats(int fd, RFB_PIXEL_FORMAT *pixfmt)
 {
-  unsigned char setpixfmt_msg[] = {
-    0,                          /* Message id */
-    0, 0, 0,                    /* Padding -- not used */
-    32,                         /* Bits per pixel */
-    24,                         /* Color depth */
-    0,                          /* Big-endian flag */
-    1,                          /* True-color flag */
-    0, 255, 0, 255, 0, 255,     /* R,G,B max values */
-    16, 8, 0,                   /* R,G,B shifts */
-    0, 0, 0                     /* Padding -- not used */
-  };
+  unsigned char setpixfmt_msg[4 + SZ_RFB_PIXEL_FORMAT];
   unsigned char setencodings_msg[] = {
     2,                          /* Message id */
     0,                          /* Padding -- not used */
     0, 1,                       /* Number of encodings */
     0, 0, 0, 0                  /* Raw encoding */
   };
-  union _LITTLE_ENDIAN {
-    CARD32 value32;
-    CARD8 test;
-  } little_endian;
-
-  /* Correcting big-endian flag in the SetPixelFormat message */
-  little_endian.value32 = 1;
-  if (little_endian.test) {
-    log_write(LL_DEBUG, "Our machine is little endian");
-  } else {
-    log_write(LL_DEBUG, "Our machine is big endian");
-    setpixfmt_msg[6] = 1;
-  }
 
   log_write(LL_DEBUG, "Sending SetPixelFormat message");
+
+  memset(setpixfmt_msg, 0, 4);
+  buf_put_pixfmt(&setpixfmt_msg[4], pixfmt);
   if (!send_data(fd, setpixfmt_msg, sizeof(setpixfmt_msg)))
     return 0;
 
   log_write(LL_DEBUG, "Sending SetEncodings message");
+
   if (!send_data(fd, setencodings_msg, sizeof(setencodings_msg)))
     return 0;
 
