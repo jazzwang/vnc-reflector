@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rect.h,v 1.6 2001/12/02 08:30:07 const Exp $
+ * $Id: rect.h,v 1.7 2002/09/08 19:37:12 const Exp $
  * Operations with rectangle structures.
  */
 
@@ -37,6 +37,18 @@ typedef struct _FB_RECT_LIST {
   FB_RECT_NODE *last_rect;
   int num_rects;
 } FB_RECT_LIST;
+
+/*
+ * A macro to set x, y, w, h values in an FB_RECT structure.
+ */
+
+#define SET_RECT(rr, xx, yy, ww, hh)            \
+{                                               \
+  (rr)->x = (xx);                               \
+  (rr)->y = (yy);                               \
+  (rr)->w = (ww);                               \
+  (rr)->h = (hh);                               \
+}
 
 /*
  * Functions

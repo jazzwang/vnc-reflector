@@ -22,9 +22,8 @@ depending on which of two passwords was used to initiate a client
 session.
 
 Raw, Hextile, Tight and CopyRect encodings are suported both at the
-host side and at the client side. Current implementation of Tight
-encoder is limited (supports only BGR233 pixel format) and inefficient
-(lacks caching capability).
+host side and at the client side. JPEG sub-encoding in Tight is
+supported on client connections.
 
 Please note that the documentation is incomplete.
 

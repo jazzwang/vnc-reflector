@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.38 2001/12/06 18:01:47 const Exp $
+ * $Id: client_io.c,v 1.39 2002/09/08 19:37:11 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -221,10 +221,12 @@ static void rf_client_initmsg(void)
   aio_write(NULL, g_screen_info.name, g_screen_info.name_length);
   aio_setread(rf_client_msg, NULL, 1);
 
-  /* Set up initial pixel format */
+  /* Set up initial pixel format and encoders' parameters */
   memcpy(&cl->format, &g_screen_info.pixformat, sizeof(RFB_PIXEL_FORMAT));
   cl->trans_func = transfunc_null;
   cl->bgr233_f = 0;
+  cl->compress_level = 6;       /* default compression level */
+  cl->jpeg_quality = -1;        /* disable JPEG by default */
 
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
@@ -321,6 +323,7 @@ static void rf_client_encodings_data(void)
   cl->enc_enable[RFB_ENCODING_RAW] = 1;
   cl->enc_prefer = RFB_ENCODING_RAW;
   cl->compress_level = -1;
+  cl->jpeg_quality = -1;
   cl->enable_lastrect = 0;
   cl->enable_newfbsize = 0;
   for (i = 1; i < NUM_ENCODINGS; i++)
@@ -345,7 +348,15 @@ static void rf_client_encodings_data(void)
       cl->compress_level = (int)(enc - RFB_ENCODING_COMPESSLEVEL0);
       log_write(LL_DETAIL, "Compression level %d requested by client %s",
                 cl->compress_level, cur_slot->name);
+    } else if (enc >= RFB_ENCODING_QUALITYLEVEL0 &&
+               enc <= RFB_ENCODING_QUALITYLEVEL9 &&
+               cl->jpeg_quality == -1) {
+      cl->jpeg_quality = (int)(enc - RFB_ENCODING_QUALITYLEVEL0);
+      log_write(LL_DETAIL, "JPEG quality level %d requested by client %s",
+                cl->jpeg_quality, cur_slot->name);
     } else if (enc == RFB_ENCODING_LASTRECT) {
+      log_write(LL_DETAIL, "Client %s supports LastRect markers",
+                cur_slot->name);
       cl->enable_lastrect = 1;
     } else if (enc == RFB_ENCODING_NEWFBSIZE) {
       /* FIXME: Handle NewFBRect on->off _correctly_. */
@@ -355,7 +366,7 @@ static void rf_client_encodings_data(void)
     }
   }
   if (cl->compress_level < 0)
-    cl->compress_level = 6;   /* Default compression level */
+    cl->compress_level = 6;     /* default compression level */
 
   log_write(LL_DEBUG, "Encoding list set by %s", cur_slot->name);
   if (cl->enc_prefer == RFB_ENCODING_RAW) {
@@ -609,7 +620,6 @@ static void send_update(void)
   CARD8 rect_hdr[12];
   FB_RECT rect;
   AIO_BLOCK *block;
-  int use_tight_f = 0;
   AIO_FUNCPTR fn = NULL;
   int raw_bytes = 0, hextile_bytes = 0;
 
@@ -617,10 +627,9 @@ static void send_update(void)
             cl->pending_rects.num_rects, cur_slot->name);
 
   /* Prepare and send FramebufferUpdate message header */
-  if ( cl->enc_prefer == RFB_ENCODING_TIGHT &&
-       cl->enable_lastrect && cl->bgr233_f ) {
+  /* FIXME: Enable Tight encoding even if LastRect is not supported. */
+  if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
     buf_put_CARD16(&msg_hdr[2], 0xFFFF);
-    use_tight_f = 1;
   } else {
     buf_put_CARD16(&msg_hdr[2], cl->pending_rects.num_rects);
   }
@@ -637,14 +646,14 @@ static void send_update(void)
       put_rect_header(rect_hdr, &rect);
       aio_write(wf_client_update_finished, rect_hdr, 12);
       return;                   /* Important! */
-    } else if ( rect.enc == RFB_ENCODING_COPYRECT &&
-                cl->enc_enable[RFB_ENCODING_COPYRECT] ) {
+    } else if (rect.enc == RFB_ENCODING_COPYRECT &&
+               cl->enc_enable[RFB_ENCODING_COPYRECT] ) {
       /* CopyRect */
       block = rfb_encode_copyrect_block(cl, &rect);
-    } else if (use_tight_f) {
+    } else if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
       /* Use Tight encoding */
       rect.enc = RFB_ENCODING_TIGHT;
-      rfb_encode_tight8(cl, &rect);
+      rfb_encode_tight(cl, &rect);
       continue;                 /* Important! */
     } else if ( cl->enc_prefer != RFB_ENCODING_RAW &&
                 cl->enc_enable[RFB_ENCODING_HEXTILE] ) {
@@ -674,7 +683,7 @@ static void send_update(void)
   }
 
   /* Send LastRect marker. */
-  if (use_tight_f) {
+  if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
     rect.x = rect.y = rect.w = rect.h = 0;
     rect.enc = RFB_ENCODING_LASTRECT;
     put_rect_header(rect_hdr, &rect);

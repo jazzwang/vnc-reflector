@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.21 2002/09/04 03:07:24 const Exp $
+ * $Id: encode.c,v 1.22 2002/09/08 19:37:12 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -42,6 +42,13 @@ typedef struct _TILE_HINTS {
 /* Cache for the encoded data */
 static TILE_HINTS *s_hints8 = NULL;
 static CARD8 *s_cache8 = NULL;
+
+/* Two-color palette */
+typedef struct _PALETTE2 {
+  int num_colors;
+  CARD32 bg;
+  CARD32 fg;
+} PALETTE2;
 
 /********************************************************************/
 /*                   Maintaining cache structures                   */

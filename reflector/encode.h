@@ -10,18 +10,12 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.h,v 1.13 2002/09/04 03:07:24 const Exp $
+ * $Id: encode.h,v 1.14 2002/09/08 19:37:12 const Exp $
  * Encoding screen rectangles.
  */
 
 #ifndef _REFLIB_ENCODE_H
 #define _REFLIB_ENCODE_H
-
-typedef struct _PALETTE2 {
-  int num_colors;
-  CARD32 bg;
-  CARD32 fg;
-} PALETTE2;
 
 /* Max size of hextile-encoded data per one 16x16 tile */
 /* FIXME: Bad name? */
@@ -59,8 +53,8 @@ AIO_BLOCK *rfb_encode_raw_block(CL_SLOT *cl, FB_RECT *r);
 AIO_BLOCK *rfb_encode_copyrect_block(CL_SLOT *cl, FB_RECT *r);
 AIO_BLOCK *rfb_encode_hextile_block(CL_SLOT *cl, FB_RECT *r);
 
-/* encode-tight8.c */
+/* encode-tight.c */
 
-int rfb_encode_tight8(CL_SLOT *cl, FB_RECT *r);
+int rfb_encode_tight(CL_SLOT *cl, FB_RECT *r);
 
 #endif /* _REFLIB_ENCODE_H */

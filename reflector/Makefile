@@ -10,7 +10,7 @@
 # This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
 # and sponsored by HorizonLive.com, Inc.
 #
-# $Id: Makefile,v 1.31 2002/09/03 19:57:28 const Exp $
+# $Id: Makefile,v 1.32 2002/09/08 19:37:11 const Exp $
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
@@ -28,21 +28,22 @@ CFLAGS =	-g -pedantic -Wall $(IFLAGS)
 # Use poll(2) syscall in async I/O instead of select(2)
 CONFFLAGS =	-DUSE_POLL
 
-# Link with zlib library
-LDFLAGS =	-lz
+# Link with zlib and JPEG libraries
+LDFLAGS =	-lz -ljpeg
 
 PROG = 	vncreflector
 
 OBJS = 	main.o logging.o active.o actions.o host_connect.o d3des.o rfblib.o \
 	async_io.o host_io.o client_io.o encode.o rect.o translate.o \
-	control.o encode_tight8.o decode_hextile.o decode_tight.o fbs_files.o
+	control.o encode_tight.o decode_hextile.o decode_tight.o fbs_files.o
 
 SRCS =	main.c logging.c active.c actions.c host_connect.c d3des.c rfblib.c \
 	async_io.c host_io.c client_io.c encode.c rect.c translate.c \
-	control.c encode_tight8.c decode_hextile.c decode_tight.c fbs_files.c
+	control.c encode_tight.c decode_hextile.c decode_tight.c fbs_files.c
 
 CC = gcc
-MAKEDEPEND = gccmakedep
+MAKEDEPEND = makedepend
+MAKEDEPFLAGS = -Y
 
 default: $(PROG)
 
@@ -53,38 +54,36 @@ clean:
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
 
 depend: $(SRCS)
-	$(MAKEDEPEND) -I. $(SRCS)
+	$(MAKEDEPEND) $(MAKEDEPFLAGS) -I. $(SRCS) 2> /dev/null
 
 .c.o:
 	$(CC) $(CFLAGS) $(CONFFLAGS) -c $<
 
 
 # DO NOT DELETE
-main.o: main.c rfblib.h async_io.h logging.h reflector.h host_connect.h \
-  rect.h translate.h host_io.h client_io.h encode.h
-logging.o: logging.c logging.h
-active.o: active.c rfblib.h reflector.h logging.h
-actions.o: actions.c rfblib.h reflector.h logging.h
-host_connect.o: host_connect.c rfblib.h reflector.h logging.h async_io.h \
-  rect.h host_io.h translate.h client_io.h encode.h host_connect.h
-d3des.o: d3des.c d3des.h
-rfblib.o: rfblib.c rfblib.h d3des.h
-async_io.o: async_io.c async_io.h
-host_io.o: host_io.c rfblib.h reflector.h async_io.h logging.h rect.h \
-  translate.h client_io.h host_connect.h host_io.h encode.h
-client_io.o: client_io.c rfblib.h logging.h async_io.h reflector.h rect.h \
-  host_io.h translate.h client_io.h encode.h
-encode.o: encode.c rfblib.h reflector.h async_io.h rect.h translate.h \
-  client_io.h encode.h
-rect.o: rect.c rfblib.h rect.h
-translate.o: translate.c rfblib.h reflector.h rect.h async_io.h translate.h \
-  client_io.h
-control.o: control.c rfblib.h async_io.h logging.h reflector.h rect.h \
-  host_connect.h host_io.h translate.h client_io.h
-encode_tight8.o: encode_tight8.c rfblib.h reflector.h async_io.h rect.h \
-  translate.h client_io.h encode.h
-decode_hextile.o: decode_hextile.c rfblib.h reflector.h async_io.h logging.h \
-  rect.h host_io.h
-decode_tight.o: decode_tight.c rfblib.h reflector.h async_io.h logging.h \
-  rect.h host_io.h
-fbs_files.o: fbs_files.c rfblib.h reflector.h logging.h
+
+main.o: rfblib.h async_io.h logging.h reflector.h host_connect.h rect.h
+main.o: translate.h host_io.h client_io.h encode.h
+logging.o: logging.h
+active.o: rfblib.h reflector.h logging.h
+actions.o: rfblib.h reflector.h logging.h
+host_connect.o: rfblib.h reflector.h logging.h async_io.h rect.h host_io.h
+host_connect.o: translate.h client_io.h encode.h host_connect.h
+d3des.o: d3des.h
+rfblib.o: rfblib.h d3des.h
+async_io.o: async_io.h
+host_io.o: rfblib.h reflector.h async_io.h logging.h rect.h translate.h
+host_io.o: client_io.h host_connect.h host_io.h encode.h
+client_io.o: rfblib.h logging.h async_io.h reflector.h rect.h host_io.h
+client_io.o: translate.h client_io.h encode.h
+encode.o: rfblib.h reflector.h async_io.h rect.h translate.h client_io.h
+encode.o: encode.h
+rect.o: rfblib.h rect.h
+translate.o: rfblib.h reflector.h rect.h async_io.h translate.h client_io.h
+control.o: rfblib.h async_io.h logging.h reflector.h rect.h host_connect.h
+control.o: host_io.h translate.h client_io.h
+encode_tight.o: rfblib.h reflector.h async_io.h rect.h translate.h
+encode_tight.o: client_io.h encode.h
+decode_hextile.o: rfblib.h reflector.h async_io.h logging.h rect.h host_io.h
+decode_tight.o: rfblib.h reflector.h async_io.h logging.h rect.h host_io.h
+fbs_files.o: rfblib.h reflector.h logging.h
