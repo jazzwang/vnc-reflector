@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.1 2002/09/03 19:57:28 const Exp $
+ * $Id: decode_tight.c,v 1.2 2002/09/04 02:09:51 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -39,7 +39,7 @@ static int s_stream_id;
 static int s_filter_id;
 static int s_num_colors;
 static CARD32 s_palette[256];
-static int s_compressed_size;
+static int s_compressed_size, s_uncompressed_size;
 
 static void rf_host_tight_compctl(void);
 static void rf_host_tight_fill(void);
@@ -92,13 +92,11 @@ static void rf_host_tight_compctl(void)
     aio_setread(rf_host_tight_fill, NULL, 3);
   }
   else if (comp_ctl == RFB_TIGHT_JPEG) {
-    /* FIXME: Handle the error correctly. */
     log_write(LL_WARN, "JPEG is not supported on host connections");
     aio_close(0);
     return;
   }
   else if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
-    /* FIXME: Handle the error correctly. */
     log_write(LL_ERROR, "Invalid sub-encoding in Tight-encoded data");
     aio_close(0);
     return;
@@ -109,8 +107,9 @@ static void rf_host_tight_compctl(void)
       aio_setread(rf_host_tight_filter, NULL, 1);
     } else {
       s_filter_id = RFB_TIGHT_FILTER_COPY;
-      if (s_rect.w * s_rect.h * 3 < RFB_TIGHT_MIN_TO_COMPRESS) {
-        aio_setread(rf_host_tight_raw, NULL, s_rect.w * s_rect.h * 3);
+      s_uncompressed_size = s_rect.w * s_rect.h * 3;
+      if (s_uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
+        aio_setread(rf_host_tight_raw, NULL, s_uncompressed_size);
       } else {
         aio_setread(rf_host_tight_len1, NULL, 1);
       }
@@ -121,8 +120,6 @@ static void rf_host_tight_compctl(void)
 static void rf_host_tight_fill(void)
 {
   CARD32 color;
-
-  log_write(LL_WARN, "solid-color data"); /* DEBUG! */
 
   /* Note: cur_slot->readbuf is unsigned char[]. */
   color = (cur_slot->readbuf[0] << 16 |
@@ -137,14 +134,13 @@ static void rf_host_tight_fill(void)
 
 static void rf_host_tight_filter(void)
 {
-  log_write(LL_WARN, "explicit filter"); /* DEBUG! */
-
   s_filter_id = cur_slot->readbuf[0];
   if (s_filter_id == RFB_TIGHT_FILTER_PALETTE) {
     aio_setread(rf_host_tight_numcolors, NULL, 1);
   } else {
-    if (s_rect.w * s_rect.h * 3 < RFB_TIGHT_MIN_TO_COMPRESS) {
-      aio_setread(rf_host_tight_raw, NULL, s_rect.w * s_rect.h * 3);
+    s_uncompressed_size = s_rect.w * s_rect.h * 3;
+    if (s_uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
+      aio_setread(rf_host_tight_raw, NULL, s_uncompressed_size);
     } else {
       aio_setread(rf_host_tight_len1, NULL, 1);
     }
@@ -155,13 +151,11 @@ static void rf_host_tight_numcolors(void)
 {
   s_num_colors = cur_slot->readbuf[0] + 1;
   aio_setread(rf_host_tight_palette, NULL, s_num_colors * 3);
-
-  log_write(LL_WARN, "num_colors = %d", s_num_colors); /* DEBUG! */
 }
 
 static void rf_host_tight_palette(void)
 {
-  int i, row_size, data_size;
+  int i, row_size;
 
   for (i = 0; i < s_num_colors; i++) {
     s_palette[i] = (cur_slot->readbuf[i*3] << 16 |
@@ -169,9 +163,9 @@ static void rf_host_tight_palette(void)
                     cur_slot->readbuf[i*3+2]);
   }
   row_size = (s_num_colors <= 2) ? (s_rect.w + 7) / 8 : s_rect.w;
-  data_size = s_rect.h * row_size;
+  s_uncompressed_size = s_rect.h * row_size;
   if (data_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-    aio_setread(rf_host_tight_indexed, NULL, data_size);
+    aio_setread(rf_host_tight_indexed, NULL, s_uncompressed_size);
   } else {
     aio_setread(rf_host_tight_len1, NULL, 1);
   }
@@ -179,8 +173,6 @@ static void rf_host_tight_palette(void)
 
 static void rf_host_tight_raw(void)
 {
-  log_write(LL_WARN, "raw data"); /* DEBUG! */
-
   tight_draw_truecolor_data(cur_slot->readbuf);
   fbupdate_rect_done();
 }
@@ -224,9 +216,6 @@ static void rf_host_tight_compressed(void)
   CARD8 *buf;
   int err;
 
-  log_write(LL_WARN, "compressed data, size = %d",
-            s_compressed_size); /* DEBUG! */
-
   /* Initialize compression stream if needed */
 
   zs = &s_zstream[s_stream_id];
@@ -241,23 +230,19 @@ static void rf_host_tight_compressed(void)
       } else {
         log_write(LL_ERROR, "inflateInit() failed");
       }
-      return;                   /* FIXME. */
+      aio_close(0);
+      return;
     }
     s_zstream_active[s_stream_id] = 1;
   }
 
-  /* Compute uncompressed data size and allocate a buffer */
+  /* Allocate a buffer to put decompressed data into */
 
-  if (s_filter_id == RFB_TIGHT_FILTER_PALETTE) {
-    /* FIXME: Don't compute second time, we already did it. */
-    row_size = (s_num_colors <= 2) ? (s_rect.w + 7) / 8 : s_rect.w;
-    uncompressed_size = s_rect.h * row_size;
-  } else {
-    uncompressed_size = s_rect.h * s_rect.w * 3;
-  }
-  buf = malloc(uncompressed_size);
+  buf = malloc(s_uncompressed_size);
   if (buf == NULL) {
-    return;                     /* FIXME. */
+    log_write(LL_ERROR, "Error allocating memory in Tight decoder");
+    aio_close(0);
+    return;
   }
 
   /* Decompress the data */
@@ -270,15 +255,19 @@ static void rf_host_tight_compressed(void)
   err = inflate(zs, Z_SYNC_FLUSH);
   if (err != Z_OK && err != Z_STREAM_END) {
     if (zs->msg != NULL) {
-      log_write(LL_ERROR, "Inflate error: %s.\n", zs->msg);
+      log_write(LL_ERROR, "inflate() failed: %s", zs->msg);
     } else {
-      log_write(LL_ERROR, "Inflate error: %d.\n", err);
+      log_write(LL_ERROR, "inflate() failed: %d", err);
     }
     free(buf);
-    return;                     /* FIXME. */
+    aio_close(0);
+    return;
   }
 
-  /* FIXME: Check the amount of data decompressed. */
+  if (zs->avail_out > 0)
+    log_write(LL_WARN, "Decompressed data size is less than expected");
+
+  /* Draw the data on the framebuffer */
 
   if (s_filter_id == RFB_TIGHT_FILTER_PALETTE) {
     tight_draw_indexed_data(buf);
@@ -290,6 +279,10 @@ static void rf_host_tight_compressed(void)
 
   fbupdate_rect_done();
 }
+
+/*
+ * Draw 24-bit truecolor pixel array on the framebuffer.
+ */
 
 static void tight_draw_truecolor_data(CARD8 *src)
 {
@@ -308,6 +301,11 @@ static void tight_draw_truecolor_data(CARD8 *src)
     fb_ptr += g_fb_width - s_rect.w;
   }
 }
+
+/*
+ * Draw indexed data on the framebuffer, each source pixel is either 1
+ * bit (two colors) or 8 bits (up to 256 colors).
+ */
 
 static void tight_draw_indexed_data(CARD8 *src)
 {
