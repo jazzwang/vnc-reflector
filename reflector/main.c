@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.5 2001/08/02 11:23:44 const Exp $
+ * $Id: main.c,v 1.6 2001/08/02 11:53:00 const Exp $
  * Main module
  */
 
@@ -56,7 +56,6 @@ int main(int argc, char **argv)
     /* Allocate framebuffer */
     framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
     if (framebuffer) {
-      desktop_info.bytes_row = desktop_info.width * 4;
       log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
                 desktop_info.width * desktop_info.height * 4);
 

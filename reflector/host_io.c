@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.1 2001/08/02 11:13:38 const Exp $
+ * $Id: host_io.c,v 1.2 2001/08/02 11:53:00 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -79,6 +79,7 @@ static void rf_host_msg(void)
 static CARD16 rect_count;
 static CARD16 rect_x, rect_y, rect_w, rect_h;
 static CARD32 rect_enc;
+static CARD16 rect_cur_row;
 
 static void rf_host_fbupdate_hdr(void)
 {
@@ -102,6 +103,13 @@ static void rf_host_fbupdate_recthdr(void)
   rect_h = buf_get_CARD16(&cur_slot->readbuf[6]);
   rect_enc = buf_get_CARD32(&cur_slot->readbuf[8]);
 
+  if (!rect_h || !rect_w) {
+    log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring)",
+              (int)rect_w, (int)rect_h, (int)rect_x, (int)rect_y);
+    aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
+    return;
+  }
+
   log_write(LL_DEBUG, "Receiving rectangle %dx%d at %d,%d",
             (int)rect_w, (int)rect_h, (int)rect_x, (int)rect_y);
 
@@ -109,8 +117,10 @@ static void rf_host_fbupdate_recthdr(void)
   case 0:
     log_write(LL_DEBUG, "Receiving raw-encoded data, expecting %d byte(s)",
               rect_w * rect_h * sizeof(CARD32));
-    aio_setread(rf_host_fbupdate_raw, (char *)framebuffer,
-                 rect_w * rect_h * sizeof(CARD32));
+    rect_cur_row = 0;
+    aio_setread(rf_host_fbupdate_raw,
+                &framebuffer[rect_y * desktop_info.width + rect_x],
+                rect_w * sizeof(CARD32));
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX", (unsigned long)rect_enc);
@@ -120,13 +130,23 @@ static void rf_host_fbupdate_recthdr(void)
 
 static void rf_host_fbupdate_raw(void)
 {
-  log_write(LL_DEBUG, "Received rectangle ok");
+  int idx;
 
-  if (--rect_count) {
-    aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
+  if (++rect_cur_row < rect_h) {
+    /* Read next row */
+    idx = (rect_y + rect_cur_row) * desktop_info.width + rect_x;
+    aio_setread(rf_host_fbupdate_raw, &framebuffer[idx],
+                rect_w * sizeof(CARD32));
   } else {
-    request_update(1);
-    aio_setread(rf_host_msg, NULL, 1);
+    /* Done with this rectangle */
+    log_write(LL_DEBUG, "Received rectangle ok");
+
+    if (--rect_count) {
+      aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
+    } else {
+      request_update(1);
+      aio_setread(rf_host_msg, NULL, 1);
+    }
   }
 }
 
