@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.9 2001/10/05 10:36:19 const Exp $
+ * $Id: encode.c,v 1.10 2001/10/06 17:58:57 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -93,9 +93,9 @@ static int encode_tile32(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
 static int encode_tile_raw8(CARD8 *dst_buf,CL_SLOT *cl,FB_RECT *r);
 static int encode_tile_raw16(CARD8 *dst_buf,CL_SLOT *cl,FB_RECT *r);
 static int encode_tile_raw32(CARD8 *dst_buf,CL_SLOT *cl,FB_RECT *r);
-static void prepare_tile8(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static void prepare_tile16(CARD16 *dst_buf, CL_SLOT *cl, FB_RECT *r);
-static void prepare_tile32(CARD32 *dst_buf, CL_SLOT *cl, FB_RECT *r);
+static void analyze_rect8(CARD8 *dst_buf, FB_RECT *r);
+static void analyze_rect16(CARD16 *dst_buf, FB_RECT *r);
+static void analyze_rect32(CARD32 *dst_buf, FB_RECT *r);
 
 static CARD32 bg, fg;
 static CARD32 prev_bg;
@@ -266,8 +266,11 @@ static int encode_tile##bpp(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)    \
   CARD##bpp color, bg_color;                                            \
   CARD8 subenc = 0;                                                     \
                                                                         \
-  /* Get tile data, count colors, consider bg, fg */                    \
-  prepare_tile##bpp(tile_buf, cl, r);                                   \
+  /* Perform pixel format translation */                                \
+  (*cl->trans_func)(tile_buf, r, cl->trans_table);                      \
+                                                                        \
+  /* Count colors, consider bg, fg */                                   \
+  analyze_rect##bpp(tile_buf, r);                                       \
   bg_color = (CARD##bpp)bg;                                             \
                                                                         \
   /* Set appropriate sub-encoding flags */                              \
@@ -389,25 +392,18 @@ DEFINE_ENCODE_TILE_RAW(16)
 DEFINE_ENCODE_TILE_RAW(32)
 
 /*
- * Prepare tile for encoding. This function copies small (upto 16x16)
- * rectangle from screenbuffer to memory array, performs color
- * translation and counts number of colors and determines background
- * and foreground colors for the tile.
+ * Determine number of colors in a tile, choose background and
+ * foreground colors.
  */
 
-#define DEFINE_PREPARE_TILE(bpp)                                           \
+#define DEFINE_ANALYZE_RECT(bpp)                                           \
                                                                            \
-static void prepare_tile##bpp(CARD##bpp *dst_buf, CL_SLOT *cl, FB_RECT *r) \
+static void analyze_rect##bpp(CARD##bpp *dst_buf, FB_RECT *r)              \
 {                                                                          \
   int i;                                                                   \
   int bg_count = 0, fg_count = 0;                                          \
   CARD32 pixel;                                                            \
                                                                            \
-  /* Perform pixel format translation */                                   \
-  (*cl->trans_func)(dst_buf, r, cl->trans_table);                          \
-                                                                           \
-  /* Determine number of colors in a tile, choose background and           \
-     foreground colors. */                                                 \
   bg = fg = (CARD32)*dst_buf++;                                            \
   num_colors = 1;                                                          \
   for (i = 1; i < r->h * r->w; i++) {                                      \
@@ -434,7 +430,7 @@ static void prepare_tile##bpp(CARD##bpp *dst_buf, CL_SLOT *cl, FB_RECT *r) \
   }                                                                        \
 }
 
-DEFINE_PREPARE_TILE(8)
-DEFINE_PREPARE_TILE(16)
-DEFINE_PREPARE_TILE(32)
+DEFINE_ANALYZE_RECT(8)
+DEFINE_ANALYZE_RECT(16)
+DEFINE_ANALYZE_RECT(32)
 
