@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.11 2001/08/04 22:25:14 const Exp $
+ * $Id: client_io.c,v 1.12 2001/08/07 14:00:43 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -353,7 +353,8 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
 
-  rlist_add_rect(&cl->pending_rects, rect, 16);
+  if (cl->connected)
+    rlist_add_rect(&cl->pending_rects, rect, 16);
 }
 
 void fn_client_send_rects(AIO_SLOT *slot)
