@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.45 2002/10/11 12:05:24 const Exp $
+ * $Id: client_io.c,v 1.46 2003/01/06 07:07:19 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -363,7 +363,7 @@ static void rf_client_encodings_data(void)
                 cur_slot->name);
       cl->enable_lastrect = 1;
     } else if (enc == RFB_ENCODING_NEWFBSIZE) {
-      /* FIXME: Handle NewFBRect on->off _correctly_. */
+      /* FIXMENOW: Handle NewFBSize on->off _correctly_. */
       cl->enable_newfbsize = 1;
       log_write(LL_DETAIL, "Client %s supports desktop geometry changes",
                 cur_slot->name);
@@ -406,7 +406,7 @@ static void rf_client_updatereq(void)
 
   cl->update_rect = rect;
 
-  /* FIXME: Always clip the requested rectangle to the framebuffer size? */
+  /* FIXMENOW: Always clip the requested rectangle to the framebuffer size? */
 
   if (!cur_slot->readbuf[0]) {
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
@@ -525,41 +525,41 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
   if (!cl->connected || cl->newfbsize_pending)
     return;
 
+  /* If the framebuffer geometry has been changed, then we don't care
+     about pending pixel updates until the client will be informed on
+     desktop size change. */
+  if (g_screen_info.width != cl->fb_width ||
+      g_screen_info.height != cl->fb_height) {
+    cl->newfbsize_pending = 1;
+    REGION_EMPTY(&cl->pending_region);
+    REGION_EMPTY(&cl->copy_region);
+    return;
+  }
+
   add_rect.x1 = rect->x;
   add_rect.y1 = rect->y;
   add_rect.x2 = add_rect.x1 + rect->w;
   add_rect.y2 = add_rect.y1 + rect->h;
+  REGION_INIT(&add_region, &add_rect, 4);
 
-  if (rect->enc == RFB_ENCODING_NEWFBSIZE) {
-    if (rect->w != cl->fb_width || rect->h != cl->fb_height) {
-      cl->fb_width = rect->w;
-      cl->fb_height = rect->h;
-      if (cl->enable_newfbsize) {
-        REGION_EMPTY(&cl->pending_region);
-        cl->newfbsize_pending = 1;
-      }
-    }
+  /* FIXMENOW: Is cl->update_rect always set correctly? */
+  REGION_INIT(&clip_region, &cl->update_rect, 1);
+
+  if (rect->enc == RFB_ENCODING_COPYRECT &&
+      cl->enc_enable[RFB_ENCODING_COPYRECT] &&
+      !REGION_NOTEMPTY(&cl->copy_region)) {
+    cl->copy_dx = rect->x - rect->src_x;
+    cl->copy_dy = rect->y - rect->src_y;
+    /* FIXMENOW: Clip source region to clip_region? */
+    REGION_INTERSECT(&add_region, &add_region, &clip_region);
+    REGION_UNION(&cl->copy_region, &cl->copy_region, &add_region);
   } else {
-    /* FIXME: Is cl->update_rect always set correctly? */
-
-    REGION_INIT(&add_region, &add_rect, 4);
-    REGION_INIT(&clip_region, &cl->update_rect, 1);
-
-    if (rect->enc == RFB_ENCODING_COPYRECT &&
-        cl->enc_enable[RFB_ENCODING_COPYRECT] &&
-        !REGION_NOTEMPTY(&cl->copy_region)) {
-      cl->copy_dx = rect->x - rect->src_x;
-      cl->copy_dy = rect->y - rect->src_y;
-      REGION_INTERSECT(&add_region, &add_region, &clip_region);
-      REGION_UNION(&cl->copy_region, &cl->copy_region, &add_region);
-    } else {
-      REGION_INTERSECT(&add_region, &add_region, &clip_region);
-      REGION_UNION(&cl->pending_region, &cl->pending_region, &add_region);
-    }
-
-    REGION_UNINIT(&add_region);
-    REGION_UNINIT(&clip_region);
+    REGION_INTERSECT(&add_region, &add_region, &clip_region);
+    REGION_UNION(&cl->pending_region, &cl->pending_region, &add_region);
   }
+
+  REGION_UNINIT(&add_region);
+  REGION_UNINIT(&clip_region);
 }
 
 void fn_client_send_rects(AIO_SLOT *slot)
@@ -659,8 +659,6 @@ static void send_newfbsize(void)
   };
   CARD8 rect_hdr[12];
   FB_RECT rect;
-  BoxRec tmp_rect;
-  RegionRec tmp_region;
 
   log_write(LL_DEBUG, "Sending NewFBSize update (%dx%d) to %s",
             (int)cl->fb_width, (int)cl->fb_height, cur_slot->name);
@@ -668,26 +666,26 @@ static void send_newfbsize(void)
   buf_put_CARD16(&msg_hdr[2], 1);
   aio_write(NULL, msg_hdr, 4);
 
-  tmp_rect.x1 = rect.x = 0;
-  tmp_rect.y1 = rect.y = 0;
-  tmp_rect.x2 = rect.w = cl->fb_width;
-  tmp_rect.y2 = rect.h = cl->fb_height;
+  rect.x = 0;
+  rect.y = 0;
+  rect.w = cl->fb_width;
+  rect.h = cl->fb_height;
   rect.enc = RFB_ENCODING_NEWFBSIZE;
 
   put_rect_header(rect_hdr, &rect);
   aio_write(wf_client_update_finished, rect_hdr, 12);
-  cl->newfbsize_pending = 0;
-
-  /* FIXME: Clip to cl->update_rect? */
-  REGION_INIT(&tmp_region, &tmp_rect, 1);
-  REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
-  REGION_UNINIT(&tmp_region);
 }
+
+/*
+ * Send pending framebuffer update.
+ * FIXME: Function too big.
+ */
 
 static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
-  RegionRec clip_region;
+  BoxRec tmp_rect;
+  RegionRec tmp_region, clip_region;
   CARD8 msg_hdr[4] = {
     0, 0, 0, 1
   };
@@ -699,9 +697,30 @@ static void send_update(void)
   int raw_bytes = 0, hextile_bytes = 0;
   int i;
 
+  /* Process framebuffer size change. */
   if (cl->newfbsize_pending) {
-    send_newfbsize();
-    return;
+    /* Update framebuffer size, clear newfbsize_pending flag. */
+    cl->fb_width = g_screen_info.width;
+    cl->fb_height = g_screen_info.height;
+    cl->newfbsize_pending = 0;
+    log_write(LL_DEBUG, "Applying new framebuffer size (%dx%d) to %s",
+              (int)cl->fb_width, (int)cl->fb_height, cur_slot->name);
+    /* Send NewFBSize update if supported by the client. */
+    if (cl->enable_newfbsize)
+      send_newfbsize();
+    /* In any case, mark all the framebuffer contents as changed. */
+    tmp_rect.x1 = 0;
+    tmp_rect.y1 = 0;
+    tmp_rect.x2 = cl->fb_width;
+    tmp_rect.y2 = cl->fb_height;
+    REGION_INIT(&tmp_region, &tmp_rect, 1);
+    REGION_EMPTY(&cl->pending_region);
+    REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
+    REGION_UNINIT(&tmp_region);
+    REGION_EMPTY(&cl->copy_region);
+    /* If NewFBSize was sent, then pixel data will be sent next time. */
+    if (cl->enable_newfbsize)
+      return;
   }
 
   /* Clip pending regions to the rectangle requested by the client. */
