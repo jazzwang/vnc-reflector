@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: async_io.c,v 1.25 2003/04/21 17:20:35 const Exp $
+ * $Id: async_io.c,v 1.26 2003/04/26 19:47:23 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -364,6 +364,10 @@ void aio_mainloop(void)
   fd_set fdset_r, fdset_w;
   struct timeval timeout;
   AIO_SLOT *slot, *next_slot;
+
+  signal(SIGPIPE, SIG_IGN);
+  signal(SIGTERM, sh_interrupt);
+  signal(SIGINT, sh_interrupt);
 
   if (s_sig_func_set)
     aio_process_func_list();
