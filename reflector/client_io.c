@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.4 2001/08/03 06:52:54 const Exp $
+ * $Id: client_io.c,v 1.5 2001/08/03 07:34:57 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -12,12 +12,14 @@
 #include "rfblib.h"
 #include "logging.h"
 #include "async_io.h"
+#include "client_io.h"
 #include "d3des.h"
 
-/* FIXME: Move these into the AIO_SLOT structure clone */
-static unsigned char s_buf[20];
-static unsigned char s_crypted[16];
 static unsigned char *s_password;
+
+/*
+ * Prototypes for static functions
+ */
 
 static void cf_client(void);
 static void rf_client_ver(void);
@@ -58,6 +60,7 @@ static void cf_client(void)
 
 static void rf_client_ver(void)
 {
+  CL_SLOT *csl = (CL_SLOT *)cur_slot;
   int i;
 
   /* FIXME: Check protocol version. */
@@ -70,38 +73,42 @@ static void rf_client_ver(void)
   log_write(LL_DETAIL, "Client supports %.11s", cur_slot->readbuf);
 
   /* Request VNC authentication */
-  buf_put_CARD32(s_buf, (CARD32)2);
+  buf_put_CARD32(csl->msg_buf, 2);
 
   /* Prepare "random" challenge */
   srandom((unsigned int)time(NULL));
   for (i = 0; i < 16; i++)
-    s_buf[i + 4] = (unsigned char)random();
+    csl->msg_buf[i + 4] = (unsigned char)random();
 
-  aio_write(NULL, s_buf, 20);
+  aio_write(NULL, csl->msg_buf, 20);
   aio_setread(rf_client_auth, NULL, 16);
 }
 
 static void rf_client_auth(void)
 {
+  CL_SLOT *csl = (CL_SLOT *)cur_slot;
   unsigned char key[8];
+  unsigned char buf[16];
 
   memset(key, 0, 8);
   strncpy((char *)key, s_password, 8);
 
+  /* Put correct crypted response to buf */
   deskey(key, EN0);
-  des(s_buf + 4, s_crypted);
-  des(s_buf + 12, s_crypted + 8);
+  des(csl->msg_buf + 4, buf);
+  des(csl->msg_buf + 12, buf + 8);
 
-  if (memcmp(cur_slot->readbuf, s_crypted, 16) != 0) {
+  /* Compare client response with the correct one */
+  /* FIXME: Implement "too many tries" functionality some day. */
+  if (memcmp(cur_slot->readbuf, buf, 16) != 0) {
     log_write(LL_WARN, "Authentication failed for %s", cur_slot->name);
-    /* FIXME: Implement "too many tries" functionality some day */
-    buf_put_CARD32(s_buf, (CARD32)1);
-    aio_write(NULL, s_buf, 4);
+    buf_put_CARD32(buf, 1);
+    aio_write(NULL, buf, 4);
     aio_close(0);
   } else {
     log_write(LL_MSG, "Authentication passed by %s", cur_slot->name);
-    buf_put_CARD32(s_buf, (CARD32)0);
-    aio_write(NULL, s_buf, 4);
+    buf_put_CARD32(buf, 0);
+    aio_write(NULL, buf, 4);
     aio_setread(rf_client_initmsg, NULL, 1);
   }
 }
