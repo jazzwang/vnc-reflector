@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: translate.c,v 1.10 2002/09/09 07:35:31 const Exp $
+ * $Id: translate.c,v 1.11 2002/09/21 12:43:01 const Exp $
  * Pixel format translation.
  */
 
@@ -22,7 +22,6 @@
 
 #include "rfblib.h"
 #include "reflector.h"
-#include "rect.h"
 #include "async_io.h"
 #include "translate.h"
 #include "client_io.h"

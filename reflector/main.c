@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.45 2002/09/07 06:10:41 const Exp $
+ * $Id: main.c,v 1.46 2002/09/21 12:43:01 const Exp $
  * Main module
  */
 
@@ -30,7 +30,6 @@
 #include "logging.h"
 #include "reflector.h"
 #include "host_connect.h"
-#include "rect.h"
 #include "translate.h"
 #include "host_io.h"
 #include "client_io.h"

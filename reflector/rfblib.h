@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.20 2002/09/09 07:35:31 const Exp $
+ * $Id: rfblib.h,v 1.21 2002/09/21 12:43:01 const Exp $
  * RFB protocol definitions
  */
 
@@ -31,6 +31,32 @@
 #define CARD32  u_int32_t
 
 #endif /* CARD32 */
+
+/*
+ * Rectangle.
+ */
+
+typedef struct _FB_RECT {
+  CARD16 x;
+  CARD16 y;
+  CARD16 w;
+  CARD16 h;
+  CARD32 enc;                   /* Encoding type. */
+  CARD16 src_x;                 /* CopyRect X source position. */
+  CARD16 src_y;                 /* CopyRect Y source position. */
+} FB_RECT;
+
+/*
+ * A macro to set x, y, w, h values in an FB_RECT structure.
+ */
+
+#define SET_RECT(rr, xx, yy, ww, hh)            \
+{                                               \
+  (rr)->x = (xx);                               \
+  (rr)->y = (yy);                               \
+  (rr)->w = (ww);                               \
+  (rr)->h = (hh);                               \
+}
 
 /* FIXME: Non-consistent names. */
 

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.23 2002/09/09 07:35:31 const Exp $
+ * $Id: encode.c,v 1.24 2002/09/21 12:43:01 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -23,7 +23,6 @@
 #include "rfblib.h"
 #include "reflector.h"
 #include "async_io.h"
-#include "rect.h"
 #include "translate.h"
 #include "client_io.h"
 #include "encode.h"

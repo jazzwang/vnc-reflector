@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_hextile.c,v 1.4 2002/09/18 11:01:05 const Exp $
+ * $Id: decode_hextile.c,v 1.5 2002/09/21 12:43:01 const Exp $
  * Decoding Hextile-encoded rectangles.
  */
 
@@ -24,7 +24,6 @@
 #include "reflector.h"
 #include "async_io.h"
 #include "logging.h"
-#include "rect.h"
 #include "host_io.h"
 
 static CARD8 s_subenc;

@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: decode_tight.c,v 1.6 2002/09/18 11:01:05 const Exp $
+ * $Id: decode_tight.c,v 1.7 2002/09/21 12:43:01 const Exp $
  * Decoding Tight-encoded rectangles.
  */
 
@@ -25,7 +25,6 @@
 #include "reflector.h"
 #include "async_io.h"
 #include "logging.h"
-#include "rect.h"
 #include "host_io.h"
 
 /*

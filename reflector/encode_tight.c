@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight.c,v 1.3 2002/09/10 07:42:19 const Exp $
+ * $Id: encode_tight.c,v 1.4 2002/09/21 12:43:01 const Exp $
  * Tight encoder.
  */
 
@@ -25,7 +25,6 @@
 #include "rfblib.h"
 #include "reflector.h"
 #include "async_io.h"
-#include "rect.h"
 #include "translate.h"
 #include "client_io.h"
 #include "encode.h"

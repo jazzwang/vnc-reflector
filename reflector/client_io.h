@@ -10,12 +10,14 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.h,v 1.21 2002/09/09 07:35:31 const Exp $
+ * $Id: client_io.h,v 1.22 2002/09/21 12:43:01 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
 #ifndef _REFLIB_CLIENT_IO_H
 #define _REFLIB_CLIENT_IO_H
+
+#include "region.h"
 
 #define TYPE_CL_SLOT    1
 
@@ -32,7 +34,7 @@ typedef struct _CL_SLOT {
   void *trans_table;
   TRANSFUNC_PTR trans_func;
 
-  FB_RECT_LIST pending_rects;
+  RegionRec pending_region;
   CARD16 temp_count;
   unsigned char auth_challenge[16];
   unsigned char enc_prefer;
@@ -43,7 +45,7 @@ typedef struct _CL_SLOT {
   int zs_active[4];
   int zs_level[4];
   size_t cut_len;
-  FB_RECT update_rect;
+  BoxRec update_rect;
   unsigned int bgr233_f           :1;
   unsigned int readonly           :1;
   unsigned int connected          :1;

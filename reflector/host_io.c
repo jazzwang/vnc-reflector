@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.42 2002/09/09 07:35:31 const Exp $
+ * $Id: host_io.c,v 1.43 2002/09/21 12:43:01 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -25,7 +25,6 @@
 #include "reflector.h"
 #include "async_io.h"
 #include "logging.h"
-#include "rect.h"
 #include "translate.h"
 #include "client_io.h"
 #include "host_connect.h"
