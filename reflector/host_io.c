@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.22 2001/08/26 13:34:37 const Exp $
+ * $Id: host_io.c,v 1.23 2001/08/26 14:15:04 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -93,6 +93,7 @@ void host_activate(void)
 /* On-close hook */
 void host_close_hook(void)
 {
+  int i, fb_size, hints_size;
 
   if (s_fbs_fp != NULL)
     fbs_close_file();
@@ -124,6 +125,14 @@ void host_close_hook(void)
     return;
   }
   aio_close(0);
+
+  /* Erase framebuffer contents, invalidate cache */
+  fb_size = g_fb_width * g_fb_height;
+  for (i = 0; i < fb_size; i++)
+    g_framebuffer[i] = 0;
+  hints_size = ((g_fb_width + 15) / 16) * ((g_fb_height + 15) / 16);
+  for (i = 0; i < hints_size; i++)
+    g_hints[i].subenc8 = 0;
 
   /* If we were asked to re-connect, let's do it */
   host_maybe_reconnect();
@@ -754,7 +763,7 @@ static void invalidate_cache(FB_RECT *r)
   int tile_x0, tile_y0, tile_x1, tile_y1;
   int x, y;
 
-  tiles_in_row = ((int)g_screen_info.width + 15) / 16;
+  tiles_in_row = ((int)g_fb_width + 15) / 16;
 
   tile_x0 = r->x / 16;
   tile_y0 = r->y / 16;
