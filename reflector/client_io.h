@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001-2003 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.h,v 1.24 2002/10/03 16:25:05 const Exp $
+ * $Id: client_io.h,v 1.25 2003/04/21 17:20:35 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
