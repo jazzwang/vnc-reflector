@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.h,v 1.12 2001/12/02 08:30:07 const Exp $
+ * $Id: encode.h,v 1.13 2002/09/04 03:07:24 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -22,17 +22,6 @@ typedef struct _PALETTE2 {
   CARD32 bg;
   CARD32 fg;
 } PALETTE2;
-
-/* This structure describes cached data for a properly-aligned 16x16 tile. */
-/* NOTE: If hextile_datasize is not 0 then valid_f should be non-zero too, */
-/* but if valid_f is not 0, do not expect hextile_datasize to be non-zero. */
-typedef struct _TILE_HINTS {
-  CARD8 valid_f;                /* At least meta-data available if not 0   */
-  CARD8 num_colors;             /* Meta-data: number of colors (1, 2 or 0) */
-  CARD8 bg;                     /* Meta-data: background color             */
-  CARD8 fg;                     /* Meta-data: foreground color             */
-  CARD16 hextile_datasize;      /* Hextile-encoded data available if not 0 */
-} TILE_HINTS;
 
 /* Max size of hextile-encoded data per one 16x16 tile */
 /* FIXME: Bad name? */
@@ -57,9 +46,6 @@ typedef struct _TILE_HINTS {
 }
 
 /* encode.c */
-
-extern TILE_HINTS *g_hints;
-extern CARD8 *g_cache8;
 
 int allocate_enc_cache(void);
 int sizeof_enc_cache(void);

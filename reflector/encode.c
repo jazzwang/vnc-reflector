@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode.c,v 1.20 2001/12/02 08:30:07 const Exp $
+ * $Id: encode.c,v 1.21 2002/09/04 03:07:24 const Exp $
  * Encoding screen rectangles.
  */
 
@@ -28,10 +28,20 @@
 #include "client_io.h"
 #include "encode.h"
 
+/* This structure describes cached data for a properly-aligned 16x16 tile. */
+/* NOTE: If hextile_datasize is not 0 then valid_f should be non-zero too, */
+/* but if valid_f is not 0, do not expect hextile_datasize to be non-zero. */
+typedef struct _TILE_HINTS {
+  CARD8 valid_f;                /* At least meta-data available if not 0   */
+  CARD8 num_colors;             /* Meta-data: number of colors (1, 2 or 0) */
+  CARD8 bg;                     /* Meta-data: background color             */
+  CARD8 fg;                     /* Meta-data: foreground color             */
+  CARD16 hextile_datasize;      /* Hextile-encoded data available if not 0 */
+} TILE_HINTS;
 
-/* Cache for encoded data */
-TILE_HINTS *g_hints = NULL;
-CARD8 *g_cache8 = NULL;
+/* Cache for the encoded data */
+static TILE_HINTS *s_hints8 = NULL;
+static CARD8 *s_cache8 = NULL;
 
 /********************************************************************/
 /*                   Maintaining cache structures                   */
@@ -50,16 +60,16 @@ int allocate_enc_cache(void)
 
   tiles_x = (int)g_fb_width / 16;
   tiles_y = (int)g_fb_height / 16;
-  g_hints = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
-  if (g_hints == NULL) {
+  s_hints8 = calloc(tiles_x * tiles_y, sizeof(TILE_HINTS));
+  if (s_hints8 == NULL) {
     return 0;
   }
   s_cache_size = tiles_x * tiles_y * sizeof(TILE_HINTS);
 
-  g_cache8 = malloc(tiles_x * tiles_y * HEXTILE_MAX_TILE_DATASIZE);
-  if (g_cache8 == NULL) {
-    free(g_hints);
-    g_hints = NULL;
+  s_cache8 = malloc(tiles_x * tiles_y * HEXTILE_MAX_TILE_DATASIZE);
+  if (s_cache8 == NULL) {
+    free(s_hints8);
+    s_hints8 = NULL;
     return 0;
   }
   s_cache_size += tiles_x * tiles_y * HEXTILE_MAX_TILE_DATASIZE;
@@ -91,18 +101,18 @@ void invalidate_enc_cache(FB_RECT *r)
 
   for (y = tile_y0; y <= tile_y1; y++)
     for (x = tile_x0; x <= tile_x1; x++)
-      g_hints[y * tiles_in_row + x].valid_f = 0;
+      s_hints8[y * tiles_in_row + x].valid_f = 0;
 }
 
 void free_enc_cache(void)
 {
-  if (g_hints != NULL) {
-    free(g_hints);
-    g_hints = NULL;
+  if (s_hints8 != NULL) {
+    free(s_hints8);
+    s_hints8 = NULL;
   }
-  if (g_cache8 != NULL) {
-    free(g_cache8);
-    g_cache8 = NULL;
+  if (s_cache8 != NULL) {
+    free(s_cache8);
+    s_cache8 = NULL;
   }
   s_cache_size = 0;
 }
@@ -291,8 +301,8 @@ static int encode_tile_using_cache(CARD8 *dst_buf, CL_SLOT *cl, FB_RECT *r)
 
   tiles_in_row = (int)g_fb_width / 16;
   tile_ord = (r->y / 16) * tiles_in_row + (r->x / 16);
-  hints = &g_hints[tile_ord];
-  cache = &g_cache8[tile_ord * HEXTILE_MAX_TILE_DATASIZE];
+  hints = &s_hints8[tile_ord];
+  cache = &s_cache8[tile_ord * HEXTILE_MAX_TILE_DATASIZE];
 
   if (hints->valid_f && hints->hextile_datasize != 0) {
 
