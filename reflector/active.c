@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001-2003 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001-2004 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: active.c,v 1.4 2003/04/21 17:20:35 const Exp $
+ * $Id: active.c,v 1.5 2004/08/08 15:23:35 const_k Exp $
  * Active file marker implementation
  */
 

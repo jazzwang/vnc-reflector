@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001-2003 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001-2004 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.51 2004/08/08 08:05:16 const_k Exp $
+ * $Id: main.c,v 1.52 2004/08/08 15:23:35 const_k Exp $
  * Main module
  */
 
@@ -95,7 +95,7 @@ int main(int argc, char **argv)
 
   if (!opt_no_banner) {
     fprintf(stderr,
-"VNC Reflector %s.  Copyright (C) 2001-2003 HorizonLive.com, Inc.\n\n"
+"VNC Reflector %s.  Copyright (C) 2001-2004 HorizonLive.com, Inc.\n\n"
 "HorizonLive provides e-Learning and collaborative synchronous presentation\n"
 "solutions in a totally Web-based environment.  For more information about\n"
 "HorizonLive, please see our website at http://www.horizonlive.com/\n\n",
@@ -358,7 +358,7 @@ static void parse_args(int argc, char **argv)
 static void report_usage(char *program_name)
 {
   fprintf(stderr,
-          "VNC Reflector %s.  Copyright (C) 2001-2003 HorizonLive.com, Inc."
+          "VNC Reflector %s.  Copyright (C) 2001-2004 HorizonLive.com, Inc."
           "\n\n",
           VERSION);
 
