@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.2 2001/08/01 11:32:48 const Exp $
+ * $Id: main.c,v 1.3 2001/08/01 11:49:39 const Exp $
  * Main module
  */
 
@@ -14,6 +14,7 @@
 #include "reflector.h"
 #include "logging.h"
 #include "hostconnect.h"
+#include "dispatch.h"
 
 /* Configuration options */
 static int   opt_listen_port;
@@ -25,8 +26,8 @@ static int   opt_hostport;
 static char  opt_password[9];
 
 /* Framebuffer */
-static RFB_DESKTOP_INFO desktop_info;
-static CARD32 *framebuffer;
+RFB_DESKTOP_INFO desktop_info;
+CARD32 *framebuffer;
 
 /* Functions local to this file */
 static void parse_args(int argc, char **argv);
@@ -40,7 +41,6 @@ int main(int argc, char **argv)
   /* Parse command line, exit on error */
   parse_args(argc, argv);
 
-  /* Open logs */
   if (!log_open(opt_log_filename, LL_DEBUG,
                 (opt_foreground) ? LL_DETAIL : -1)) {
     fprintf(stderr, "%s: error opening log file (ignoring this error)\n",
@@ -48,10 +48,8 @@ int main(int argc, char **argv)
   }
   log_write(LL_MSG, "Starting VNC Reflector %s", VERSION);
 
-  /* Read the password */
   read_pasword_file();
 
-  /* Connect to host machine */
   host_fd = connect_to_host(opt_hostname, opt_hostport);
   if (host_fd != -1 && setup_session(host_fd, opt_password, &desktop_info)) {
     framebuffer = malloc(desktop_info.width * desktop_info.height * 4);
@@ -59,9 +57,8 @@ int main(int argc, char **argv)
       desktop_info.bytes_row = desktop_info.width * 4;
       log_write(LL_DEBUG, "Allocated framebuffer, %d bytes",
                 desktop_info.width * desktop_info.height * 4);
-
-    /* ... */
-
+      /* Main event loop */
+      mainloop(host_fd, opt_listen_port);
     } else {
       log_write(LL_ERROR, "Error allocating framebuffer");
     }
