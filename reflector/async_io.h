@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.5 2001/08/03 06:52:54 const Exp $
+ * $Id: async_io.h,v 1.6 2001/08/04 17:25:17 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -17,8 +17,8 @@ typedef void (*AIO_FUNCPTR)();
 
 /* This structure is used as a part of output queue */
 typedef struct _AIO_BLOCK {
-  size_t data_size;             /* Data size in this block                 */
   struct _AIO_BLOCK *next;      /* Next block or NULL for the last block   */
+  size_t data_size;             /* Data size in this block                 */
   unsigned char data[1];        /* Beginning of the data buffer            */
 } AIO_BLOCK;
 
@@ -52,6 +52,8 @@ typedef struct _AIO_SLOT {
   unsigned errread_f  :1;       /* 1 if there was a problem reading data   */
   unsigned errwrite_f :1;       /* 1 if there was a problem writing data   */
 
+  int io_errno;                 /* Error code if errread_f or errwrite_f   */
+
   struct _AIO_SLOT *next;       /* To make a list of AIO_SLOT structures   */
   struct _AIO_SLOT *prev;       /* To make a list of AIO_SLOT structures   */
 
@@ -74,6 +76,7 @@ void aio_close(int fatal);
 void aio_mainloop(void);
 void aio_setread(AIO_FUNCPTR fn, void *inbuf, int bytes_to_read);
 void aio_write(AIO_FUNCPTR fn, void *outbuf, int bytes_to_write);
+void aio_write_nocopy(AIO_FUNCPTR fn, AIO_BLOCK *block);
 void aio_setclose(AIO_FUNCPTR closefunc);
 
 #endif /* _REFLIB_ASYNC_IO_H */

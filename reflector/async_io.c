@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.6 2001/08/04 12:26:03 const Exp $
+ * $Id: async_io.c,v 1.7 2001/08/04 17:25:17 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "async_io.h"
 
@@ -283,30 +284,36 @@ void aio_write(AIO_FUNCPTR fn, void *outbuf, int bytes_to_write)
 {
   AIO_BLOCK *block;
 
-  /* FIXME: Check for close_f before the work? */
-  /* FIXME: Check return value after malloc(). */
-  /* FIXME: Provide a function that do not use memcpy(). */
   /* FIXME: Join small blocks together? */
   /* FIXME: Support small static buffer as in reading? */
 
-  /* By the way, writefunc may be NULL */
-  cur_slot->writefunc = fn;
-
-  block = malloc(sizeof(AIO_BLOCK) + bytes_to_write - 1);
-  block->data_size = bytes_to_write;
-  block->next = NULL;
-  memcpy(block->data, outbuf, bytes_to_write);
-
-  if (cur_slot->outqueue == NULL) {
-    /* Output queue was empty */
-    cur_slot->outqueue = block;
-    cur_slot->bytes_written = 0;
-    FD_SET(cur_slot->fd, &s_fdset_write);
-  } else {
-    /* Output queue was not empty */
-    cur_slot->outqueue_last->next = block;
+  block = malloc(sizeof(AIO_BLOCK) + bytes_to_write);
+  if (block != NULL) {
+    block->data_size = bytes_to_write;
+    memcpy(block->data, outbuf, bytes_to_write);
+    aio_write_nocopy(fn, block);
   }
-  cur_slot->outqueue_last = block;
+}
+
+void aio_write_nocopy(AIO_FUNCPTR fn, AIO_BLOCK *block)
+{
+  if (block != NULL) {
+    /* By the way, writefunc may be NULL */
+    cur_slot->writefunc = fn;
+
+    if (cur_slot->outqueue == NULL) {
+      /* Output queue was empty */
+      cur_slot->outqueue = block;
+      cur_slot->bytes_written = 0;
+      FD_SET(cur_slot->fd, &s_fdset_write);
+    } else {
+      /* Output queue was not empty */
+      cur_slot->outqueue_last->next = block;
+    }
+
+    cur_slot->outqueue_last = block;
+    block->next = NULL;
+  }
 }
 
 void aio_setclose(AIO_FUNCPTR closefunc)
@@ -327,6 +334,7 @@ static void aio_process_input(AIO_SLOT *slot)
      Or better destroy the slot? -- I think yes. */
 
   if (!slot->close_f) {
+    errno = 0;
     bytes = read(slot->fd, slot->readbuf + slot->bytes_ready,
                  slot->bytes_to_read - slot->bytes_ready);
 
@@ -336,9 +344,10 @@ static void aio_process_input(AIO_SLOT *slot)
         cur_slot = slot;
         (*slot->readfunc)();
       }
-    } else {
+    } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
       slot->close_f = 1;
       slot->errread_f = 1;
+      slot->io_errno = errno;
     }
   }
 }
@@ -351,6 +360,7 @@ static void aio_process_output(AIO_SLOT *slot)
   /* FIXME: Maybe write all blocks in a loop. */
 
   if (!slot->close_f) {
+    errno = 0;
     bytes = write(slot->fd, slot->outqueue->data + slot->bytes_written,
                   slot->outqueue->data_size - slot->bytes_written);
 
@@ -374,9 +384,10 @@ static void aio_process_output(AIO_SLOT *slot)
           }
         }
       }
-    } else {
+    } else if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
       slot->close_f = 1;
       slot->errwrite_f = 1;
+      slot->io_errno = errno;
     }
   }
 }
@@ -385,7 +396,8 @@ static void aio_accept_connection(void)
 {
   AIO_SLOT *slot;
   struct sockaddr_in client_addr;
-  int len, fd;
+  unsigned int len;
+  int fd;
 
   len = sizeof(client_addr);
   fd = accept(s_listen_fd, (struct sockaddr *) &client_addr, &len);
