@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: rfblib.h,v 1.7 2001/08/06 23:30:31 const Exp $
+ * $Id: rfblib.h,v 1.8 2001/08/08 14:42:08 const Exp $
  * RFB protocol definitions
  */
 
@@ -68,8 +68,14 @@ typedef struct _RFB_SCREEN_INFO {
  * Encodings
  */
 
-#define RFB_ENCODING_RAW      0
-#define RFB_ENCODING_HEXTILE  5
+#define RFB_ENCODING_RAW       0
+#define RFB_ENCODING_COPYRECT  1
+#define RFB_ENCODING_RRE       2
+#define RFB_ENCODING_CORRE     4
+#define RFB_ENCODING_HEXTILE   5
+#define RFB_ENCODING_ZLIB      6
+#define RFB_ENCODING_TIGHT     7
+#define RFB_ENCODING_ZLIBHEX   8
 
 /*
  * Hextile encoding

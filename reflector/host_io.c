@@ -1,11 +1,12 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.12 2001/08/08 12:34:01 const Exp $
+ * $Id: host_io.c,v 1.13 2001/08/08 14:42:08 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
@@ -25,6 +26,7 @@ static void rf_host_msg(void);
 static void rf_host_fbupdate_hdr(void);
 static void rf_host_fbupdate_recthdr(void);
 static void rf_host_fbupdate_raw(void);
+static void rf_host_copyrect(void);
 static void rf_host_hextile_subenc(void);
 static void rf_host_hextile_raw(void);
 static void rf_host_hextile_hex(void);
@@ -172,7 +174,7 @@ static void rf_host_fbupdate_recthdr(void)
 
   switch(rect_enc) {
   case RFB_ENCODING_RAW:
-    log_write(LL_DEBUG, "Receiving raw-encoded data, expecting %d byte(s)",
+    log_write(LL_DEBUG, "Receiving raw data, expecting %d byte(s)",
               cur_rect.w * cur_rect.h * sizeof(CARD32));
     rect_cur_row = 0;
     aio_setread(rf_host_fbupdate_raw,
@@ -181,12 +183,16 @@ static void rf_host_fbupdate_recthdr(void)
                 cur_rect.w * sizeof(CARD32));
     break;
   case RFB_ENCODING_HEXTILE:
-    log_write(LL_DEBUG, "Receiving hextile-encoded data");
+    log_write(LL_DEBUG, "Receiving Hextile-encoded data");
     hextile_rect.x = cur_rect.x;
     hextile_rect.y = cur_rect.y;
     hextile_rect.w = (cur_rect.w < 16) ? cur_rect.w : 16;
     hextile_rect.h = (cur_rect.h < 16) ? cur_rect.h : 16;
     aio_setread(rf_host_hextile_subenc, NULL, sizeof(CARD8));
+    break;
+  case RFB_ENCODING_COPYRECT:
+    log_write(LL_DEBUG, "Receiving CopyRect instruction");
+    aio_setread(rf_host_copyrect, NULL, 4);
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX", (unsigned long)rect_enc);
@@ -207,6 +213,42 @@ static void rf_host_fbupdate_raw(void)
     /* Done with this rectangle */
     fbupdate_rect_done();
   }
+}
+
+static void rf_host_copyrect(void)
+{
+  CARD16 src_x, src_y;
+  CARD32 *src_ptr;
+  CARD32 *dst_ptr;
+  int width = (int)g_screen_info->width;
+  int row;
+
+  src_x = buf_get_CARD16(cur_slot->readbuf);
+  src_y = buf_get_CARD16(&cur_slot->readbuf[2]);
+
+  if (src_y > cur_rect.y) {
+    /* Copy rows starting from top */
+    src_ptr = &g_framebuffer[src_y * width + src_x];
+    dst_ptr = &g_framebuffer[cur_rect.y * width + cur_rect.x];
+    for (row = 0; row < cur_rect.h; row++) {
+      memmove(dst_ptr, src_ptr, cur_rect.w * sizeof(CARD32));
+      src_ptr += width;
+      dst_ptr += width;
+    }
+  } else {
+    /* Copy rows starting from bottom */
+    src_ptr = &g_framebuffer[(src_y + cur_rect.h - 1) * width +
+                             src_x];
+    dst_ptr = &g_framebuffer[(cur_rect.y + cur_rect.h - 1) * width +
+                             cur_rect.x];
+    for (row = 0; row < cur_rect.h; row++) {
+      memmove(dst_ptr, src_ptr, cur_rect.w * sizeof(CARD32));
+      src_ptr -= width;
+      dst_ptr -= width;
+    }
+  }
+
+  fbupdate_rect_done();
 }
 
 static void rf_host_hextile_subenc(void)

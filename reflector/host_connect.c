@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_connect.c,v 1.5 2001/08/08 09:49:32 const Exp $
+ * $Id: host_connect.c,v 1.6 2001/08/08 14:42:08 const Exp $
  * Connecting to a VNC host
  */
 
@@ -237,8 +237,9 @@ static int set_data_formats(int fd, RFB_PIXEL_FORMAT *pixfmt)
   unsigned char setencodings_msg[] = {
     2,                          /* Message id */
     0,                          /* Padding -- not used */
-    0, 2,                       /* Number of encodings */
+    0, 3,                       /* Number of encodings */
     0, 0, 0, 5,                 /* Hextile encoding */
+    0, 0, 0, 1,                 /* CopyRect encoding */
     0, 0, 0, 0                  /* Raw encoding */
   };
 
