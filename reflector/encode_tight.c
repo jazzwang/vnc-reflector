@@ -11,7 +11,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: encode_tight.c,v 1.1 2002/09/08 19:37:12 const Exp $
+ * $Id: encode_tight.c,v 1.2 2002/09/10 06:58:55 const Exp $
  * Tight encoder.
  */
 
@@ -280,7 +280,11 @@ rfb_encode_tight(CL_SLOT *cl, FB_RECT *r)
         SendTightHeader(&rbest);
 
         SET_RECT(&rtemp, rbest.x, rbest.y, 1, 1);
-        (*cl->trans_func)(tightBeforeBuf, &rtemp, cl->trans_table);
+        if (usePixelFormat24) {
+          transfunc_null(tightBeforeBuf, &rtemp, NULL);
+        } else {
+          (*cl->trans_func)(tightBeforeBuf, &rtemp, cl->trans_table);
+        }
 
         SendSolidRect(cl);
 
@@ -493,7 +497,7 @@ static int SendSubrect(CL_SLOT *cl, FB_RECT *r)
   /* Translate pixel data into the client's format
      (don't translate when the client requests 24-bit colors). */
   if (usePixelFormat24) {
-    transfunc_null(tightBeforeBuf, r, cl->trans_table);
+    transfunc_null(tightBeforeBuf, r, NULL);
   } else {
     (*cl->trans_func)(tightBeforeBuf, r, cl->trans_table);
   }
