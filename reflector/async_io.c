@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.17 2001/08/26 14:25:15 const Exp $
+ * $Id: async_io.c,v 1.18 2001/08/27 08:37:03 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -38,7 +38,6 @@ AIO_SLOT *cur_slot;
 #ifdef USE_POLL
 static struct pollfd s_fd_array[FD_ARRAY_MAXSIZE];
 static unsigned int s_fd_array_size;
-static int s_listen_fd_idx;
 #else
 static fd_set s_fdset_read;
 static fd_set s_fdset_write;
@@ -49,10 +48,6 @@ static AIO_FUNCPTR s_idle_func;
 static AIO_SLOT *s_first_slot;
 static AIO_SLOT *s_last_slot;
 
-static int s_listen_fd;
-static AIO_FUNCPTR s_accept_func;
-static size_t s_new_slot_size;
-
 static volatile int s_sig_func_set;
 static AIO_FUNCPTR s_sig_func[10];
 
@@ -62,10 +57,11 @@ static int s_close_f;
  * Prototypes for static functions
  */
 
+static void aio_listen_initfunc(void);
 static void aio_process_input(AIO_SLOT *slot);
 static void aio_process_output(AIO_SLOT *slot);
 static void aio_process_func_list(void);
-static void aio_accept_connection(void);
+static void aio_accept_connection(AIO_SLOT *slot);
 static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 
 static void sh_interrupt(int signo);
@@ -92,7 +88,6 @@ void aio_init(void)
   FD_ZERO(&s_fdset_write);
   s_max_fd = 0;
 #endif
-  s_listen_fd = -1;
   s_idle_func = NULL;
   s_first_slot = NULL;
   s_last_slot = NULL;
@@ -175,13 +170,17 @@ void aio_add_slot(int fd, char *name, AIO_FUNCPTR initfunc, size_t slot_size)
 
 /*
  * Create listening socket. All connections would be accepted
- * automatically and initfunc would be called for each new slot
+ * automatically and acceptfunc would be called for each new slot
  * created on incoming connection.
- * NOTE: only one listening socket is supported at this time.
  */
+
+/* Variables to hold data to be passed to initfunc of listening slot */
+static AIO_FUNCPTR s_tmp_acceptfunc;
+static size_t s_tmp_slot_size;
 
 int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
 {
+  int listen_fd;
   struct sockaddr_in listen_addr;
   int optval = 1;
 
@@ -190,14 +189,13 @@ int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
   if (acceptfunc == NULL)
     return 0;
   
-  s_listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (s_listen_fd < 0)
+  listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (listen_fd < 0)
     return 0;
 
-  if (setsockopt(s_listen_fd, SOL_SOCKET, SO_REUSEADDR,
+  if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR,
                  &optval, sizeof(int)) != 0) {
-    close(s_listen_fd);
-    s_listen_fd = -1;
+    close(listen_fd);
     return 0;
   }
 
@@ -205,32 +203,28 @@ int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
   listen_addr.sin_addr.s_addr = INADDR_ANY;
   listen_addr.sin_port = htons((unsigned short)port);
 
-  if ( bind(s_listen_fd, (struct sockaddr *)&listen_addr,
+  if ( bind(listen_fd, (struct sockaddr *)&listen_addr,
             sizeof(listen_addr)) != 0 ||
-       fcntl(s_listen_fd, F_SETFL, O_NONBLOCK) != 0 ||
-       listen(s_listen_fd, 5) != 0 ) {
-    close(s_listen_fd);
-    s_listen_fd = -1;
+       fcntl(listen_fd, F_SETFL, O_NONBLOCK) != 0 ||
+       listen(listen_fd, 5) != 0 ) {
+    close(listen_fd);
     return 0;
   }
 
-#ifdef USE_POLL
-  /* FIXME: do something better if s_fd_array_size exceeds max size? */
-  if (s_fd_array_size < FD_ARRAY_MAXSIZE) {
-    s_listen_fd_idx = s_fd_array_size++;
-    s_fd_array[s_listen_fd_idx].fd = s_listen_fd;
-    s_fd_array[s_listen_fd_idx].events = POLLIN;
-  }
-#else
-  FD_SET(s_listen_fd, &s_fdset_read);
-  if (s_listen_fd > s_max_fd)
-    s_max_fd = s_listen_fd;
-#endif
+  s_tmp_acceptfunc = acceptfunc;
+  s_tmp_slot_size = slot_size;
 
-  s_accept_func = acceptfunc;
-  s_new_slot_size = slot_size;
+  aio_add_slot(listen_fd, "[listening slot]", aio_listen_initfunc,
+               sizeof(AIO_SLOT));
 
   return 1;
+}
+
+static void aio_listen_initfunc(void)
+{
+  cur_slot->listening_f = 1;
+  cur_slot->readfunc = s_tmp_acceptfunc;
+  cur_slot->bytes_to_read = s_tmp_slot_size;
 }
 
 /*
@@ -325,17 +319,17 @@ void aio_mainloop(void)
         } else {
           if (s_fd_array[slot->idx].revents & POLLOUT)
             aio_process_output(slot);
-          if ((s_fd_array[slot->idx].revents & POLLIN) && !slot->close_f)
-            aio_process_input(slot);
+          if ((s_fd_array[slot->idx].revents & POLLIN) && !slot->close_f) {
+            if (slot->listening_f)
+              aio_accept_connection(slot);
+            else
+              aio_process_input(slot);
+          }
         }
         if (slot->close_f)
           aio_destroy_slot(slot, 0);
         slot = next_slot;
       }
-      if ( s_listen_fd != -1 &&
-           (s_fd_array[s_listen_fd_idx].revents & POLLIN) &&
-           !s_close_f )
-        aio_accept_connection();
       if (s_sig_func_set)
         aio_process_func_list();
     } else {
@@ -345,8 +339,7 @@ void aio_mainloop(void)
         (*s_idle_func)();       /* Do something in idle periods */
     }
   }
-  /* Stop listening, close all slots and exit */
-  close(s_listen_fd);
+  /* Close all slots and exit */
   for (slot = s_first_slot; slot != NULL; slot = slot->next)
     aio_destroy_slot(slot, 1);
 }
@@ -373,14 +366,16 @@ void aio_mainloop(void)
         next_slot = slot->next;
         if (FD_ISSET(slot->fd, &fdset_w))
           aio_process_output(slot);
-        if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f)
-          aio_process_input(slot);
+        if (FD_ISSET(slot->fd, &fdset_r) && !slot->close_f) {
+          if (slot->listening_f)
+            aio_accept_connection(slot);
+          else
+            aio_process_input(slot);
+        }
         if (slot->close_f)
           aio_destroy_slot(slot, 0);
         slot = next_slot;
       }
-      if (s_listen_fd != -1 && FD_ISSET(s_listen_fd, &fdset_r) && !s_close_f)
-        aio_accept_connection();
       if (s_sig_func_set)
         aio_process_func_list();
     } else {
@@ -566,20 +561,19 @@ static void aio_process_func_list(void)
   }
 }
 
-static void aio_accept_connection(void)
+static void aio_accept_connection(AIO_SLOT *slot)
 {
-  AIO_SLOT *slot;
   struct sockaddr_in client_addr;
   unsigned int len;
   int fd;
 
   len = sizeof(client_addr);
-  fd = accept(s_listen_fd, (struct sockaddr *) &client_addr, &len);
+  fd = accept(slot->fd, (struct sockaddr *) &client_addr, &len);
   if (fd < 0)
     return;
 
-  aio_add_slot(fd, inet_ntoa(client_addr.sin_addr), s_accept_func,
-               s_new_slot_size);
+  aio_add_slot(fd, inet_ntoa(client_addr.sin_addr), slot->readfunc,
+               slot->bytes_to_read);
 }
 
 /*
@@ -620,8 +614,6 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
       memmove(&s_fd_array[slot->idx],
               &s_fd_array[slot->idx + 1],
               (s_fd_array_size - slot->idx - 1) * sizeof(struct pollfd));
-      if (s_listen_fd_idx > slot->idx)
-        s_listen_fd_idx--;
       for (h_slot = slot->next; h_slot != NULL; h_slot = h_slot->next)
         h_slot->idx--;
     }

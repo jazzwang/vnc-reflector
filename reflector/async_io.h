@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.h,v 1.10 2001/08/23 15:24:51 const Exp $
+ * $Id: async_io.h,v 1.11 2001/08/27 08:37:03 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -33,11 +33,14 @@ typedef struct _AIO_SLOT {
                                 /*   (currently, IP address for sockets)   */
 
   AIO_FUNCPTR readfunc;         /* Function to process data read,          */
-                                /*   to be set with aio_setread()          */
+                                /*   to be set with aio_setread(), or with */
+                                /*   aio_listen for listening socket       */
   unsigned char *readbuf;       /* Pointer to an input buffer,             */
                                 /*   to be set with aio_setread()          */
   size_t bytes_to_read;         /* Bytes to read into the input buffer     */
-                                /*   to be set with aio_setread()          */
+                                /*   to be set with aio_setread(), or size */
+                                /*   of the slot structure to allocate, if */
+                                /*   this is a lostening slot              */
   size_t bytes_ready;           /* Bytes ready in the input buffer         */
   unsigned char buf256[256];    /* Built-in input buffer                   */
 
@@ -47,11 +50,12 @@ typedef struct _AIO_SLOT {
 
   AIO_FUNCPTR closefunc;        /* To be called before close, may be NULL  */
 
-  unsigned alloc_f    :1;       /* 1 if buffer has to be freed with free() */
-  unsigned close_f    :1;       /* 1 if the slot is about to be closed     */
-  unsigned errio_f    :1;       /* 1 if there was an I/O problem           */
-  unsigned errread_f  :1;       /* 1 if there was a problem reading data   */
-  unsigned errwrite_f :1;       /* 1 if there was a problem writing data   */
+  unsigned listening_f :1;      /* 1 if this slot is listening one         */
+  unsigned alloc_f     :1;      /* 1 if buffer has to be freed with free() */
+  unsigned close_f     :1;      /* 1 if the slot is about to be closed     */
+  unsigned errio_f     :1;      /* 1 if there was an I/O problem           */
+  unsigned errread_f   :1;      /* 1 if there was a problem reading data   */
+  unsigned errwrite_f  :1;      /* 1 if there was a problem writing data   */
 
   int io_errno;                 /* Error code if errread_f or errwrite_f   */
 
