@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.12 2001/08/20 09:52:09 const Exp $
+ * $Id: async_io.c,v 1.13 2001/08/20 10:04:25 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -64,6 +64,8 @@ static void aio_process_output(AIO_SLOT *slot);
 static void aio_accept_connection(void);
 static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 
+static void sh_interrupt (int signo);
+
 
 /*
  * Implementation
@@ -77,7 +79,6 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 
 void aio_init(void)
 {
-  signal(SIGPIPE, SIG_IGN);
 #ifdef USE_POLL
   s_fd_array_size = 0;
 #else
@@ -273,6 +274,10 @@ void aio_close(int fatal)
 void aio_mainloop(void)
 {
   AIO_SLOT *slot, *next_slot;
+
+  signal(SIGPIPE, SIG_IGN);
+  signal(SIGTERM, sh_interrupt);
+  signal(SIGINT, sh_interrupt);
 
   while (!s_close_f) {
     if (poll(s_fd_array, s_fd_array_size, 10000) > 0) {
@@ -586,5 +591,15 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal)
   /* Close the file and free the slot itself */
   close(slot->fd);
   free(slot);
+}
+
+/*
+ * Signal handler catching SEGTERM and SIGINT signals
+ */
+
+static void sh_interrupt (int signo)
+{
+  s_close_f = 1;
+  signal (signo, sh_interrupt);
 }
 
