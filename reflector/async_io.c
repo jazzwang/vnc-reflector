@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: async_io.c,v 1.22 2001/10/02 09:03:45 const Exp $
+ * $Id: async_io.c,v 1.23 2002/03/07 22:03:19 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -525,6 +525,7 @@ AIO_SLOT *aio_new_slot(int fd, char *name, size_t slot_size)
       slot->idx = s_fd_array_size++;
       s_fd_array[slot->idx].fd = fd;
       s_fd_array[slot->idx].events = POLLIN;
+      s_fd_array[slot->idx].revents = 0;
     }
 #else
     FD_SET(fd, &s_fdset_read);
