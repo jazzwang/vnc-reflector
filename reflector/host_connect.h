@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: hostconnect.h,v 1.1 2001/08/01 04:58:39 const Exp $
+ * $Id: host_connect.h,v 1.1 2001/08/02 11:23:44 const Exp $
  * Connecting to a VNC host
  */
 

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: hostconnect.c,v 1.3 2001/08/02 11:13:38 const Exp $
+ * $Id: host_connect.c,v 1.1 2001/08/02 11:23:44 const Exp $
  * Connecting to a VNC host
  */
 
@@ -17,7 +17,7 @@
 
 #include "rfblib.h"
 #include "logging.h"
-#include "hostconnect.h"
+#include "host_connect.h"
 #include "d3des.h"
 
 static int negotiate_ver(int fd, int major, int minor);
