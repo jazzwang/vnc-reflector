@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.35 2002/07/05 12:41:29 const Exp $
+ * $Id: host_io.c,v 1.36 2002/07/10 15:46:38 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -26,6 +26,7 @@
 #include "reflector.h"
 #include "async_io.h"
 #include "logging.h"
+#include "active.h"
 #include "rect.h"
 #include "translate.h"
 #include "client_io.h"
@@ -145,6 +146,7 @@ void host_close_hook(void)
     /* Exit event loop if framebuffer does not exist yet. */
     if (g_framebuffer == NULL)
       aio_close(1);
+    remove_active_file();
   } else {
     log_write(LL_INFO, "Closing previous connection to host");
     host_really_activate(s_new_slot);
@@ -160,6 +162,8 @@ static void host_really_activate(AIO_SLOT *slot)
   log_write(LL_MSG, "Activating new host connection");
   slot->type = TYPE_HOST_ACTIVE_SLOT;
   s_host_slot = slot;
+
+  write_active_file();
 
   /* Allocate the framebuffer or extend its dimensions if necessary */
   if (!alloc_framebuffer(hs->fb_width, hs->fb_height)) {

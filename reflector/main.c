@@ -1,5 +1,5 @@
 /* VNC Reflector
- * Copyright (C) 2001 HorizonLive.com, Inc.  All rights reserved.
+ * Copyright (C) 2001,2002 HorizonLive.com, Inc.  All rights reserved.
  *
  * This software is released under the terms specified in the file LICENSE,
  * included.  HorizonLive provides e-Learning and collaborative synchronous
@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.39 2002/07/05 12:41:29 const Exp $
+ * $Id: main.c,v 1.40 2002/07/10 15:46:38 const Exp $
  * Main module
  */
 
@@ -28,6 +28,7 @@
 #include "rfblib.h"
 #include "async_io.h"
 #include "logging.h"
+#include "active.h"
 #include "reflector.h"
 #include "host_connect.h"
 #include "control.h"
@@ -45,6 +46,7 @@ static int   opt_no_banner;
 static int   opt_cl_listen_port;
 static char *opt_log_filename;
 static char *opt_passwd_filename;
+static char *opt_active_filename;
 static int   opt_foreground;
 static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
@@ -90,10 +92,10 @@ int main(int argc, char **argv)
 
   if (!opt_no_banner) {
     fprintf(stderr,
-"VNC Reflector %s.  Copyright (C) 2001 HorizonLive.com, Inc.\n\n"
+"VNC Reflector %s.  Copyright (C) 2001,2002 HorizonLive.com, Inc.\n\n"
 "HorizonLive provides e-Learning and collaborative synchronous presentation\n"
 "solutions in a totally Web-based environment.  For more information about\n"
-"HorizonLive, please see our website at http://www.horizonlive.com/ .\n\n",
+"HorizonLive, please see our website at http://www.horizonlive.com/\n\n",
             VERSION);
   }
 
@@ -131,6 +133,8 @@ int main(int argc, char **argv)
     read_password_file();
     set_client_passwords(opt_client_password, opt_client_ro_password);
     host_set_fbs_prefix(opt_fbs_prefix, opt_join_sessions);
+
+    set_active_file(opt_active_filename);
 
     aio_init();
     if (opt_bind_ip != NULL) {
@@ -194,13 +198,14 @@ static void parse_args(int argc, char **argv)
   opt_file_loglevel = -1;
   opt_passwd_filename = NULL;
   opt_log_filename = NULL;
+  opt_active_filename = NULL;
   opt_cl_listen_port = -1;
   opt_pid_file[0] = '\0';
   opt_fbs_prefix = NULL;
   opt_join_sessions = 0;
   opt_bind_ip = NULL;
 
-  while (!err && (c = getopt(argc, argv, "hqjv:f:p:g:l:i:s:b:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hqjv:f:p:a:g:l:i:s:b:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
@@ -235,6 +240,12 @@ static void parse_args(int argc, char **argv)
         err = 1;
       else
         opt_log_filename = optarg;
+      break;
+    case 'a':
+      if (opt_active_filename != NULL)
+        err = 1;
+      else
+        opt_active_filename = optarg;
       break;
     case 'l':
       if (opt_cl_listen_port != -1)
@@ -298,7 +309,7 @@ static void parse_args(int argc, char **argv)
 static void report_usage(char *program_name)
 {
   fprintf(stderr,
-          "VNC Reflector %s.  Copyright (C) 2001 HorizonLive.com, Inc.\n\n",
+          "VNC Reflector %s.  Copyright (C) 2001,2002 HorizonLive.com, Inc.\n\n",
           VERSION);
 
   fprintf(stderr, "Usage: %s [OPTIONS...] HOST_INFO_FILE\n\n",
@@ -310,6 +321,8 @@ static void report_usage(char *program_name)
           " to the filename\n"
           "  -p PASSWD_FILE  - read a plaintext client password file"
           " [default: passwd]\n"
+          "  -a ACTIVE_FILE  - create file during times when a host is"
+          " connected\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
           "  -b IP_ADDRESS   - bind listening sockets to a specific IP"
