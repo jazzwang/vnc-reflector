@@ -1,7 +1,7 @@
 /* VNC Reflector
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: main.c,v 1.8 2001/08/02 15:33:05 const Exp $
+ * $Id: main.c,v 1.9 2001/08/02 15:54:38 const Exp $
  * Main module
  */
 
@@ -26,6 +26,8 @@ static int   opt_listen_port;
 static char *opt_log_filename;
 static char *opt_passwd_filename;
 static int   opt_foreground;
+static int   opt_stderr_loglevel;
+static int   opt_file_loglevel;
 static char  opt_hostname[256];
 static int   opt_hostport;
 static char  opt_password[9];
@@ -46,8 +48,8 @@ int main(int argc, char **argv)
   /* Parse command line, exit on error */
   parse_args(argc, argv);
 
-  if (!log_open(opt_log_filename, LL_DEBUG,
-                (opt_foreground) ? LL_DETAIL : -1)) {
+  if (!log_open(opt_log_filename, opt_file_loglevel,
+                (opt_foreground) ? opt_stderr_loglevel : -1)) {
     fprintf(stderr, "%s: error opening log file (ignoring this error)\n",
             argv[0]);
   }
@@ -114,17 +116,29 @@ static void parse_args(int argc, char **argv)
   char *pos;
 
   opt_foreground = 0;
+  opt_stderr_loglevel = -1;
+  opt_file_loglevel = -1;
   opt_passwd_filename = NULL;
   opt_log_filename = NULL;
   opt_listen_port = -1;
 
-  while (!err && (c = getopt(argc, argv, "hfp:g:l:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hv:f:p:g:l:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
       break;
+    case 'v':
+      if (opt_file_loglevel != -1)
+        err = 1;
+      else
+        opt_file_loglevel = atoi(optarg);
+      break;
     case 'f':
       opt_foreground = 1;
+      if (opt_stderr_loglevel != -1)
+        err = 1;
+      else
+        opt_stderr_loglevel = atoi(optarg);
       break;
     case 'p':
       if (opt_passwd_filename != NULL)
@@ -159,6 +173,8 @@ static void parse_args(int argc, char **argv)
   }
 
   /* Provide reasonable defaults to options */
+  if (opt_file_loglevel == -1)
+    opt_file_loglevel = LL_INFO;
   if (opt_passwd_filename == NULL)
     opt_passwd_filename = "passwd";
   if (opt_log_filename == NULL)
@@ -203,10 +219,15 @@ static void report_usage(char *program_name)
           " [default: 5999]\n"
           "  -g LOG_FILE    - write logs to specified file"
           " [default: reflector.log]\n"
-          "  -f             - run in foreground, write log to stderr\n"
+          "  -v LOG_LEVEL   - set verbosity level for log file (0..%d)"
+          " [default: %d]\n"
+          "  -f LOG_LEVEL   - run in foreground, show logs on stderr"
+          " at specified\n"
+          "                   verbosity level (0..%d)\n"
           "  -h             - print this help message\n"
           "\n"
-          "Note: default display number is :0 (port 5900)\n\n");
+          "Note: default host's display number is :0 (port 5900)\n\n",
+          LL_DEBUG, LL_INFO, LL_DEBUG, LL_MSG);
 }
 
 static int read_pasword_file(void)
