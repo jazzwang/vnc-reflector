@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.30 2002/09/21 12:43:01 const Exp $
+ * $Id: host_connect.c,v 1.31 2003/01/11 09:13:59 const Exp $
  * Connecting to a VNC host
  */
 
@@ -349,15 +349,11 @@ static void send_client_initmsg(void)
 static void rf_host_initmsg(void)
 {
   HOST_SLOT *hs = (HOST_SLOT *)cur_slot;
-  CARD16 width, height;
 
-  width = buf_get_CARD16(cur_slot->readbuf);
-  height = buf_get_CARD16(&cur_slot->readbuf[2]);
+  hs->fb_width = buf_get_CARD16(cur_slot->readbuf);
+  hs->fb_height = buf_get_CARD16(&cur_slot->readbuf[2]);
   log_write(LL_MSG, "Remote desktop geometry is %dx%d",
-            (int)width, (int)height);
-
-  hs->fb_width = width;
-  hs->fb_height = height;
+            (int)hs->fb_width, (int)hs->fb_height);
 
   hs->temp_len = buf_get_CARD32(&cur_slot->readbuf[20]);
   aio_setread(rf_host_set_formats, NULL, hs->temp_len);
