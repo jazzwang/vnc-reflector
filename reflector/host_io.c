@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: host_io.c,v 1.7 2001/08/04 17:29:34 const Exp $
+ * $Id: host_io.c,v 1.8 2001/08/04 21:58:57 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -13,15 +13,20 @@
 #include "reflector.h"
 #include "async_io.h"
 #include "logging.h"
+#include "rect.h"
+#include "client_io.h"
 #include "host_io.h"
 
 static void if_host(void);      /* Init hook */
 static void cf_host(void);      /* Close hook */
 
 static void rf_host_msg(void);
+
 static void rf_host_fbupdate_hdr(void);
 static void rf_host_fbupdate_recthdr(void);
 static void rf_host_fbupdate_raw(void);
+static void fn_host_add_client_rect(AIO_SLOT *slot);
+
 static void rf_host_colormap_hdr(void);
 static void rf_host_colormap_data(void);
 static void rf_host_cuttext_hdr(void);
@@ -54,11 +59,19 @@ static void if_host(void)
 static void cf_host(void)
 {
   if (cur_slot->errread_f) {
-    log_write(LL_ERROR, "Host I/O error, read: %s",
-              strerror(cur_slot->io_errno));
+    if (cur_slot->io_errno) {
+      log_write(LL_ERROR, "Host I/O error, read: %s",
+                strerror(cur_slot->io_errno));
+    } else {
+      log_write(LL_ERROR, "Host I/O error, read");
+    }
   } else if (cur_slot->errwrite_f) {
-    log_write(LL_ERROR, "Host I/O error, write: %s",
-              strerror(cur_slot->io_errno));
+    if (cur_slot->io_errno) {
+      log_write(LL_ERROR, "Host I/O error, write: %s",
+                strerror(cur_slot->io_errno));
+    } else {
+      log_write(LL_ERROR, "Host I/O error, write");
+    }
   }
   log_write(LL_WARN, "Closing connection to host");
   aio_close(1);
@@ -96,12 +109,13 @@ static void rf_host_msg(void)
 
 /* FIXME: Add state variables to the AIO_SLOT structure clone. */
 static CARD16 rect_count;
-static CARD16 rect_x, rect_y, rect_w, rect_h;
+static FB_RECT cur_rect;
 static CARD32 rect_enc;
 static CARD16 rect_cur_row;
 
 static void rf_host_fbupdate_hdr(void)
 {
+
   rect_count = buf_get_CARD16(&cur_slot->readbuf[1]);
 
   if (rect_count == 0xFFFF) {
@@ -116,30 +130,34 @@ static void rf_host_fbupdate_hdr(void)
 
 static void rf_host_fbupdate_recthdr(void)
 {
-  rect_x = buf_get_CARD16(cur_slot->readbuf);
-  rect_y = buf_get_CARD16(&cur_slot->readbuf[2]);
-  rect_w = buf_get_CARD16(&cur_slot->readbuf[4]);
-  rect_h = buf_get_CARD16(&cur_slot->readbuf[6]);
+
+  cur_rect.x = buf_get_CARD16(cur_slot->readbuf);
+  cur_rect.y = buf_get_CARD16(&cur_slot->readbuf[2]);
+  cur_rect.w = buf_get_CARD16(&cur_slot->readbuf[4]);
+  cur_rect.h = buf_get_CARD16(&cur_slot->readbuf[6]);
   rect_enc = buf_get_CARD32(&cur_slot->readbuf[8]);
 
-  if (!rect_h || !rect_w) {
+  if (!cur_rect.h || !cur_rect.w) {
     log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring)",
-              (int)rect_w, (int)rect_h, (int)rect_x, (int)rect_y);
+              (int)cur_rect.w, (int)cur_rect.h,
+              (int)cur_rect.x, (int)cur_rect.y);
     aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
     return;
   }
 
   log_write(LL_DEBUG, "Receiving rectangle %dx%d at %d,%d",
-            (int)rect_w, (int)rect_h, (int)rect_x, (int)rect_y);
+            (int)cur_rect.w, (int)cur_rect.h,
+            (int)cur_rect.x, (int)cur_rect.y);
 
   switch(rect_enc) {
   case 0:
     log_write(LL_DEBUG, "Receiving raw-encoded data, expecting %d byte(s)",
-              rect_w * rect_h * sizeof(CARD32));
+              cur_rect.w * cur_rect.h * sizeof(CARD32));
     rect_cur_row = 0;
     aio_setread(rf_host_fbupdate_raw,
-                &g_framebuffer[rect_y * (int)g_screen_info->width + rect_x],
-                rect_w * sizeof(CARD32));
+                &g_framebuffer[cur_rect.y * (int)g_screen_info->width +
+                               cur_rect.x],
+                cur_rect.w * sizeof(CARD32));
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX", (unsigned long)rect_enc);
@@ -151,23 +169,33 @@ static void rf_host_fbupdate_raw(void)
 {
   int idx;
 
-  if (++rect_cur_row < rect_h) {
+  if (++rect_cur_row < cur_rect.h) {
     /* Read next row */
-    idx = (rect_y + rect_cur_row) * (int)g_screen_info->width + rect_x;
+    idx = (cur_rect.y + rect_cur_row) * (int)g_screen_info->width + cur_rect.x;
     aio_setread(rf_host_fbupdate_raw, &g_framebuffer[idx],
-                rect_w * sizeof(CARD32));
+                cur_rect.w * sizeof(CARD32));
   } else {
     /* Done with this rectangle */
     log_write(LL_DEBUG, "Received rectangle ok");
 
+    /* Queue this rectangle for each client */
+    aio_walk_slots(fn_host_add_client_rect, TYPE_CL_SLOT);
+
     if (--rect_count) {
       aio_setread(rf_host_fbupdate_recthdr, NULL, 12);
     } else {
+      /* Done with this update */
+      aio_walk_slots(fn_client_send_rects, TYPE_CL_SLOT);
       log_write(LL_DETAIL, "Requesting incremental framebuffer update");
       request_update(1);
       aio_setread(rf_host_msg, NULL, 1);
     }
   }
+}
+
+static void fn_host_add_client_rect(AIO_SLOT *slot)
+{
+  fn_client_add_rect(slot, &cur_rect);
 }
 
 /*****************************************/

@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: client_io.c,v 1.7 2001/08/04 17:29:34 const Exp $
+ * $Id: client_io.c,v 1.8 2001/08/04 21:58:57 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -13,10 +13,11 @@
 #include "rfblib.h"
 #include "logging.h"
 #include "async_io.h"
-#include "client_io.h"
 #include "reflector.h"
+#include "rect.h"
 #include "encode.h"
 #include "d3des.h"
+#include "client_io.h"
 
 static unsigned char *s_password;
 
@@ -54,9 +55,12 @@ void set_client_password(unsigned char *password)
 
 void af_client_accept(void)
 {
-  /* FIXME: Function naming is bad (client_accept_hook?). */
-  /* FIXME: Store client address in an AIO_SLOT structure clone */
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
 
+  /* FIXME: Function naming is bad (client_accept_hook?). */
+
+  cur_slot->type = TYPE_CL_SLOT;
+  cl->connected = 0;
   aio_setclose(cf_client);
 
   log_write(LL_MSG, "Accepted connection from %s", cur_slot->name);
@@ -68,11 +72,19 @@ void af_client_accept(void)
 static void cf_client(void)
 {
   if (cur_slot->errread_f) {
-    log_write(LL_WARN, "Error reading from %s: %s",
-              cur_slot->name, strerror(cur_slot->io_errno));
+    if (cur_slot->io_errno) {
+      log_write(LL_WARN, "Error reading from %s: %s",
+                cur_slot->name, strerror(cur_slot->io_errno));
+    } else {
+      log_write(LL_ERROR, "Error reading from %s", cur_slot->name);
+    }
   } else if (cur_slot->errwrite_f) {
-    log_write(LL_WARN, "Error sending to %s: %s",
-              cur_slot->name, strerror(cur_slot->io_errno));
+    if (cur_slot->io_errno) {
+      log_write(LL_WARN, "Error sending to %s: %s",
+                cur_slot->name, strerror(cur_slot->io_errno));
+    } else {
+      log_write(LL_ERROR, "Error sending to %s", cur_slot->name);
+    }
   }
   log_write(LL_MSG, "Closing client connection %s", cur_slot->name);
 }
@@ -135,6 +147,7 @@ static void rf_client_auth(void)
 static void rf_client_initmsg(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  FB_RECT rect;
   unsigned char msg_server_init[24];
 
   if (cur_slot->readbuf[0] == 0) {
@@ -154,6 +167,18 @@ static void rf_client_initmsg(void)
   /* The client did not requested framebuffer updates yet */
   cl->update_requested = 0;
   cl->update_in_progress = 0;
+
+  /* Add a rectangle covering the whole framebuffer to the list of
+     pending rectangles */
+  rect.x = 0;
+  rect.y = 0;
+  rect.w = g_screen_info->width;
+  rect.h = g_screen_info->height;
+  rlist_init(&cl->pending_rects);
+  rlist_add_rect(&cl->pending_rects, &rect, 0);
+
+  /* We are connected. */
+  cl->connected = 1;
 }
 
 static void rf_client_msg(void)
@@ -257,7 +282,7 @@ static void rf_client_updatereq(void)
               cur_slot->name);
   }
 
-  if (cl->update_in_progress) {
+  if (cl->update_in_progress || !cl->pending_rects.num_rects) {
     cl->update_requested = 1;
   } else {
     send_update();
@@ -277,7 +302,7 @@ static void wf_client_update_finished(void)
             cur_slot->name);
 
   cl->update_in_progress = 0;
-  if (cl->update_requested) {
+  if (cl->update_requested && cl->pending_rects.num_rects) {
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
@@ -306,31 +331,66 @@ static void rf_client_cuttext_data(void)
 }
 
 /*
+ * Functions called from host_io.c
+ */
+
+void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
+{
+  CL_SLOT *cl = (CL_SLOT *)slot;
+
+  rlist_add_rect(&cl->pending_rects, rect, 16);
+}
+
+void fn_client_send_rects(AIO_SLOT *slot)
+{
+  CL_SLOT *cl = (CL_SLOT *)slot;
+  AIO_SLOT *saved_slot = cur_slot;
+
+  if ( !cl->update_in_progress &&
+       cl->update_requested &&
+       cl->pending_rects.num_rects ) {
+    cur_slot = slot;
+    send_update();
+    cl->update_in_progress = 1;
+    cl->update_requested = 0;
+    cl->update_full = 0;
+    cur_slot = saved_slot;
+  }
+}
+
+/*
  * Non-callback functions
  */
 
 static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
-  unsigned char msg_hdr[16] = {
-    0, 0, 0, 1,
+  CARD8 msg_hdr[4] = {
+    0, 0, 0, 1
+  };
+  CARD8 rect_hdr[12] = {
     0, 0, 0, 0,
     0, 0, 0, 0,
     0, 0, 0, 0
   };
+  FB_RECT rect;
 
   /* FIXME: This sends the whole framebuffer to the client! */
 
-  log_write(LL_DEBUG, "Sending framebuffer update to %s",
-            cur_slot->name);
+  log_write(LL_DEBUG, "Sending framebuffer update (%d rects) to %s",
+            cl->pending_rects.num_rects, cl->s.name);
 
-  buf_put_CARD16(&msg_hdr[8], g_screen_info->width);
-  buf_put_CARD16(&msg_hdr[10], g_screen_info->height);
+  buf_put_CARD16(&msg_hdr[2], cl->pending_rects.num_rects);
+  aio_write(NULL, msg_hdr, 4);
 
-  aio_write(NULL, msg_hdr, 16);
-  aio_write_nocopy(wf_client_update_finished,
-                   rfb_encode_raw_block(&cl->format, 0, 0,
-                                        g_screen_info->width,
-                                        g_screen_info->height));
+  while (rlist_pick_rect(&cl->pending_rects, &rect)) {
+    buf_put_CARD16(rect_hdr, rect.x);
+    buf_put_CARD16(&rect_hdr[2], rect.y);
+    buf_put_CARD16(&rect_hdr[4], rect.w);
+    buf_put_CARD16(&rect_hdr[6], rect.h);
+    aio_write(NULL, rect_hdr, 12);
+    aio_write_nocopy(wf_client_update_finished,
+                     rfb_encode_raw_block(&cl->format, &rect));
+  }
 }
 

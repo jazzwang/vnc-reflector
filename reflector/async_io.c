@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.7 2001/08/04 17:25:17 const Exp $
+ * $Id: async_io.c,v 1.8 2001/08/04 21:58:57 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -185,6 +185,24 @@ int aio_listen(int port, AIO_FUNCPTR acceptfunc, size_t slot_size)
   s_new_slot_size = slot_size;
 
   return 1;
+}
+
+/*
+ * Iterate over a list of connection slots with specified type.
+ */
+
+void aio_walk_slots(AIO_FUNCPTR fn, int type)
+{
+  AIO_SLOT *slot, *next_slot;
+
+  slot = s_first_slot;
+  while (slot != NULL && !s_close_f) {
+    next_slot = slot->next;
+    if (slot->type == type) {
+      (*fn)(slot);
+    }
+    slot = next_slot;
+  }
 }
 
 /*
