@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.42 2002/09/21 12:43:01 const Exp $
+ * $Id: client_io.c,v 1.43 2002/09/30 05:11:19 const Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -55,6 +55,7 @@ static void rf_client_cuttext_hdr(void);
 static void rf_client_cuttext_data(void);
 
 static void set_trans_func(CL_SLOT *cl);
+static void send_newfbsize(void);
 static void send_update(void);
 
 /*
@@ -234,6 +235,7 @@ static void rf_client_initmsg(void)
   cl->update_requested = 0;
   cl->update_in_progress = 0;
   REGION_INIT(&cl->pending_region, NullBox, 10);
+  cl->newfbsize_pending = 0;
 
   /* We are connected. */
   cl->connected = 1;
@@ -393,6 +395,10 @@ static void rf_client_updatereq(void)
   rect.x2 = rect.x1 + buf_get_CARD16(&cur_slot->readbuf[5]);
   rect.y2 = rect.y1 + buf_get_CARD16(&cur_slot->readbuf[7]);
 
+  cl->update_rect = rect;
+
+  /* FIXME: Always clip the requested rectangle to the framebuffer size? */
+
   if (!cur_slot->readbuf[0]) {
     log_write(LL_DEBUG, "Received framebuffer update request (full) from %s",
               cur_slot->name);
@@ -400,17 +406,17 @@ static void rf_client_updatereq(void)
     REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
     REGION_UNINIT(&tmp_region);
   } else {
-    cl->update_rect = rect;
     log_write(LL_DEBUG, "Received framebuffer update request from %s",
               cur_slot->name);
   }
 
-  if (cl->update_in_progress || !REGION_NOTEMPTY(&cl->pending_region)) {
-    cl->update_requested = 1;
-  } else {
+  if (!cl->update_in_progress &&
+      (cl->newfbsize_pending || REGION_NOTEMPTY(&cl->pending_region))) {
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
+  } else {
+    cl->update_requested = 1;
   }
 
   aio_setread(rf_client_msg, NULL, 1);
@@ -424,7 +430,8 @@ static void wf_client_update_finished(void)
             cur_slot->name);
 
   cl->update_in_progress = 0;
-  if (cl->update_requested && !REGION_NOTEMPTY(&cl->pending_region)) {
+  if (cl->update_requested &&
+      (cl->newfbsize_pending || REGION_NOTEMPTY(&cl->pending_region))) {
     send_update();
     cl->update_in_progress = 1;
     cl->update_requested = 0;
@@ -502,7 +509,7 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
   RegionRec tmp_region, clip_region;
   BoxRec tmp_rect;
 
-  if (!cl->connected)
+  if (!cl->connected || cl->newfbsize_pending)
     return;
 
   tmp_rect.x1 = rect->x;
@@ -515,15 +522,12 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect)
       cl->fb_width = rect->w;
       cl->fb_height = rect->h;
       if (cl->enable_newfbsize) {
-        REGION_INIT(&tmp_region, &tmp_rect, 1);
-        REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
-        REGION_UNINIT(&tmp_region);
-        /* FIXME: The line below is a HACK!
-           This update_rect stuff should be redesigned. */
-        cl->update_rect = tmp_rect;
+        REGION_EMPTY(&cl->pending_region);
+        cl->newfbsize_pending = 1;
       }
     }
   } else {
+    /* FIXME: Is cl->update_rect always set correctly? */
     REGION_INIT(&tmp_region, &tmp_rect, 4);
     REGION_INIT(&clip_region, &cl->update_rect, 1)
     REGION_INTERSECT(&tmp_region, &tmp_region, &clip_region);
@@ -538,9 +542,8 @@ void fn_client_send_rects(AIO_SLOT *slot)
   CL_SLOT *cl = (CL_SLOT *)slot;
   AIO_SLOT *saved_slot = cur_slot;
 
-  if ( !cl->update_in_progress &&
-       cl->update_requested &&
-       REGION_NOTEMPTY(&cl->pending_region) ) {
+  if (!cl->update_in_progress && cl->update_requested &&
+      (cl->newfbsize_pending || REGION_NOTEMPTY(&cl->pending_region))) {
     cur_slot = slot;
     send_update();
     cl->update_in_progress = 1;
@@ -621,6 +624,39 @@ static void set_trans_func(CL_SLOT *cl)
   }
 }
 
+static void send_newfbsize(void)
+{
+  CL_SLOT *cl = (CL_SLOT *)cur_slot;
+  CARD8 msg_hdr[4] = {
+    0, 0, 0, 1
+  };
+  CARD8 rect_hdr[12];
+  FB_RECT rect;
+  BoxRec tmp_rect;
+  RegionRec tmp_region;
+
+  log_write(LL_DEBUG, "Sending NewFBSize update (%dx%d) to %s",
+            (int)cl->fb_width, (int)cl->fb_height, cur_slot->name);
+
+  buf_put_CARD16(&msg_hdr[2], 1);
+  aio_write(NULL, msg_hdr, 4);
+
+  tmp_rect.x1 = rect.x = 0;
+  tmp_rect.y1 = rect.y = 0;
+  tmp_rect.x2 = rect.w = cl->fb_width;
+  tmp_rect.y2 = rect.h = cl->fb_height;
+  rect.enc = RFB_ENCODING_NEWFBSIZE;
+
+  put_rect_header(rect_hdr, &rect);
+  aio_write(wf_client_update_finished, rect_hdr, 12);
+  cl->newfbsize_pending = 0;
+
+  /* FIXME: Clip to cl->update_rect? */
+  REGION_INIT(&tmp_region, &tmp_rect, 1);
+  REGION_UNION(&cl->pending_region, &cl->pending_region, &tmp_region);
+  REGION_UNINIT(&tmp_region);
+}
+
 static void send_update(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
@@ -634,7 +670,12 @@ static void send_update(void)
   int raw_bytes = 0, hextile_bytes = 0;
   int i;
 
-  log_write(LL_DEBUG, "Sending framebuffer update (%d rects max) to %s",
+  if (cl->newfbsize_pending) {
+    send_newfbsize();
+    return;
+  }
+
+  log_write(LL_DEBUG, "Sending framebuffer update (min %d rects) to %s",
             REGION_NUM_RECTS(&cl->pending_region), cur_slot->name);
 
   /* Prepare and send FramebufferUpdate message header */
@@ -656,17 +697,7 @@ static void send_update(void)
               (int)rect.w, (int)rect.h, (int)rect.x, (int)rect.y,
               cur_slot->name);
 
-    if (rect.enc == RFB_ENCODING_NEWFBSIZE) {
-      /* NewFBSize (cl->enable_newfbsize assumed to be not 0) */
-      put_rect_header(rect_hdr, &rect);
-      aio_write(wf_client_update_finished, rect_hdr, 12);
-      REGION_EMPTY(&cl->pending_region);
-      return;                   /* Important! */
-    } else if (rect.enc == RFB_ENCODING_COPYRECT &&
-               cl->enc_enable[RFB_ENCODING_COPYRECT] ) {
-      /* CopyRect */
-      block = rfb_encode_copyrect_block(cl, &rect);
-    } else if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
+    if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
       /* Use Tight encoding */
       rect.enc = RFB_ENCODING_TIGHT;
       rfb_encode_tight(cl, &rect);
