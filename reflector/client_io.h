@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.h,v 1.28 2004/08/08 15:23:35 const_k Exp $
+ * $Id: client_io.h,v 1.29 2004/10/14 20:02:54 grolloj Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -77,5 +77,6 @@ extern FB_RECT *crsr_get_pos_rect(void);
 extern CARD8 *crsr_get_col(void);
 extern CARD8 *crsr_get_bmps(void);
 extern int crsr_get_type(void);
+extern int crsr_has_pos_rect(void);
 
 #endif /* _REFLIB_CLIENT_IO_H */
