@@ -1,7 +1,7 @@
 /* VNC Reflector Lib
  * Copyright (C) 2001 Const Kaplinsky
  *
- * $Id: async_io.c,v 1.5 2001/08/03 06:52:54 const Exp $
+ * $Id: async_io.c,v 1.6 2001/08/04 12:26:03 const Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -15,6 +15,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "async_io.h"
 
@@ -63,6 +64,7 @@ static void aio_destroy_slot(AIO_SLOT *slot, int fatal);
 
 void aio_init(void)
 {
+  signal(SIGPIPE, SIG_IGN);
   FD_ZERO(&s_fdset_read);
   FD_ZERO(&s_fdset_write);
   s_max_fd = 0;
