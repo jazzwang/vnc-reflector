@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.38 2001/12/04 14:15:48 const Exp $
+ * $Id: main.c,v 1.39 2002/07/05 12:41:29 const Exp $
  * Main module
  */
 
@@ -50,6 +50,7 @@ static int   opt_stderr_loglevel;
 static int   opt_file_loglevel;
 static char  opt_pid_file[256];
 static char *opt_fbs_prefix;
+static int   opt_join_sessions;
 static char *opt_bind_ip;
 
 static unsigned char opt_client_password[9];
@@ -129,7 +130,7 @@ int main(int argc, char **argv)
   if (init_screen_info()) {
     read_password_file();
     set_client_passwords(opt_client_password, opt_client_ro_password);
-    host_set_fbs_prefix(opt_fbs_prefix);
+    host_set_fbs_prefix(opt_fbs_prefix, opt_join_sessions);
 
     aio_init();
     if (opt_bind_ip != NULL) {
@@ -196,15 +197,19 @@ static void parse_args(int argc, char **argv)
   opt_cl_listen_port = -1;
   opt_pid_file[0] = '\0';
   opt_fbs_prefix = NULL;
+  opt_join_sessions = 0;
   opt_bind_ip = NULL;
 
-  while (!err && (c = getopt(argc, argv, "hqv:f:p:g:l:i:s:b:")) != -1) {
+  while (!err && (c = getopt(argc, argv, "hqjv:f:p:g:l:i:s:b:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
       break;
     case 'q':
       opt_no_banner = 1;
+      break;
+    case 'j':
+      opt_join_sessions = 1;
       break;
     case 'v':
       if (opt_file_loglevel != -1)
@@ -302,25 +307,29 @@ static void report_usage(char *program_name)
   fprintf(stderr,
           "Options:\n"
           "  -i PID_FILE     - write pid file, appending listening port"
-          " to filename\n"
-          "  -p PASSWD_FILE  - read plaintext client password file"
+          " to the filename\n"
+          "  -p PASSWD_FILE  - read a plaintext client password file"
           " [default: passwd]\n"
           "  -l LISTEN_PORT  - port to listen for client connections"
           " [default: 5999]\n"
-          "  -b IP_ADDRESS   - bind listening sockets to specific IP"
+          "  -b IP_ADDRESS   - bind listening sockets to a specific IP"
           " [default: any]\n");
   fprintf(stderr,
           "  -s FBS_PREFIX   - save host sessions in rfbproxy-compatible"
-          " files,\n"
-          "                    appending 3-digit session IDs to"
-          " filename prefix\n"
-          "  -g LOG_FILE     - write logs to specified file"
+          " files\n"
+          "                    (optionally appending 3-digit session IDs"
+          " to the\n"
+          "                    filename prefix, only if used without the"
+          " -j option)\n"
+          "  -j              - join saved sessions (see -s option) in one"
+          " session file\n"
+          "  -g LOG_FILE     - write logs to the specified file"
           " [default: reflector.log]\n");
   fprintf(stderr,
-          "  -v LOG_LEVEL    - set verbosity level for log file (0..%d)"
+          "  -v LOG_LEVEL    - set verbosity level for the log file (0..%d)"
           " [default: %d]\n"
           "  -f LOG_LEVEL    - run in foreground, show logs on stderr"
-          " at specified\n"
+          " at the specified\n"
           "                    verbosity level (0..%d) [note: use %d for"
           " normal output]\n"
           "  -q              - suppress printing copyright banner at startup\n"

@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.h,v 1.9 2001/12/02 08:30:07 const Exp $
+ * $Id: host_io.h,v 1.10 2002/07/05 12:41:29 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -30,7 +30,7 @@ typedef struct _HOST_SLOT {
   CARD16 fb_height;
 } HOST_SLOT;
 
-void host_set_fbs_prefix(char *fbs_prefix);
+void host_set_fbs_prefix(char *fbs_prefix, int join_sessions);
 void host_activate(void);
 void host_close_hook(void);
 

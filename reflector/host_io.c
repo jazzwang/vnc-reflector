@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.34 2001/12/02 08:30:07 const Exp $
+ * $Id: host_io.c,v 1.35 2002/07/05 12:41:29 const Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -75,15 +75,19 @@ static AIO_SLOT *s_host_slot = NULL;
 static AIO_SLOT *s_new_slot = NULL;
 
 static char *s_fbs_prefix = NULL;
+static int s_join_sessions;
 static int s_fbs_idx = 0;
 static FILE *s_fbs_fp = NULL;
 static CARD8 *s_fbs_buffer, *s_fbs_buffer_ptr;
 static struct timeval s_fbs_start_time, s_fbs_time;
 static struct timezone s_fbs_timezone;
+static CARD16 s_fbs_fb_width, s_fbs_fb_height;
 
-void host_set_fbs_prefix(char *fbs_prefix)
+
+void host_set_fbs_prefix(char *fbs_prefix, int join_sessions)
 {
   s_fbs_prefix = fbs_prefix;
+  s_join_sessions = join_sessions;
   s_fbs_idx = 0;
 }
 
@@ -168,10 +172,8 @@ static void host_really_activate(AIO_SLOT *slot)
   g_screen_info.height = hs->fb_height;
 
   /* If requested, open file to save this session and write the header */
-  if (s_fbs_prefix != NULL) {
-    s_fbs_idx++;
+  if (s_fbs_prefix != NULL)
     fbs_open_file(hs);
-  }
 
   cur_slot = slot;
 
@@ -682,56 +684,97 @@ void pass_cuttext_to_host(CARD8 *text, size_t len)
 static void fbs_open_file(HOST_SLOT *hs)
 {
   int max_rect_size, w, h;
+  CARD32 len;
   char fname[256];
   char fbs_header[256];
-  CARD32 len;
+  char fbs_desktop_name[] = "RFB session archived by VNC Reflector";
+  CARD8 fbs_newfbsize_msg[16] = {
+    0, 0, 0, 1,                 /* msg header */
+    0, 0, 0, 0, 0, 0, 0, 0,     /* x, y, w, h */
+    0, 0, 0, 0                  /* encoding   */
+  };
 
-  /* First, remember current time */
-  gettimeofday(&s_fbs_start_time, &s_fbs_timezone);
+  /* Increment session number */
+  s_fbs_idx++;
+  if (s_fbs_idx > 999)
+    s_fbs_idx = 0;
 
-  /* Prepare file name suffixed with session number */
+  /* Prepare file name optionally suffixed with session number */
   len = strlen(s_fbs_prefix);
   if (len + 4 > 255) {
     log_write(LL_WARN, "FBS filename prefix too long");
     s_fbs_prefix = NULL;
     return;
   }
-  if (s_fbs_idx > 999) {
-    s_fbs_idx = 0;
-  }
-  sprintf(fname, "%s.%03d", s_fbs_prefix, s_fbs_idx);
-
-  /* Open the file */
-  s_fbs_fp = fopen(fname, "w");
-  if (s_fbs_fp == NULL) {
-    log_write(LL_WARN, "Could not open FBS file for writing");
-    s_fbs_prefix = NULL;
-    return;
-  }
-  log_write(LL_MSG, "Opened FBS file for writing: %s", fname);
-
-  /* Write file header */
-  if (fwrite("FBS 001.000\n", 1, 12, s_fbs_fp) != 12) {
-    log_write(LL_WARN, "Could not write FBS file header");
-    fclose(s_fbs_fp);
-    s_fbs_fp = NULL;
-    return;
+  if (!s_join_sessions) {
+    sprintf(fname, "%s.%03d", s_fbs_prefix, s_fbs_idx);
+  } else {
+    strcpy(fname, s_fbs_prefix);
   }
 
-  /* Prepare stream header data */
-  memcpy(fbs_header, "RFB 003.003\n", 12);
-  buf_put_CARD32(&fbs_header[12], 1);
-  buf_put_CARD16(&fbs_header[16], hs->fb_width);
-  buf_put_CARD16(&fbs_header[18], hs->fb_height);
-  buf_put_pixfmt(&fbs_header[20], &g_screen_info.pixformat);
-  len = g_screen_info.name_length;
-  if (len > 192)
-    len = 192;
-  buf_put_CARD32(&fbs_header[36], len);
-  memcpy(&fbs_header[40], g_screen_info.name, len);
+  if (!s_join_sessions || s_fbs_idx == 1) {
 
-  /* Write stream header data */
-  fbs_write_data(fbs_header, 40 + len);
+    /* Open the file */
+    s_fbs_fp = fopen(fname, "w");
+    if (s_fbs_fp == NULL) {
+      log_write(LL_WARN, "Could not open FBS file for writing");
+      s_fbs_prefix = NULL;
+      return;
+    }
+    log_write(LL_MSG, "Opened FBS file for writing: %s", fname);
+
+    /* Remember current time */
+    gettimeofday(&s_fbs_start_time, &s_fbs_timezone);
+
+    /* Write file header */
+    if (fwrite("FBS 001.000\n", 1, 12, s_fbs_fp) != 12) {
+      log_write(LL_WARN, "Could not write FBS file header");
+      fclose(s_fbs_fp);
+      s_fbs_fp = NULL;
+      return;
+    }
+
+    /* Prepare stream header data */
+    memcpy(fbs_header, "RFB 003.003\n", 12);
+    buf_put_CARD32(&fbs_header[12], 1);
+    buf_put_CARD16(&fbs_header[16], hs->fb_width);
+    buf_put_CARD16(&fbs_header[18], hs->fb_height);
+    buf_put_pixfmt(&fbs_header[20], &g_screen_info.pixformat);
+    if (!s_join_sessions) {
+      len = g_screen_info.name_length;
+      if (len > 192)
+        len = 192;
+      buf_put_CARD32(&fbs_header[36], len);
+      memcpy(&fbs_header[40], g_screen_info.name, len);
+    } else {
+      len = sizeof(fbs_desktop_name) - 1;
+      buf_put_CARD32(&fbs_header[36], len);
+      memcpy(&fbs_header[40], fbs_desktop_name, len);
+    }
+
+    /* Write stream header data */
+    fbs_write_data(fbs_header, 40 + len);
+
+  } else {                      /* Next session in the same file */
+
+    /* Open the file */
+    s_fbs_fp = fopen(fname, "a");
+    if (s_fbs_fp == NULL) {
+      log_write(LL_WARN, "Could not re-open FBS file for writing");
+      s_fbs_prefix = NULL;
+      return;
+    }
+    log_write(LL_MSG, "Re-opened FBS file for writing: %s", fname);
+
+    /* Write NewFBSize rect if framebuffer dimensions have changed */
+    if (s_fbs_fb_width != hs->fb_width || s_fbs_fb_height != hs->fb_height) {
+      buf_put_CARD16(&fbs_newfbsize_msg[8], hs->fb_width);
+      buf_put_CARD16(&fbs_newfbsize_msg[10], hs->fb_height);
+      buf_put_CARD32(&fbs_newfbsize_msg[12], RFB_ENCODING_NEWFBSIZE);
+      fbs_write_data(fbs_newfbsize_msg, sizeof(fbs_newfbsize_msg));
+    }
+
+  }
 
   /* Allocate memory to hold one rectangle of maximum size */
   if (s_fbs_fp != NULL) {
@@ -748,6 +791,12 @@ static void fbs_open_file(HOST_SLOT *hs)
                 max_rect_size);
       s_fbs_buffer_ptr = s_fbs_buffer;
     }
+  }
+
+  /* Remember framebuffer dimensions */
+  if (s_fbs_fp != NULL) {
+    s_fbs_fb_width = hs->fb_width;
+    s_fbs_fb_height = hs->fb_height;
   }
 }
 
