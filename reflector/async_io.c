@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: async_io.c,v 1.26 2003/04/26 19:47:23 const Exp $
+ * $Id: async_io.c,v 1.27 2003/10/09 15:06:31 const_k Exp $
  * Asynchronous file/socket I/O
  */
 
@@ -114,7 +114,7 @@ void aio_init(void)
 
 /*
  * Bind all listening sockets to specific interface specified by an IP
- * adress.
+ * address.
  */
 
 int aio_set_bind_address(char *bind_ip)
