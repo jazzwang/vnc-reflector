@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.c,v 1.48 2004/08/07 17:28:46 const_k Exp $
+ * $Id: host_io.c,v 1.49 2004/08/08 08:05:16 const_k Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -256,25 +256,35 @@ static void rf_host_fbupdate_recthdr(void)
 
   fbs_spool_data(cur_slot->readbuf, 12);
 
-  /* Handle LastRect "encoding" first */
+  /* Handle LastRect pseudo-encoding first */
   if (cur_rect.enc == RFB_ENCODING_LASTRECT) {
     log_write(LL_DEBUG, "LastRect marker received from the host");
-    cur_rect.x = cur_rect.y = 0;
+    cur_rect.x = cur_rect.y = 0; /* FIXME: */
     rect_count = 1;
     fbupdate_rect_done();
     return;
   }
 
-  /* Ignore zero-size rectangles */
-  if (cur_rect.enc != RFB_ENCODING_PTR_POS && (cur_rect.h == 0 || cur_rect.w == 0)) {
-    log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring), encoding 0x%08lX",
-              (int)cur_rect.w, (int)cur_rect.h,
-              (int)cur_rect.x, (int)cur_rect.y, cur_rect.enc);
+  /* PointerPos pseudo-encoding (pointer position changed on the host) */
+  if (cur_rect.enc == RFB_ENCODING_POINTERPOS) {
+    log_write(LL_DEBUG, "New pointer position received from the host");
+    setread_decode_pointerpos(&cur_rect);
+    cur_rect.x = cur_rect.y = 0; /* FIXME: */
     fbupdate_rect_done();
     return;
   }
 
-  /* Handle NewFBSize "encoding", as a special case */
+  /* Rectangles of remaining encodings should not be zero-size */
+  if (cur_rect.h == 0 || cur_rect.w == 0) {
+    log_write(LL_WARN, "Zero-size rectangle %dx%d at %d,%d (ignoring)",
+              (int)cur_rect.w, (int)cur_rect.h,
+              (int)cur_rect.x, (int)cur_rect.y);
+    fbupdate_rect_done();
+    return;
+  }
+
+  /* NewFBSize pseudo-encoding (new framebuffer size on the host) */
+  /* FIXME: Allow zero-size framebuffer? */
   if (cur_rect.enc == RFB_ENCODING_NEWFBSIZE) {
     log_write(LL_INFO, "New host desktop geometry: %dx%d",
               (int)cur_rect.w, (int)cur_rect.h);
@@ -287,7 +297,7 @@ static void rf_host_fbupdate_recthdr(void)
       return;
     }
 
-    cur_rect.x = cur_rect.y = 0;
+    cur_rect.x = cur_rect.y = 0; /* FIXME: */
 
     /* NewFBSize is always the last rectangle regardless of rect_count */
     rect_count = 1;
@@ -337,12 +347,8 @@ static void rf_host_fbupdate_recthdr(void)
     setread_decode_xcursor(&cur_rect);
     break;
   case RFB_ENCODING_RICHCURSOR:
-    log_write(LL_DEBUG, "Rich Cursor encoding.");
+    log_write(LL_DEBUG, "RichCursor encoding.");
     setread_decode_richcursor(&cur_rect);
-    break;
-  case RFB_ENCODING_PTR_POS:
-    log_write(LL_DEBUG, "Ptr pos encoding.");
-    setread_decode_ptr_pos(&cur_rect);
     break;
   default:
     log_write(LL_ERROR, "Unknown encoding: 0x%08lX",

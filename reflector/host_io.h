@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_io.h,v 1.16 2003/05/29 16:16:45 const_k Exp $
+ * $Id: host_io.h,v 1.17 2004/08/08 08:05:16 const_k Exp $
  * Asynchronous interaction with VNC host.
  */
 
@@ -49,5 +49,11 @@ extern void setread_decode_hextile(FB_RECT *r);
 
 extern void setread_decode_tight(FB_RECT *r);
 extern void reset_tight_streams(void);
+
+/* decode_cursor.c */
+
+extern void setread_decode_xcursor(FB_RECT *r);
+extern void setread_decode_richcursor(FB_RECT *r);
+extern void setread_decode_pointerpos(FB_RECT *r);
 
 #endif /* _REFLIB_HOST_IO_H */

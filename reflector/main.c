@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.50 2004/08/07 17:28:46 const_k Exp $
+ * $Id: main.c,v 1.51 2004/08/08 08:05:16 const_k Exp $
  * Main module
  */
 
@@ -212,8 +212,8 @@ static void parse_args(int argc, char **argv)
   opt_bind_ip = NULL;
   opt_request_tight = 0;
   opt_request_copyrect = 1;
-  opt_request_cursor = 0;
   opt_convert_copyrect = 0;
+  opt_request_cursor = 1;
   opt_tight_level = -1;
 
   while (!err &&
@@ -229,10 +229,7 @@ static void parse_args(int argc, char **argv)
       opt_join_sessions = 1;
       break;
     case 'x':
-      if (opt_request_cursor)
-        err = 1;
-      else
-        opt_request_cursor = 1;
+      opt_request_cursor = 0;
       break;
     case 'v':
       if (opt_file_loglevel != -1)
@@ -401,7 +398,9 @@ static void report_usage(char *program_name)
           "                    rectangles, so clients will never receive"
           " CopyRects\n"
           "  -R              - disable CopyRect completely on both host"
-          " and client sides\n");
+          " and client sides\n"
+          "  -x              - disable cursor shape and cursor position"
+          " updates\n");
   fprintf(stderr,
           "  -g LOG_FILE     - write logs to the specified file"
           " [default: reflector.log]\n"

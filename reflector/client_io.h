@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.h,v 1.26 2004/08/07 17:28:46 const_k Exp $
+ * $Id: client_io.h,v 1.27 2004/08/08 08:05:16 const_k Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -58,7 +58,7 @@ typedef struct _CL_SLOT {
   unsigned int enable_newfbsize   :1;
   unsigned int newfbsize_pending  :1;
   unsigned int newcursor_pending  :1;
-  unsigned int ptr_pos_pending    :1;
+  unsigned int pointerpos_pending :1;
 } CL_SLOT;
 
 void set_client_passwords(unsigned char *password, unsigned char *password_ro);
@@ -69,7 +69,7 @@ void fn_client_add_rect(AIO_SLOT *slot, FB_RECT *rect);
 void fn_client_send_rects(AIO_SLOT *slot);
 void fn_client_send_cuttext(AIO_SLOT *slot, CARD8 *text, size_t len);
 void fn_client_send_xcursor(AIO_SLOT *slot);
-void fn_client_send_ptr_pos(AIO_SLOT *slot);
+void fn_client_send_pointerpos(AIO_SLOT *slot);
 
 /* External functions for cursor updates */
 extern FB_RECT *crsr_get_rect(void);

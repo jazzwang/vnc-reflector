@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.36 2004/08/07 17:28:46 const_k Exp $
+ * $Id: host_connect.c,v 1.37 2004/08/08 08:05:16 const_k Exp $
  * Connecting to a VNC host
  */
 
@@ -434,7 +434,7 @@ static void rf_host_set_formats(void)
   if (s_request_cursor) {
     buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_XCURSOR);
     buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_RICHCURSOR);
-    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_PTR_POS);
+    buf_putsafe_CARD32(&setenc_msg[4 + num_enc++ * 4], RFB_ENCODING_POINTERPOS);
   }
 
 

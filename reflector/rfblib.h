@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: rfblib.h,v 1.26 2004/08/07 17:28:46 const_k Exp $
+ * $Id: rfblib.h,v 1.27 2004/08/08 08:05:16 const_k Exp $
  * RFB protocol definitions
  */
 
@@ -132,9 +132,10 @@ typedef struct _rfbXCursorColors {
 /*
  * Mouse cursor encodings
  */
+
 #define RFB_ENCODING_XCURSOR        0xFFFFFF10
 #define RFB_ENCODING_RICHCURSOR     0xFFFFFF11
-#define RFB_ENCODING_PTR_POS        0xFFFFFF18
+#define RFB_ENCODING_POINTERPOS     0xFFFFFF18
 
 /*
  * Hextile encoding

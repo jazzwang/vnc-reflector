@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: client_io.c,v 1.53 2004/08/07 17:28:46 const_k Exp $
+ * $Id: client_io.c,v 1.54 2004/08/08 08:05:16 const_k Exp $
  * Asynchronous interaction with VNC clients.
  */
 
@@ -57,7 +57,7 @@ static void rf_client_cuttext_data(void);
 static void set_trans_func(CL_SLOT *cl);
 static void send_newfbsize(void);
 static void send_cursorshape(void);
-static void send_ptr_pos(void);
+static void send_pointerpos(void);
 static void send_update(void);
 
 /*
@@ -380,7 +380,7 @@ static void rf_client_encodings_data(void)
 	cl->newcursor_pending = 1;
       log_write(LL_DETAIL, "Client %s supports Rich Cursor updates.",
 		cur_slot->name);
-    } else if (enc == RFB_ENCODING_PTR_POS) {
+    } else if (enc == RFB_ENCODING_POINTERPOS) {
       /* FIXME: anything to do here? */
       log_write(LL_ERROR, "Client %s supports Pointer Position updates.",
 		cur_slot->name);
@@ -451,7 +451,7 @@ static void rf_client_updatereq(void)
 
   if (!cl->update_in_progress &&
       (cl->newfbsize_pending ||
-       cl->ptr_pos_pending ||
+       cl->pointerpos_pending ||
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
@@ -470,7 +470,7 @@ static void wf_client_update_finished(void)
   cl->update_in_progress = 0;
   if (cl->update_requested &&
       (cl->newfbsize_pending ||
-       cl->ptr_pos_pending ||
+       cl->pointerpos_pending ||
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     send_update();
@@ -603,7 +603,7 @@ void fn_client_send_rects(AIO_SLOT *slot)
 
   if (!cl->update_in_progress && cl->update_requested &&
       (cl->newfbsize_pending ||
-       cl->ptr_pos_pending ||
+       cl->pointerpos_pending ||
        REGION_NOTEMPTY(&cl->pending_region) ||
        REGION_NOTEMPTY(&cl->copy_region))) {
     cur_slot = slot;
@@ -639,10 +639,10 @@ void fn_client_send_xcursor(AIO_SLOT *slot)
   cl->newcursor_pending = 1;
 }
 
-void fn_client_send_ptr_pos(AIO_SLOT *slot)
+void fn_client_send_pointerpos(AIO_SLOT *slot)
 {
   CL_SLOT *cl = (CL_SLOT *)slot;
-  cl->ptr_pos_pending = 1;
+  cl->pointerpos_pending = 1;
 }
 
 /*
@@ -760,7 +760,7 @@ void send_cursorshape(void)
   aio_write(NULL, bmps, size);
 }
 
-void send_ptr_pos(void)
+void send_pointerpos(void)
 {
   CL_SLOT *cl = (CL_SLOT *)cur_slot;
   CARD8 rect_hdr[12];
@@ -770,7 +770,7 @@ void send_ptr_pos(void)
     put_rect_header(rect_hdr, crsr_get_pos_rect());
     aio_write(NULL, rect_hdr, 12);
   }
-  cl->ptr_pos_pending = 0;
+  cl->pointerpos_pending = 0;
 }
 
 /*
@@ -851,7 +851,7 @@ static void send_update(void)
   num_all_rects = num_penging_rects + num_copy_rects;
   if (cl->newcursor_pending)
       num_all_rects++;
-  if (cl->ptr_pos_pending)
+  if (cl->pointerpos_pending)
       num_all_rects++;
   if (num_all_rects == 0)
     return;
@@ -953,8 +953,8 @@ static void send_update(void)
     send_cursorshape();
 
   /* pointer position update */
-  if (cl->ptr_pos_pending)
-    send_ptr_pos();
+  if (cl->pointerpos_pending)
+    send_pointerpos();
 
   /* Send LastRect marker. */
   if (cl->enc_prefer == RFB_ENCODING_TIGHT && cl->enable_lastrect) {
