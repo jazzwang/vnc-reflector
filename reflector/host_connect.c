@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: host_connect.c,v 1.22 2001/12/02 08:30:07 const Exp $
+ * $Id: host_connect.c,v 1.23 2001/12/04 14:15:48 const Exp $
  * Connecting to a VNC host
  */
 
@@ -147,8 +147,11 @@ static int parse_host_info(void)
     return 0;
   }
 
-  /* Truncate at the end of first line */
+  /* Truncate at the end of first line, respectinging MS-DOS end-of-lines */
   pos = strchr(buf, '\n');
+  if (pos != NULL)
+    *pos = '\0';
+  pos = strchr(buf, '\r');
   if (pos != NULL)
     *pos = '\0';
 
@@ -166,7 +169,7 @@ static int parse_host_info(void)
 
   colon_pos = strchr(buf, ':');
   if (colon_pos != NULL) {
-    if (!isdigit(colon_pos[1])) {
+    if (!isdigit(colon_pos[1]) && colon_pos[1] != '-') {
       log_write(LL_ERROR, "Non-numeric host display number: %s",
                 colon_pos + 1);
       return 0;

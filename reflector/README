@@ -73,19 +73,22 @@ Format of the HOST_INFO_FILE
 HOST_INFO_FILE provides information about the host to connect to. It's
 first line should begin with hostname (or with an asterisk if we would wait
 for reversed host->reflector connection). Next thing is VNC display number
-after a colon (or a port number, for reversed connections), then follows
-plaintext host password after a space.
+after a colon (or a TCP port number, for reversed connections). Then
+follows plaintext host password after a space. For non-reversed
+connections, negative display numbers are allowed (e.g. display number
+-5820 corresponds to port number 80 at the host side). For reversed
+connections, default listening port number is 5500.
 
-Sample to connect to some.hostname.com's display :0 (port 5900):
+A sample to connect to some.hostname.com's display :0 (port 5900):
 
 === cut ===
 some.hostname.com:0 PaS$w0rD
 === cut ===
 
-Sample to listen for host connection on the port 5998:
+A sample to listen for host connections on TCP port 5598:
 
 === cut ===
-*:5998 PaS$w0rD
+*:5598 PaS$w0rD
 === cut ===
 
 

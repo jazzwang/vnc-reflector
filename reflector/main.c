@@ -10,7 +10,7 @@
  * This software was authored by Constantin Kaplinsky <const@ce.cctpu.edu.ru>
  * and sponsored by HorizonLive.com, Inc.
  *
- * $Id: main.c,v 1.37 2001/12/02 08:30:07 const Exp $
+ * $Id: main.c,v 1.38 2001/12/04 14:15:48 const Exp $
  * Main module
  */
 
@@ -236,7 +236,7 @@ static void parse_args(int argc, char **argv)
         err = 1;
       else {
         opt_cl_listen_port = atoi(optarg);
-        if (opt_cl_listen_port < 0)
+        if (opt_cl_listen_port <= 0)
           err = 1;
       }
       break;
@@ -358,6 +358,8 @@ static int read_password_file(void)
   /* Read password file */
   while (line < 2) {
     c = getc(passwd_fp);
+    if (c == '\r')
+      c = getc(passwd_fp);      /* Handle MS-DOS-style end of line */
     if (c != '\n' && c != EOF && len < 8) {
       password_ptr[len++] = c;
     } else {
