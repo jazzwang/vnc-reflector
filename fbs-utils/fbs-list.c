@@ -1,0 +1,40 @@
+/*
+ * FrameBuffer Stream Utilities.
+ * Copyright (C) 2008 Wimba, Inc.  All rights reserved.
+ *
+ * This software is released under the terms specified in the file
+ * LICENSE, included.
+ */
+
+#include <stdio.h>
+
+#include "version.h"
+
+static void report_usage(char *program_name);
+
+int main (int argc, char *argv[])
+{
+  FILE *fp = stdin;
+  int needClose = 0;
+
+  if (argc == 2 && argv[1][0] != '-') {
+    fp = fopen(argv[1], "rb");
+    if (fp == NULL) {
+      fprintf(stderr, "Error opening file: %s\n", argv[1]);
+      return 1;
+    }
+  } else if (argc >= 2) {
+    report_usage(argv[0]);
+    return 1;
+  }
+
+  return 0;
+}
+
+static void report_usage(char *program_name)
+{
+  fprintf(stderr, "fbs-list version %s.\n%s\n\n", VERSION, COPYRIGHT);
+
+  fprintf(stderr, "Usage: %s [FBS_FILE]\n\n",
+          program_name);
+}
