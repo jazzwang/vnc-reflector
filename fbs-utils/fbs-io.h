@@ -22,7 +22,7 @@ typedef struct _FBSTREAM {
   int end_reached;
 } FBSTREAM;
 
-extern int new_fbstream(FBSTREAM *fbs, FILE *fp);
+extern int open_fbstream(FBSTREAM *fbs, FILE *fp);
 
 extern size_t get_block_consumed(FBSTREAM *fbs);
 extern size_t get_block_available(FBSTREAM *fbs);

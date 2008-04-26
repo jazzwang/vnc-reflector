@@ -12,11 +12,13 @@
 #include "fbs-io.h"
 
 static void report_usage(char *program_name);
+static int list_fbs(FILE *fp);
 
 int main (int argc, char *argv[])
 {
   FILE *fp = stdin;
   int needClose = 0;
+  int success = 0;
 
   if (argc == 2 && argv[1][0] != '-') {
     fp = fopen(argv[1], "rb");
@@ -29,10 +31,15 @@ int main (int argc, char *argv[])
     return 1;
   }
 
+  if (list_fbs(fp)) {
+    success = 1;
+  }
+
   if (needClose) {
     fclose(fp);
   }
-  return 0;
+
+  return success;
 }
 
 static void report_usage(char *program_name)
@@ -41,4 +48,14 @@ static void report_usage(char *program_name)
 
   fprintf(stderr, "Usage: %s [FBS_FILE]\n\n",
           program_name);
+}
+
+static int list_fbs(FILE *fp)
+{
+  FBSTREAM fbs;
+
+  if (!open_fbstream(&fbs, fp))
+    return 0;
+
+  return 1;
 }
