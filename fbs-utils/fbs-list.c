@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "version.h"
+#include "fbs-io.h"
 
 static void report_usage(char *program_name);
 
@@ -28,6 +29,9 @@ int main (int argc, char *argv[])
     return 1;
   }
 
+  if (needClose) {
+    fclose(fp);
+  }
   return 0;
 }
 
