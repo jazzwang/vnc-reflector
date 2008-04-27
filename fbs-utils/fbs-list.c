@@ -7,12 +7,17 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
 
+#include "rfblib.h"
 #include "version.h"
 #include "fbs-io.h"
 
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
+static int read_rfb_init(FBSTREAM *fbs);
 
 int main (int argc, char *argv[])
 {
@@ -54,9 +59,57 @@ static int list_fbs(FILE *fp)
 {
   FBSTREAM fbs;
 
-  if (!fbs_init(&fbs, fp))
+  if (!fbs_init(&fbs, fp)) {
     return 0;
+  }
+
+  if (!read_rfb_init(&fbs)) {
+    return 0;
+  }
 
   fbs_cleanup(&fbs);
+  return 1;
+}
+
+static int read_rfb_init(FBSTREAM *fbs)
+{
+  char buf_version[12];
+  char buf_sec_type[4];
+  char buf_server_init[24];
+  int width, height;
+  CARD32 desktop_name_bytes;
+  char *ptr_desktop_name;
+
+  if (!fbs_read(fbs, buf_version, 12)) {
+    return 0;
+  }
+  if (memcmp(buf_version, "RFB 003.003\n", 12) != 0) {
+    fprintf(stderr, "Incorrect RFB protocol version\n");
+    return 0;
+  }
+  if (!fbs_read(fbs, buf_sec_type, 4)) {
+    return 0;
+  }
+  if (buf_get_CARD32(buf_sec_type) != 1) {
+    fprintf(stderr, "Incorrect RFB protocol security type\n");
+    return 0;
+  }
+  if (!fbs_read(fbs, buf_server_init, 24)) {
+    return 0;
+  }
+  width = buf_get_CARD16(&buf_server_init[0]);
+  height = buf_get_CARD16(&buf_server_init[2]);
+  printf(" Desktop size: %dx%d\n", width, height);
+
+  desktop_name_bytes = buf_get_CARD32(&buf_server_init[20]);
+  /* FIXME: Check size. */
+  ptr_desktop_name = (char *)malloc(desktop_name_bytes + 1);
+  if (!fbs_read(fbs, ptr_desktop_name, desktop_name_bytes)) {
+    return 0;
+  }
+  ptr_desktop_name[desktop_name_bytes] = '\0';
+  printf(" Desktop name: %s\n", ptr_desktop_name);
+  free(ptr_desktop_name);
+
   return 1;
 }

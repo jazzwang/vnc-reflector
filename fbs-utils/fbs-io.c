@@ -49,6 +49,38 @@ void fbs_cleanup(FBSTREAM *fbs)
   fbs_free_block(fbs);
 }
 
+int fbs_getc(FBSTREAM *fbs)
+{
+  int c;
+
+  if (fbs->end_reached || fbs->block_data == NULL) {
+    return -1;
+  }
+
+  c = fbs->block_data[fbs->block_offset++] & 0xFF;
+  if (fbs->block_offset >= fbs->block_size) {
+    if (!fbs_read_block(fbs)) {
+      return -1;
+    }
+  }
+  return c;
+}
+
+int fbs_read(FBSTREAM *fbs, char *buf, size_t len)
+{
+  int i, c;
+
+  for (i = 0; i < len; i++) {
+    c = fbs_getc(fbs);
+    if (c < 0) {
+      return 0;
+    }
+    buf[i] = (char)c;
+  }
+
+  return 1;
+}
+
 size_t fbs_get_block_size(FBSTREAM *fbs)
 {
   return fbs->block_size;

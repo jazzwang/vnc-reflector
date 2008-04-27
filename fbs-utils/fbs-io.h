@@ -26,11 +26,16 @@ typedef struct _FBSTREAM {
 extern int fbs_init(FBSTREAM *fbs, FILE *fp);
 extern void fbs_cleanup(FBSTREAM *fbs);
 
+extern int fbs_getc(FBSTREAM *fbs);
+extern int fbs_read(FBSTREAM *fbs, char *buf, size_t len);
+
 extern size_t fbs_get_block_size(FBSTREAM *fbs);
 extern size_t fbs_get_block_offset(FBSTREAM *fbs);
 extern size_t fbs_get_file_offset(FBSTREAM *fbs);
 
 extern unsigned long fbs_get_last_byte_timestamp(FBSTREAM *fbs);
 extern unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs);
+
+extern int fbs_end_reached(FBSTREAM *fbs);
 
 #endif /* defined(_FBSUTIL_IO_H) */
