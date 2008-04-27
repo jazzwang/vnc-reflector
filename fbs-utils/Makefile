@@ -6,7 +6,7 @@
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
-IFLAGS =	-I.
+IFLAGS =	-I../reflector
 
 # Production
 CFLAGS =	-O2 $(IFLAGS)
@@ -41,7 +41,7 @@ clean:
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
 
 depend: $(SRCS)
-	$(MAKEDEPEND) $(MAKEDEPFLAGS) -I. $(SRCS) 2> /dev/null
+	$(MAKEDEPEND) $(MAKEDEPFLAGS) $(IFLAGS) $(SRCS) 2> /dev/null
 
 .c.o:
 	$(CC) $(CFLAGS) $(CONFFLAGS) -c $<
@@ -50,3 +50,4 @@ depend: $(SRCS)
 # DO NOT DELETE
 
 fbs-list.o: version.h fbs-io.h
+fbs-io.o: ../reflector/rfblib.h fbs-io.h

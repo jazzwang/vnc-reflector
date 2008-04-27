@@ -14,19 +14,21 @@
 
 typedef struct _FBSTREAM {
   FILE *fp;
-  size_t consumed;
-  size_t available;
-  size_t total_consumed;
-  unsigned long last_timestamp;
-  unsigned long next_timestamp;
+  char *block_data;
+  size_t block_size;
+  size_t block_offset;
+  size_t file_offset;
+  unsigned int timestamp;
+  unsigned int prev_timestamp;
   int end_reached;
 } FBSTREAM;
 
 extern int open_fbstream(FBSTREAM *fbs, FILE *fp);
+extern void close_fbstream(FBSTREAM *fbs);
 
-extern size_t get_block_consumed(FBSTREAM *fbs);
-extern size_t get_block_available(FBSTREAM *fbs);
-extern size_t get_total_consumed(FBSTREAM *fbs);
+extern size_t get_block_size(FBSTREAM *fbs);
+extern size_t get_block_offset(FBSTREAM *fbs);
+extern size_t get_file_offset(FBSTREAM *fbs);
 
 extern unsigned long get_last_byte_timestamp(FBSTREAM *fbs);
 extern unsigned long get_next_byte_timestamp(FBSTREAM *fbs);
