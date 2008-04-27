@@ -178,7 +178,7 @@ typedef struct _rfbXCursorColors {
   ((CARD32)((CARD8 *)(buf))[0] << 24 |          \
    (CARD32)((CARD8 *)(buf))[1] << 16 |          \
    (CARD32)((CARD8 *)(buf))[2] << 8  |          \
-   (CARD32)((CARD8 *)(buf))[3]);
+   (CARD32)((CARD8 *)(buf))[3])
 
 #define buf_put_CARD8(buf, value)               \
   *((CARD8 *)(buf)) = (CARD8)(value);
