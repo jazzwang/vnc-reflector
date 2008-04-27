@@ -37,10 +37,8 @@ int open_fbstream(FBSTREAM *fbs, FILE *fp)
     return 0;
   }
 
-  while(1) {
-    if (!read_block(fbs)) {
-      return 0;
-    }
+  if (!read_block(fbs)) {
+    return 0;
   }
 
   return 1;
@@ -96,8 +94,8 @@ static int read_block(FBSTREAM *fbs)
   fbs->block_offset = 0;
   fbs->block_data = malloc(fbs->block_size);
 
+  /* Data is padded to multiple of 4 bytes. */
   buf_size = (buf_size + 3) & (~3);
-  printf("%u -> %u\n", fbs->block_size, buf_size); /* DEBUG: */
 
   if (fread(fbs->block_data, 1, buf_size, fbs->fp) != buf_size) {
     fprintf(stderr, "Error reading data\n");
