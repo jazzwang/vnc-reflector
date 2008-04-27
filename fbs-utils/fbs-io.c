@@ -75,26 +75,45 @@ unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs)
   return fbs->timestamp;
 }
 
+int fbs_end_reached(FBSTREAM *fbs)
+{
+  return fbs->end_reached;
+}
+
 /************************* Private Code *************************/
+
+static const size_t MAX_BLOCK_SIZE = 1024 * 1024;
 
 static int fbs_read_block(FBSTREAM *fbs)
 {
   char buf[4];
   size_t buf_size;
+  int n;
 
   fbs_free_block(fbs);
 
-  if (fread(buf, 1, 4, fbs->fp) != 4) {
+  n = fread(buf, 1, 4, fbs->fp);
+  if (n == 0 && feof(fbs->fp)) {
+    fbs->end_reached = 1;
+    fbs_free_block(fbs);
+    return 1;
+  }
+  if (n != 4) {
     fprintf(stderr, "Error reading block header\n");
     return 0;
   }
 
-  fbs->block_size = buf_size = buf_get_CARD32(buf);
-  fbs->block_offset = 0;
-  fbs->block_data = malloc(fbs->block_size);
+  fbs->block_size = buf_get_CARD32(buf);
+  if (fbs->block_size == 0 || fbs->block_size > MAX_BLOCK_SIZE) {
+    fprintf(stderr, "Bad block size: %d\n", fbs->block_size);
+    return 0;
+  }
 
   /* Data is padded to multiple of 4 bytes. */
-  buf_size = (buf_size + 3) & (~3);
+  buf_size = (fbs->block_size + 3) & (~3);
+
+  fbs->block_offset = 0;
+  fbs->block_data = malloc(buf_size);
 
   if (fread(fbs->block_data, 1, buf_size, fbs->fp) != buf_size) {
     fprintf(stderr, "Error reading data\n");
@@ -102,7 +121,7 @@ static int fbs_read_block(FBSTREAM *fbs)
   }
 
   if (fread(buf, 1, 4, fbs->fp) != 4) {
-    fprintf(stderr, "Error reading block header\n");
+    fprintf(stderr, "Error reading block timestamp\n");
     return 0;
   }
 
