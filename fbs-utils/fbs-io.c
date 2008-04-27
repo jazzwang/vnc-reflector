@@ -14,12 +14,12 @@
 #include "rfblib.h"
 #include "fbs-io.h"
 
-static int read_block(FBSTREAM *fbs);
-static void free_block(FBSTREAM *fbs);
+static int fbs_read_block(FBSTREAM *fbs);
+static void fbs_free_block(FBSTREAM *fbs);
 
 /************************* Public Functions *************************/
 
-int open_fbstream(FBSTREAM *fbs, FILE *fp)
+int fbs_init(FBSTREAM *fbs, FILE *fp)
 {
   char version_msg[12];
 
@@ -37,53 +37,52 @@ int open_fbstream(FBSTREAM *fbs, FILE *fp)
     return 0;
   }
 
-  if (!read_block(fbs)) {
+  if (!fbs_read_block(fbs)) {
     return 0;
   }
 
   return 1;
 }
 
-void close_fbstream(FBSTREAM *fbs)
+void fbs_cleanup(FBSTREAM *fbs)
 {
-  /* NOTE: We do not close the file itself! */
-  free_block(fbs);
+  fbs_free_block(fbs);
 }
 
-size_t get_block_size(FBSTREAM *fbs)
+size_t fbs_get_block_size(FBSTREAM *fbs)
 {
   return fbs->block_size;
 }
 
-size_t get_block_offset(FBSTREAM *fbs)
+size_t fbs_get_block_offset(FBSTREAM *fbs)
 {
   return fbs->block_offset;
 }
 
 
-size_t get_file_offset(FBSTREAM *fbs)
+size_t fbs_get_file_offset(FBSTREAM *fbs)
 {
   return fbs->file_offset;
 }
 
-unsigned long get_last_byte_timestamp(FBSTREAM *fbs)
+unsigned long fbs_get_last_byte_timestamp(FBSTREAM *fbs)
 {
   return (fbs->block_offset > 0) ? fbs->timestamp : fbs->prev_timestamp;
 }
 
-unsigned long get_next_byte_timestamp(FBSTREAM *fbs)
+unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs)
 {
   return fbs->timestamp;
 }
 
 /************************* Private Code *************************/
 
-static int read_block(FBSTREAM *fbs)
+static int fbs_read_block(FBSTREAM *fbs)
 {
   char buf[4];
   size_t buf_size;
 
-  free_block(fbs);
+  fbs_free_block(fbs);
 
   if (fread(buf, 1, 4, fbs->fp) != 4) {
     fprintf(stderr, "Error reading block header\n");
@@ -113,7 +112,7 @@ static int read_block(FBSTREAM *fbs)
   return 1;
 }
 
-static void free_block(FBSTREAM *fbs)
+static void fbs_free_block(FBSTREAM *fbs)
 {
   if (fbs->block_data != NULL) {
     free(fbs->block_data);

@@ -23,14 +23,14 @@ typedef struct _FBSTREAM {
   int end_reached;
 } FBSTREAM;
 
-extern int open_fbstream(FBSTREAM *fbs, FILE *fp);
-extern void close_fbstream(FBSTREAM *fbs);
+extern int fbs_init(FBSTREAM *fbs, FILE *fp);
+extern void fbs_cleanup(FBSTREAM *fbs);
 
-extern size_t get_block_size(FBSTREAM *fbs);
-extern size_t get_block_offset(FBSTREAM *fbs);
-extern size_t get_file_offset(FBSTREAM *fbs);
+extern size_t fbs_get_block_size(FBSTREAM *fbs);
+extern size_t fbs_get_block_offset(FBSTREAM *fbs);
+extern size_t fbs_get_file_offset(FBSTREAM *fbs);
 
-extern unsigned long get_last_byte_timestamp(FBSTREAM *fbs);
-extern unsigned long get_next_byte_timestamp(FBSTREAM *fbs);
+extern unsigned long fbs_get_last_byte_timestamp(FBSTREAM *fbs);
+extern unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs);
 
 #endif /* defined(_FBSUTIL_IO_H) */

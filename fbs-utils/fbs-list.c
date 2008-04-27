@@ -54,8 +54,9 @@ static int list_fbs(FILE *fp)
 {
   FBSTREAM fbs;
 
-  if (!open_fbstream(&fbs, fp))
+  if (!fbs_init(&fbs, fp))
     return 0;
 
+  fbs_cleanup(&fbs);
   return 1;
 }
