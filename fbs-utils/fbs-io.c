@@ -66,6 +66,9 @@ int fbs_getc(FBSTREAM *fbs)
   return c;
 }
 
+/*
+ * FIXME: Using fbs_getc() to read each byte is inefficient.
+ */
 int fbs_read(FBSTREAM *fbs, char *buf, size_t len)
 {
   int i, c;
