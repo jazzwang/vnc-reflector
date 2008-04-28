@@ -15,6 +15,8 @@
 #include "version.h"
 #include "fbs-io.h"
 
+static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
+
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
@@ -104,7 +106,11 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   read_pixel_format(scr, &buf_server_init[4]);
 
   scr->name_length = buf_get_CARD32(&buf_server_init[20]);
-  /* FIXME: Check size. */
+  if (scr->name_length > MAX_DESKTOP_NAME_SIZE) {
+    fprintf(stderr, "Desktop name too long: %u bytes\n",
+            (unsigned int)scr->name_length);
+    return 0;
+  }
   scr->name = (CARD8 *)malloc(scr->name_length + 1);
   if (!fbs_read(fbs, (char *)scr->name, scr->name_length)) {
     return 0;
