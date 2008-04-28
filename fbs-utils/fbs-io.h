@@ -74,6 +74,11 @@ extern void fbs_cleanup(FBSTREAM *fbs);
  * The return value is either the byte sucessfully read (as an
  * unsigned char converted to an int), or -1 if there was an error or
  * the end of file has been reached.
+ *
+ * Note that this function may read data ahead, and thus may print
+ * error messages for future data, while current read was successful.
+ * If such an error message was produced on stderr, then the following
+ * read operation will certainly fail.
  */
 extern int fbs_getc(FBSTREAM *fbs);
 
@@ -87,6 +92,11 @@ extern int fbs_getc(FBSTREAM *fbs);
  * reached. If the return value is 0, the buffer contents should be
  * considered undefined, as some unknown amount of data may have been
  * written to it.
+ *
+ * Just like fbs_getc(), this function may read data ahead, and thus
+ * may print error messages for future data, while current read was
+ * successful. If such an error message was produced on stderr, then
+ * the following read operation will certainly fail.
  */
 extern int fbs_read(FBSTREAM *fbs, char *buf, size_t len);
 
