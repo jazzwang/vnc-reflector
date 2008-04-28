@@ -53,15 +53,15 @@ int fbs_getc(FBSTREAM *fbs)
 {
   int c;
 
-  if (fbs->end_reached || fbs->block_data == NULL) {
+  if (fbs->block_data == NULL) {
     return -1;
   }
 
-  c = fbs->block_data[fbs->block_offset++] & 0xFF;
+  c = fbs->block_data[fbs->block_offset] & 0xFF;
+  fbs->block_offset++;
+  fbs->file_offset++;
   if (fbs->block_offset >= fbs->block_size) {
-    if (!fbs_read_block(fbs)) {
-      return -1;
-    }
+    fbs_read_block(fbs);
   }
   return c;
 }
@@ -130,7 +130,6 @@ static int fbs_read_block(FBSTREAM *fbs)
   n = fread(buf, 1, 4, fbs->fp);
   if (n == 0 && feof(fbs->fp)) {
     fbs->end_reached = 1;
-    fbs_free_block(fbs);
     return 1;
   }
   if (n != 4) {
@@ -152,11 +151,13 @@ static int fbs_read_block(FBSTREAM *fbs)
 
   if (fread(fbs->block_data, 1, buf_size, fbs->fp) != buf_size) {
     fprintf(stderr, "Error reading data\n");
+    fbs_free_block();
     return 0;
   }
 
   if (fread(buf, 1, 4, fbs->fp) != 4) {
     fprintf(stderr, "Error reading block timestamp\n");
+    fbs_free_block();
     return 0;
   }
 
