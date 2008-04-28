@@ -112,8 +112,7 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   read_pixel_format(scr, &buf_server_init[4]);
 
   if (!tight_24bits_format(scr)) {
-    fprintf(stderr, "Unsupported RFB pixel format (non-24-bits)\n");
-    return 0;
+    fprintf(stderr, "Warning: Pixel format does not look good - ignoring\n");
   }
 
   scr->name_length = buf_get_CARD32(&buf_server_init[20]);
