@@ -18,6 +18,9 @@
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs);
+static void report_rfb_init(char buf_version[12],
+                            char buf_server_init[24],
+                            char *ptr_desktop_name);
 
 int main (int argc, char *argv[])
 {
@@ -76,7 +79,6 @@ static int read_rfb_init(FBSTREAM *fbs)
   char buf_version[12];
   char buf_sec_type[4];
   char buf_server_init[24];
-  int width, height;
   CARD32 desktop_name_bytes;
   char *ptr_desktop_name;
 
@@ -97,9 +99,6 @@ static int read_rfb_init(FBSTREAM *fbs)
   if (!fbs_read(fbs, buf_server_init, 24)) {
     return 0;
   }
-  width = buf_get_CARD16(&buf_server_init[0]);
-  height = buf_get_CARD16(&buf_server_init[2]);
-  printf(" Desktop size: %dx%d\n", width, height);
 
   desktop_name_bytes = buf_get_CARD32(&buf_server_init[20]);
   /* FIXME: Check size. */
@@ -108,8 +107,25 @@ static int read_rfb_init(FBSTREAM *fbs)
     return 0;
   }
   ptr_desktop_name[desktop_name_bytes] = '\0';
-  printf(" Desktop name: %s\n", ptr_desktop_name);
+
+  report_rfb_init(buf_version, buf_server_init, ptr_desktop_name);
+
   free(ptr_desktop_name);
 
   return 1;
+}
+
+static void report_rfb_init(char buf_version[12],
+                            char buf_server_init[24],
+                            char *ptr_desktop_name)
+{
+  int width, height;
+
+  printf("# Protocol version: %.11s\n", buf_version);
+
+  width = buf_get_CARD16(&buf_server_init[0]);
+  height = buf_get_CARD16(&buf_server_init[2]);
+  printf("# Desktop size: %dx%d\n", width, height);
+
+  printf("# Desktop name: %s\n", ptr_desktop_name);
 }
