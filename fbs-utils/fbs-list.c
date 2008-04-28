@@ -22,6 +22,7 @@ static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
+static int tight_24bits_format(RFB_SCREEN_INFO *scr);
 
 int main (int argc, char *argv[])
 {
@@ -94,6 +95,7 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
     fprintf(stderr, "Incorrect RFB protocol version\n");
     return 0;
   }
+
   if (!fbs_read(fbs, buf_sec_type, 4)) {
     return 0;
   }
@@ -101,13 +103,18 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
     fprintf(stderr, "Incorrect RFB protocol security type\n");
     return 0;
   }
+
   if (!fbs_read(fbs, buf_server_init, 24)) {
     return 0;
   }
-
   scr->width = buf_get_CARD16(&buf_server_init[0]);
   scr->height = buf_get_CARD16(&buf_server_init[2]);
   read_pixel_format(scr, &buf_server_init[4]);
+
+  if (!tight_24bits_format(scr)) {
+    fprintf(stderr, "Unsupported RFB pixel format (non-24-bits)\n");
+    return 0;
+  }
 
   scr->name_length = buf_get_CARD32(&buf_server_init[20]);
   if (scr->name_length > MAX_DESKTOP_NAME_SIZE) {
@@ -143,4 +150,19 @@ static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf)
   format->r_max = buf_get_CARD16(&bbuf[4]);
   format->g_max = buf_get_CARD16(&bbuf[6]);
   format->b_max = buf_get_CARD16(&bbuf[8]);
+}
+
+static int tight_24bits_format(RFB_SCREEN_INFO *scr)
+{
+  RFB_PIXEL_FORMAT *fmt = &scr->pixformat;
+
+  if (fmt->true_color &&
+      fmt->bits_pixel == 32 &&
+      fmt->color_depth == 24 &&
+      fmt->r_max == 255 &&
+      fmt->g_max == 255 &&
+      fmt->b_max == 255)
+    return 1;
+
+  return 0;
 }
