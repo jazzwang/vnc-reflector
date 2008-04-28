@@ -151,13 +151,13 @@ static int fbs_read_block(FBSTREAM *fbs)
 
   if (fread(fbs->block_data, 1, buf_size, fbs->fp) != buf_size) {
     fprintf(stderr, "Error reading data\n");
-    fbs_free_block();
+    fbs_free_block(fbs);
     return 0;
   }
 
   if (fread(buf, 1, 4, fbs->fp) != 4) {
     fprintf(stderr, "Error reading block timestamp\n");
-    fbs_free_block();
+    fbs_free_block(fbs);
     return 0;
   }
 
