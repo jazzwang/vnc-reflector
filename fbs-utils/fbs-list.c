@@ -20,6 +20,7 @@ static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
+static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 
 int main (int argc, char *argv[])
@@ -62,6 +63,7 @@ static int list_fbs(FILE *fp)
 {
   FBSTREAM fbs;
   RFB_SCREEN_INFO screen;
+  int success;
 
   if (!fbs_init(&fbs, fp)) {
     return 0;
@@ -71,10 +73,12 @@ static int list_fbs(FILE *fp)
     return 0;
   }
 
+  success = read_normal_protocol(&fbs, &screen);
+
   free(screen.name);
   fbs_cleanup(&fbs);
 
-  return 1;
+  return success;
 }
 
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
@@ -121,6 +125,11 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   printf("# Desktop size: %dx%d\n", scr->width, scr->height);
   printf("# Desktop name: %s\n", scr->name);
 
+  return 1;
+}
+
+static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
+{
   return 1;
 }
 
