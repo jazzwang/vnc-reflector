@@ -15,12 +15,14 @@
 #include "version.h"
 #include "fbs-io.h"
 
+/* FIXME: Get rid of static and global variables. */
+static RFB_SCREEN_INFO s_screen_info;
+static void read_pixel_format(void *buf);
+
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs);
-static void report_rfb_init(char buf_version[12],
-                            char buf_server_init[24],
-                            char *ptr_desktop_name);
+static void report_rfb_init(char buf_version[12]);
 
 int main (int argc, char *argv[])
 {
@@ -70,7 +72,9 @@ static int list_fbs(FILE *fp)
     return 0;
   }
 
+  free(s_screen_info.name);
   fbs_cleanup(&fbs);
+
   return 1;
 }
 
@@ -79,8 +83,6 @@ static int read_rfb_init(FBSTREAM *fbs)
   char buf_version[12];
   char buf_sec_type[4];
   char buf_server_init[24];
-  CARD32 desktop_name_bytes;
-  char *ptr_desktop_name;
 
   if (!fbs_read(fbs, buf_version, 12)) {
     return 0;
@@ -100,32 +102,38 @@ static int read_rfb_init(FBSTREAM *fbs)
     return 0;
   }
 
-  desktop_name_bytes = buf_get_CARD32(&buf_server_init[20]);
+  s_screen_info.width = buf_get_CARD16(&buf_server_init[0]);
+  s_screen_info.height = buf_get_CARD16(&buf_server_init[2]);
+  read_pixel_format(&buf_server_init[4]);
+
+  s_screen_info.name_length = buf_get_CARD32(&buf_server_init[20]);
   /* FIXME: Check size. */
-  ptr_desktop_name = (char *)malloc(desktop_name_bytes + 1);
-  if (!fbs_read(fbs, ptr_desktop_name, desktop_name_bytes)) {
+  s_screen_info.name = (CARD8 *)malloc(s_screen_info.name_length + 1);
+  if (!fbs_read(fbs, (char *)s_screen_info.name, s_screen_info.name_length)) {
     return 0;
   }
-  ptr_desktop_name[desktop_name_bytes] = '\0';
+  s_screen_info.name[s_screen_info.name_length] = '\0';
 
-  report_rfb_init(buf_version, buf_server_init, ptr_desktop_name);
-
-  free(ptr_desktop_name);
+  report_rfb_init(buf_version);
 
   return 1;
 }
 
-static void report_rfb_init(char buf_version[12],
-                            char buf_server_init[24],
-                            char *ptr_desktop_name)
+static void report_rfb_init(char buf_version[12])
 {
-  int width, height;
-
   printf("# Protocol version: %.11s\n", buf_version);
+  printf("# Desktop size: %dx%d\n", s_screen_info.width, s_screen_info.height);
+  printf("# Desktop name: %s\n", s_screen_info.name);
+}
 
-  width = buf_get_CARD16(&buf_server_init[0]);
-  height = buf_get_CARD16(&buf_server_init[2]);
-  printf("# Desktop size: %dx%d\n", width, height);
+/* FIXME: Code duplication, see rfblib.c */
+static void read_pixel_format(void *buf)
+{
+  CARD8 *bbuf = buf;
+  RFB_PIXEL_FORMAT *format = &s_screen_info.pixformat;
 
-  printf("# Desktop name: %s\n", ptr_desktop_name);
+  memcpy(format, buf, SZ_RFB_PIXEL_FORMAT);
+  format->r_max = buf_get_CARD16(&bbuf[4]);
+  format->g_max = buf_get_CARD16(&bbuf[6]);
+  format->b_max = buf_get_CARD16(&bbuf[8]);
 }
