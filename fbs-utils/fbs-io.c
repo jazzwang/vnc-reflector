@@ -27,19 +27,22 @@ int fbs_init(FBSTREAM *fbs, FILE *fp)
   memset(fbs, 0, sizeof(FBSTREAM));
   fbs->fp = fp;
 
+  /* Read file signature. */
   if (fread(version_msg, 1, 12, fbs->fp) != 12) {
     fprintf(stderr, "Error reading the file header\n");
+    fbs->error = 1;
     return 0;
   }
 
+  /* Verify file signature. */
   if (memcmp(version_msg, "FBS 001.000\n", 12) != 0) {
     fprintf(stderr, "Bad file header\n");
+    fbs->error = 1;
     return 0;
   }
 
-  if (!fbs_read_block(fbs)) {
-    return 0;
-  }
+  /* Store the position of the first byte of RFB data. */
+  fbs->next_block_fpos = 12 + 4;
 
   return 1;
 }
@@ -53,22 +56,32 @@ int fbs_getc(FBSTREAM *fbs)
 {
   int c;
 
+  /* If no data is buffered, ... */
   if (fbs->block_data == NULL) {
-    return -1;
+    /* ... that's either an error/eof condition ... */
+    if (fbs->eof || fbs->error) {
+      return -1;
+    }
+    /* ... or we should read next data block now, ... */
+    if (!fbs_read_block(fbs)) {
+      return -1;
+    }
   }
 
-  c = fbs->block_data[fbs->block_offset] & 0xFF;
-  fbs->block_offset++;
+  /* Read the data byte, update counters. */
+  c = fbs->block_data[fbs->block_offset++] & 0xFF;
   fbs->file_offset++;
+
+  /* Free the block if all its data was consumed. */
   if (fbs->block_offset >= fbs->block_size) {
-    fbs_read_block(fbs);
+    fbs_free_block(fbs);
   }
+
   return c;
 }
 
-/*
- * FIXME: Using fbs_getc() to read each byte is inefficient.
- */
+/* FIXME: Using fbs_getc() to read each byte is inefficient. */
+
 int fbs_read(FBSTREAM *fbs, char *buf, size_t len)
 {
   int i, c;
@@ -138,39 +151,53 @@ INT32 fbs_read_S32(FBSTREAM *fbs)
   return b3 << 24 | b2 << 16 | b1 << 8 | b0;
 }
 
-size_t fbs_get_block_size(FBSTREAM *fbs)
+int fbs_get_pos(FBSTREAM *fbs,
+                size_t *block_fpos,
+                size_t *block_size,
+                size_t *offset_in_block,
+                unsigned int *timestamp)
 {
-  return fbs->block_size;
+  /* If no data is buffered, ... */
+  if (fbs->block_data == NULL) {
+    /* ... that's either an error/eof condition ... */
+    if (fbs->eof || fbs->error) {
+      return 0;
+    }
+    /* ... or we should read next data block now, ... */
+    if (!fbs_read_block(fbs)) {
+      return 0;
+    }
+  }
+
+  if (block_fpos != NULL) {
+    *block_fpos = fbs->block_fpos;
+  }
+  if (block_size != NULL) {
+    *block_size = fbs->block_size;
+  }
+  if (offset_in_block != NULL) {
+    *offset_in_block = fbs->block_offset;
+  }
+  if (timestamp != NULL) {
+    *timestamp = fbs->timestamp;
+  }
+
+  return 1;
 }
 
-size_t fbs_get_block_offset(FBSTREAM *fbs)
-{
-  return fbs->block_offset;
-}
-
-size_t fbs_get_file_offset(FBSTREAM *fbs)
+size_t fbs_num_bytes_read(FBSTREAM *fbs)
 {
   return fbs->file_offset;
 }
 
-unsigned long fbs_get_last_byte_timestamp(FBSTREAM *fbs)
-{
-  return (fbs->block_offset > 0) ? fbs->timestamp : fbs->prev_timestamp;
-}
-
-unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs)
-{
-  return fbs->timestamp;
-}
-
 int fbs_eof(FBSTREAM *fbs)
 {
-  return fbs->end_reached;
+  return fbs->eof;
 }
 
 int fbs_error(FBSTREAM *fbs)
 {
-  return (fbs->block_data == NULL && !fbs_eof(fbs));
+  return fbs->error;
 }
 
 /************************* Private Code *************************/
@@ -187,17 +214,19 @@ static int fbs_read_block(FBSTREAM *fbs)
 
   n = fread(buf, 1, 4, fbs->fp);
   if (n == 0 && feof(fbs->fp)) {
-    fbs->end_reached = 1;
-    return 1;
+    fbs->eof = 1;
+    return 0;
   }
   if (n != 4) {
     fprintf(stderr, "Error reading block header\n");
+    fbs->error = 1;
     return 0;
   }
 
   fbs->block_size = buf_get_CARD32(buf);
   if (fbs->block_size == 0 || fbs->block_size > MAX_BLOCK_SIZE) {
     fprintf(stderr, "Bad block size: %d\n", fbs->block_size);
+    fbs->error = 1;
     return 0;
   }
 
@@ -210,17 +239,21 @@ static int fbs_read_block(FBSTREAM *fbs)
   if (fread(fbs->block_data, 1, buf_size, fbs->fp) != buf_size) {
     fprintf(stderr, "Error reading data\n");
     fbs_free_block(fbs);
+    fbs->error = 1;
     return 0;
   }
 
   if (fread(buf, 1, 4, fbs->fp) != 4) {
     fprintf(stderr, "Error reading block timestamp\n");
     fbs_free_block(fbs);
+    fbs->error = 1;
     return 0;
   }
 
-  fbs->prev_timestamp = fbs->timestamp;
   fbs->timestamp = buf_get_CARD32(buf);
+
+  fbs->block_fpos = fbs->next_block_fpos;
+  fbs->next_block_fpos += (buf_size + 8);
 
   return 1;
 }
