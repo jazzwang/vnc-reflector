@@ -56,23 +56,16 @@ int fbs_getc(FBSTREAM *fbs)
 {
   int c;
 
-  /* If no data is buffered, ... */
-  if (fbs->block_data == NULL) {
-    /* ... that's either an error/eof condition ... */
-    if (fbs->eof || fbs->error) {
-      return -1;
-    }
-    /* ... or we should read next data block now, ... */
-    if (!fbs_read_block(fbs)) {
-      return -1;
-    }
+  /* Make sure next data byte is buffered in memory. */
+  if (fbs->block_data == NULL && !fbs_read_block(fbs)) {
+    return 0;
   }
 
   /* Read the data byte, update counters. */
   c = fbs->block_data[fbs->offset_in_block++] & 0xFF;
   fbs->num_bytes_read++;
 
-  /* Free the block if all its data was consumed. */
+  /* Free the block if all its data has been consumed. */
   if (fbs->offset_in_block >= fbs->block_size) {
     fbs_free_block(fbs);
   }
@@ -157,16 +150,9 @@ int fbs_get_pos(FBSTREAM *fbs,
                 size_t *offset_in_block,
                 unsigned int *timestamp)
 {
-  /* If no data is buffered, ... */
-  if (fbs->block_data == NULL) {
-    /* ... that's either an error/eof condition ... */
-    if (fbs->eof || fbs->error) {
-      return 0;
-    }
-    /* ... or we should read next data block now, ... */
-    if (!fbs_read_block(fbs)) {
-      return 0;
-    }
+  /* Make sure next data byte is buffered in memory. */
+  if (fbs->block_data == NULL && !fbs_read_block(fbs)) {
+    return 0;
   }
 
   if (block_fpos != NULL) {
@@ -211,6 +197,10 @@ static int fbs_read_block(FBSTREAM *fbs)
   int n;
 
   fbs_free_block(fbs);
+
+  if (fbs->eof || fbs->error) {
+    return 0;
+  }
 
   n = fread(buf, 1, 4, fbs->fp);
   if (n == 0 && feof(fbs->fp)) {
