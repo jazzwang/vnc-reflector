@@ -20,9 +20,10 @@ static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
-static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
-static int tight_24bits_format(RFB_SCREEN_INFO *scr);
+static int check_24bits_format(RFB_SCREEN_INFO *scr);
+
+static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 
 int main (int argc, char *argv[])
 {
@@ -111,7 +112,7 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   scr->height = buf_get_CARD16(&buf_server_init[2]);
   read_pixel_format(scr, &buf_server_init[4]);
 
-  if (!tight_24bits_format(scr)) {
+  if (!check_24bits_format(scr)) {
     fprintf(stderr, "Warning: Pixel format does not look good - ignoring\n");
   }
 
@@ -134,11 +135,6 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   return 1;
 }
 
-static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
-{
-  return 1;
-}
-
 /* FIXME: Code duplication, see rfblib.c */
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf)
 {
@@ -151,7 +147,7 @@ static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf)
   format->b_max = buf_get_CARD16(&bbuf[8]);
 }
 
-static int tight_24bits_format(RFB_SCREEN_INFO *scr)
+static int check_24bits_format(RFB_SCREEN_INFO *scr)
 {
   RFB_PIXEL_FORMAT *fmt = &scr->pixformat;
 
@@ -164,4 +160,9 @@ static int tight_24bits_format(RFB_SCREEN_INFO *scr)
     return 1;
 
   return 0;
+}
+
+static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
+{
+  return 1;
 }
