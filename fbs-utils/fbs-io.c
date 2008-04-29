@@ -29,7 +29,7 @@ int fbs_init(FBSTREAM *fbs, FILE *fp)
 
   /* Read file signature. */
   if (fread(version_msg, 1, 12, fbs->fp) != 12) {
-    fprintf(stderr, "Error reading the file header\n");
+    fprintf(stderr, "Error reading file header\n");
     fbs->error = 1;
     return 0;
   }
