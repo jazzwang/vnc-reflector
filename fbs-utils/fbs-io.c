@@ -110,9 +110,14 @@ unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs)
   return fbs->timestamp;
 }
 
-int fbs_end_reached(FBSTREAM *fbs)
+int fbs_eof(FBSTREAM *fbs)
 {
   return fbs->end_reached;
+}
+
+int fbs_error(FBSTREAM *fbs)
+{
+  return (fbs->block_data == NULL && !fbs_eof(fbs));
 }
 
 /************************* Private Code *************************/

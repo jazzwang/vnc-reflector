@@ -138,6 +138,15 @@ extern unsigned long fbs_get_last_byte_timestamp(FBSTREAM *fbs);
  */
 extern unsigned long fbs_get_next_byte_timestamp(FBSTREAM *fbs);
 
-extern int fbs_end_reached(FBSTREAM *fbs);
+/*
+ * fbs_eof() returns 1 if end of file was reached, 0 otherwise.
+ */
+extern int fbs_eof(FBSTREAM *fbs);
+
+/*
+ * fbs_error() returns 1 if there was an error, 0 otherwise.
+ * End of file condition is not considered an error.
+ */
+extern int fbs_error(FBSTREAM *fbs);
 
 #endif /* defined(_FBSUTIL_IO_H) */
