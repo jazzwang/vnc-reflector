@@ -86,7 +86,7 @@ static int list_fbs(FILE *fp)
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
   char buf_version[12];
-  char buf_sec_type[4];
+  CARD32 sec_type;
   char buf_server_init[24];
 
   if (!fbs_read(fbs, buf_version, 12)) {
@@ -97,10 +97,13 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
     return 0;
   }
 
-  if (!fbs_read(fbs, buf_sec_type, 4)) {
+  sec_type = fbs_read_U32(fbs);
+  if (fbs_error(fbs)) {
     return 0;
-  }
-  if (buf_get_CARD32(buf_sec_type) != 1) {
+  } else if (fbs_eof(fbs)) {
+    fprintf(stderr, "Preliminary end of file\n");
+    return 0;
+  } else if (sec_type != 1) {
     fprintf(stderr, "Incorrect RFB protocol security type\n");
     return 0;
   }
