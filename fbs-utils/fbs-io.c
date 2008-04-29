@@ -69,11 +69,11 @@ int fbs_getc(FBSTREAM *fbs)
   }
 
   /* Read the data byte, update counters. */
-  c = fbs->block_data[fbs->block_offset++] & 0xFF;
-  fbs->file_offset++;
+  c = fbs->block_data[fbs->offset_in_block++] & 0xFF;
+  fbs->num_bytes_read++;
 
   /* Free the block if all its data was consumed. */
-  if (fbs->block_offset >= fbs->block_size) {
+  if (fbs->offset_in_block >= fbs->block_size) {
     fbs_free_block(fbs);
   }
 
@@ -176,7 +176,7 @@ int fbs_get_pos(FBSTREAM *fbs,
     *block_size = fbs->block_size;
   }
   if (offset_in_block != NULL) {
-    *offset_in_block = fbs->block_offset;
+    *offset_in_block = fbs->offset_in_block;
   }
   if (timestamp != NULL) {
     *timestamp = fbs->timestamp;
@@ -187,7 +187,7 @@ int fbs_get_pos(FBSTREAM *fbs,
 
 size_t fbs_num_bytes_read(FBSTREAM *fbs)
 {
-  return fbs->file_offset;
+  return fbs->num_bytes_read;
 }
 
 int fbs_eof(FBSTREAM *fbs)
@@ -233,7 +233,7 @@ static int fbs_read_block(FBSTREAM *fbs)
   /* Data is padded to multiple of 4 bytes. */
   buf_size = (fbs->block_size + 3) & (~3);
 
-  fbs->block_offset = 0;
+  fbs->offset_in_block = 0;
   fbs->block_data = malloc(buf_size);
 
   if (fread(fbs->block_data, 1, buf_size, fbs->fp) != buf_size) {

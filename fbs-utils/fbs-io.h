@@ -37,8 +37,8 @@ typedef struct _FBSTREAM {
   size_t block_fpos;
   size_t next_block_fpos;
   size_t block_size;
-  size_t block_offset;
-  size_t file_offset;
+  size_t offset_in_block;
+  size_t num_bytes_read;
   unsigned int timestamp;
   int eof;
   int error;
