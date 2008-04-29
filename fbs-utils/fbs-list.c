@@ -20,6 +20,7 @@ static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 static void report_usage(char *program_name);
 static int list_fbs(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
+static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
@@ -87,46 +88,44 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
   char buf_version[12];
   CARD32 sec_type;
-  char buf_server_init[24];
+  char buf_pixformat[16];
 
-  if (!fbs_read(fbs, buf_version, 12)) {
+  /* Read as much as possible, not checking for errors. */
+  fbs_read(fbs, buf_version, 12);
+  sec_type = fbs_read_U32(fbs);
+  scr->width = fbs_read_U16(fbs);
+  scr->height = fbs_read_U16(fbs);
+  fbs_read(fbs, buf_pixformat, 16);
+  scr->name_length = fbs_read_U32(fbs);
+
+  /* Could we read everything? */
+  if (!fbs_check_success(fbs)) {
     return 0;
   }
+
+  /* Now examine what we have read. */
   if (memcmp(buf_version, "RFB 003.003\n", 12) != 0) {
     fprintf(stderr, "Incorrect RFB protocol version\n");
     return 0;
   }
-
-  sec_type = fbs_read_U32(fbs);
-  if (fbs_error(fbs)) {
-    return 0;
-  } else if (fbs_eof(fbs)) {
-    fprintf(stderr, "Preliminary end of file\n");
-    return 0;
-  } else if (sec_type != 1) {
+  if (sec_type != 1) {
     fprintf(stderr, "Incorrect RFB protocol security type\n");
     return 0;
   }
-
-  if (!fbs_read(fbs, buf_server_init, 24)) {
-    return 0;
-  }
-  scr->width = buf_get_CARD16(&buf_server_init[0]);
-  scr->height = buf_get_CARD16(&buf_server_init[2]);
-  read_pixel_format(scr, &buf_server_init[4]);
-
+  read_pixel_format(scr, buf_pixformat);
   if (!check_24bits_format(scr)) {
     fprintf(stderr, "Warning: Pixel format does not look good - ignoring\n");
   }
-
-  scr->name_length = buf_get_CARD32(&buf_server_init[20]);
   if (scr->name_length > MAX_DESKTOP_NAME_SIZE) {
     fprintf(stderr, "Desktop name too long: %u bytes\n",
             (unsigned int)scr->name_length);
     return 0;
   }
+
+  /* Finally, read the desktop name. */
   scr->name = (CARD8 *)malloc(scr->name_length + 1);
-  if (!fbs_read(fbs, (char *)scr->name, scr->name_length)) {
+  fbs_read(fbs, (char *)scr->name, scr->name_length);
+  if (!fbs_check_success(fbs)) {
     return 0;
   }
   scr->name[scr->name_length] = '\0';
@@ -138,7 +137,21 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   return 1;
 }
 
+static int fbs_check_success(FBSTREAM *fbs)
+{
+  if (fbs_error(fbs)) {
+    /* No need to report errors -- already reported. */
+    return 0;
+  } else if (fbs_eof(fbs)) {
+    fprintf(stderr, "Preliminary end of file\n");
+    return 0;
+  }
+  return 1;
+}
+
+
 /* FIXME: Code duplication, see rfblib.c */
+/* FIXME: Read directly from FBSTREAM. */
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf)
 {
   CARD8 *bbuf = buf;
