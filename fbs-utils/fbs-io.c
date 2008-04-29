@@ -58,7 +58,7 @@ int fbs_getc(FBSTREAM *fbs)
 
   /* Make sure next data byte is buffered in memory. */
   if (fbs->block_data == NULL && !fbs_read_block(fbs)) {
-    return 0;
+    return -1;
   }
 
   /* Read the data byte, update counters. */
