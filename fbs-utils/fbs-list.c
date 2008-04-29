@@ -178,7 +178,67 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
   return 0;
 }
 
+/************************* Normal Protocol *************************/
+
+static void handle_framebuffer_update(FBSTREAM *fbs);
+static void handle_set_colormap_entries(FBSTREAM *fbs);
+static void handle_bell(FBSTREAM *fbs);
+static void handle_server_cut_text(FBSTREAM *fbs);
+
 static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
-  return 1;
+  int msg_id;
+  size_t filepos;
+  size_t blksize;
+  size_t offset;
+  unsigned int timestamp;
+
+  while (!fbs_eof(fbs) && !fbs_error(fbs)) {
+    if (fbs_get_pos(fbs, &filepos, &blksize, &offset, &timestamp)) {
+      printf("%u:\t%u/%u\t@%u\n",
+             (unsigned int)filepos, (unsigned int)offset,
+             (unsigned int)blksize, timestamp);
+      if ((msg_id = fbs_getc(fbs)) >= 0) {
+        switch(msg_id) {
+        case 0:
+          handle_framebuffer_update(fbs);
+          break;
+        case 1:
+          handle_set_colormap_entries(fbs);
+          break;
+        case 2:
+          handle_bell(fbs);
+          break;
+        case 3:
+          handle_server_cut_text(fbs);
+          break;
+        default:
+          fprintf(stderr, "Unknown server message type: %d\n", msg_id);
+          return 0;
+        }
+      }
+    }
+  }
+
+  return !fbs_error(fbs);
+}
+
+static void handle_framebuffer_update(FBSTREAM *fbs)
+{
+  printf("update\n");
+}
+
+static void handle_set_colormap_entries(FBSTREAM *fbs)
+{
+  printf("colormap\n");
+}
+
+static void handle_bell(FBSTREAM *fbs)
+{
+  printf("bell\n");
+}
+
+static void handle_server_cut_text(FBSTREAM *fbs)
+{
+  printf("cuttext\n");
 }
