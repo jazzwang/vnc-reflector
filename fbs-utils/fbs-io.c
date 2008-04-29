@@ -84,6 +84,60 @@ int fbs_read(FBSTREAM *fbs, char *buf, size_t len)
   return 1;
 }
 
+CARD8 fbs_read_U8(FBSTREAM *fbs)
+{
+  return (CARD8)fbs_getc(fbs);
+}
+
+CARD16 fbs_read_U16(FBSTREAM *fbs)
+{
+  CARD16 hi, lo;
+
+  hi = (CARD16)fbs_getc(fbs);
+  lo = (CARD16)fbs_getc(fbs);
+
+  return hi << 8 | lo;
+}
+
+CARD32 fbs_read_U32(FBSTREAM *fbs)
+{
+  CARD32 b3, b2, b1, b0;
+
+  b3 = (CARD32)fbs_getc(fbs);
+  b2 = (CARD32)fbs_getc(fbs);
+  b1 = (CARD32)fbs_getc(fbs);
+  b0 = (CARD32)fbs_getc(fbs);
+
+  return b3 << 24 | b2 << 16 | b1 << 8 | b0;
+}
+
+INT8 fbs_read_S8(FBSTREAM *fbs)
+{
+  return (INT8)fbs_getc(fbs);
+}
+
+INT16 fbs_read_S16(FBSTREAM *fbs)
+{
+  INT16 hi, lo;
+
+  hi = (INT8)fbs_getc(fbs);
+  lo = (INT16)fbs_getc(fbs);
+
+  return hi << 8 | lo;
+}
+
+INT32 fbs_read_S32(FBSTREAM *fbs)
+{
+  INT32 b3, b2, b1, b0;
+
+  b3 = (INT8)fbs_getc(fbs);
+  b2 = (INT32)fbs_getc(fbs);
+  b1 = (INT32)fbs_getc(fbs);
+  b0 = (INT32)fbs_getc(fbs);
+
+  return b3 << 24 | b2 << 16 | b1 << 8 | b0;
+}
+
 size_t fbs_get_block_size(FBSTREAM *fbs)
 {
   return fbs->block_size;
@@ -93,7 +147,6 @@ size_t fbs_get_block_offset(FBSTREAM *fbs)
 {
   return fbs->block_offset;
 }
-
 
 size_t fbs_get_file_offset(FBSTREAM *fbs)
 {

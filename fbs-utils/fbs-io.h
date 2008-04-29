@@ -76,9 +76,9 @@ extern void fbs_cleanup(FBSTREAM *fbs);
  * the end of file has been reached.
  *
  * Note that this function may read data ahead, and thus may print
- * error messages for future data, while current read was successful.
- * If such an error message was produced on stderr, then the following
- * read operation will certainly fail.
+ * error messages for future data, despite of the fact this call was
+ * successful. If such an error message was produced on stderr, then
+ * the following read operation will certainly fail.
  */
 extern int fbs_getc(FBSTREAM *fbs);
 
@@ -93,12 +93,29 @@ extern int fbs_getc(FBSTREAM *fbs);
  * considered undefined, as some unknown amount of data may have been
  * written to it.
  *
- * Just like fbs_getc(), this function may read data ahead, and thus
- * may print error messages for future data, while current read was
- * successful. If such an error message was produced on stderr, then
- * the following read operation will certainly fail.
+ * If there was an error, fbs_read() will print an error message on
+ * stderr (but only if the error has not been reported earlier). Also,
+ * it may read data ahead, and thus may print an error message for
+ * future data, even if this call was successful.
  */
 extern int fbs_read(FBSTREAM *fbs, char *buf, size_t len);
+
+/*
+ * These functions read and return different types of integer values
+ * from the .fbs data stream referenced by fbs. These functions do not
+ * provide a way to detect error or eof conditions. They assume the
+ * caller would uses fbs_eof() and fbs_error() for eof and error
+ * handling.
+ *
+ * These functions may print error messages on stderr, like fbs_getc()
+ * and fbs_read().
+ */
+extern CARD8 fbs_read_U8(FBSTREAM *fbs);
+extern CARD16 fbs_read_U16(FBSTREAM *fbs);
+extern CARD32 fbs_read_U32(FBSTREAM *fbs);
+extern INT8 fbs_read_S8(FBSTREAM *fbs);
+extern INT16 fbs_read_S16(FBSTREAM *fbs);
+extern INT32 fbs_read_S32(FBSTREAM *fbs);
 
 /*
  * fbs_get_block_size() returns the size of current data block. Data
