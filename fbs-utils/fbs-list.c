@@ -181,7 +181,6 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 /************************* Normal Protocol *************************/
 
 static int handle_framebuffer_update(FBSTREAM *fbs);
-static int handle_rectangle(FBSTREAM *fbs, int idx);
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
 
 static int handle_set_colormap_entries(FBSTREAM *fbs);
@@ -238,6 +237,8 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
 {
   CARD16 num_rects;
   int i;
+  CARD16 x, y, w, h;
+  INT32 encoding;
 
   fbs_read_U8(fbs);
   num_rects = fbs_read_U16(fbs);
@@ -245,39 +246,32 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
   if (!fbs_eof(fbs) && !fbs_error(fbs)) {
     printf("  update, num_rects=%d\n", (int)num_rects);
     for (i = 0; i < (int)num_rects; i++) {
-      if (!handle_rectangle(fbs, i)) {
+      x = fbs_read_U16(fbs);
+      y = fbs_read_U16(fbs);
+      w = fbs_read_U16(fbs);
+      h = fbs_read_U16(fbs);
+      encoding = fbs_read_U32(fbs);
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
+      printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
+             i, w, h, x, y, encoding);
+
+      /* Special case: LastRect. */
+      if (encoding == -224)
+        break;
+
+      switch (encoding) {
+      case 7:
+        if (!handle_tight_rect(fbs, w, h)) {
+          return 0;
+        }
+        break;
+      default:
+        fprintf(stderr, "Unknown encoding type\n");
         return 0;
       }
     }
-  }
-
-  return 1;
-}
-
-static int handle_rectangle(FBSTREAM *fbs, int idx)
-{
-  CARD16 x, y, w, h;
-  INT32 encoding;
-
-  x = fbs_read_U16(fbs);
-  y = fbs_read_U16(fbs);
-  w = fbs_read_U16(fbs);
-  h = fbs_read_U16(fbs);
-  encoding = fbs_read_U32(fbs);
-
-  if (!fbs_check_success(fbs)) {
-    return 0;
-  }
-
-  printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
-         idx, w, h, x, y, encoding);
-
-  switch (encoding) {
-  case 7:
-    return handle_tight_rect(fbs, w, h);
-  default:
-    fprintf(stderr, "Unknown encoding type\n");
-    return 0;
   }
 
   return 1;
