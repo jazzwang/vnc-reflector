@@ -115,6 +115,18 @@ extern INT16 fbs_read_S16(FBSTREAM *fbs);
 extern INT32 fbs_read_S32(FBSTREAM *fbs);
 
 /*
+ * fbs_read_tight_len() reads an integer in compact representation
+ * (1..3 bytes). Such format is used as a part of the Tight encoding.
+ *
+ * The return value is the decoded integer. Its type is size_t because
+ * normally it should designate data length. The return value does not
+ * provide an indication of error or eof condition. The caller should
+ * use fbs_error() and fbs_eof() to detect errors or end of file.
+ * However, on error, error message will be printed on stderr.
+ */
+extern size_t fbs_read_tight_len(FBSTREAM *fbs);
+
+/*
  * fbs_get_pos() provides various information related to current
  * position in the .fbs file. If current position is on the block
  * boundary (that is, between bytes with different timestamps), then

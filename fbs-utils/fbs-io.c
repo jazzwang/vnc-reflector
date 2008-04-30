@@ -144,6 +144,31 @@ INT32 fbs_read_S32(FBSTREAM *fbs)
   return b3 << 24 | b2 << 16 | b1 << 8 | b0;
 }
 
+size_t fbs_read_tight_len(FBSTREAM *fbs)
+{
+  CARD32 result;
+  int c;
+
+  if ((c = fbs_getc(fbs)) < 0) {
+    return 0;
+  }
+  result = c & 0x7F;
+  if (c & 0x80) {
+    if ((c = fbs_getc(fbs)) < 0) {
+      return 0;
+    }
+    result |= (c & 0x7F) << 7;
+    if (c & 0x80) {
+      if ((c = fbs_getc(fbs)) < 0) {
+        return 0;
+      }
+      result |= c << 14;
+    }
+  }
+
+  return result;
+}
+
 int fbs_get_pos(FBSTREAM *fbs,
                 size_t *block_fpos,
                 size_t *block_size,
