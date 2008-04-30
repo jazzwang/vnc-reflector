@@ -349,8 +349,14 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
       }
     }
     if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-      fprintf(stderr, "Tight/RAW not supported\n");
-      return 0;
+      printf("      Tight/RAW, filter %d, bytes %u\n",
+             filter_id, (unsigned int)uncompressed_size);
+      for (i = 0; i < uncompressed_size; i++) {
+        fbs_getc(fbs);
+      }
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
     } else {
       compressed_size = fbs_read_tight_len(fbs);
       printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
