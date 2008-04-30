@@ -348,8 +348,17 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
       return 0;
     }
   } else if (comp_ctl == RFB_TIGHT_JPEG) {
-    fprintf(stderr, "Tight/JPEG not supported\n");
-    return 0;
+    compressed_size = fbs_read_tight_len(fbs);
+    if (!fbs_check_success(fbs)) {
+      return 0;
+    }
+    printf("      Tight/JPEG, bytes %u\n", (unsigned int)compressed_size);
+    for (i = 0; i < compressed_size; i++) {
+      fbs_getc(fbs);
+    }
+    if (!fbs_check_success(fbs)) {
+      return 0;
+    }
   } else if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
     fprintf(stderr, "Invalid sub-encoding in Tight-encoded data\n");
     return 0;
@@ -396,11 +405,11 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
       }
     } else {
       compressed_size = fbs_read_tight_len(fbs);
-      printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
-             filter_id, stream_id, (unsigned int)compressed_size);
       if (!fbs_check_success(fbs)) {
         return 0;
       }
+      printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
+             filter_id, stream_id, (unsigned int)compressed_size);
       for (i = 0; i < compressed_size; i++) {
         fbs_getc(fbs);
       }
