@@ -181,6 +181,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 /************************* Normal Protocol *************************/
 
 static int handle_framebuffer_update(FBSTREAM *fbs);
+static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
 
 static int handle_set_colormap_entries(FBSTREAM *fbs);
@@ -262,6 +263,11 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
         break;
 
       switch (encoding) {
+      case 1:
+        if (!handle_copyrect(fbs)) {
+          return 0;
+        }
+        break;
       case 7:
         if (!handle_tight_rect(fbs, w, h)) {
           return 0;
@@ -275,6 +281,13 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
   }
 
   return 1;
+}
+
+static int handle_copyrect(FBSTREAM *fbs)
+{
+  fbs_read_U16(fbs);
+  fbs_read_U16(fbs);
+  return fbs_check_success(fbs);
 }
 
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
