@@ -180,10 +180,12 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static void handle_framebuffer_update(FBSTREAM *fbs);
-static void handle_set_colormap_entries(FBSTREAM *fbs);
-static void handle_bell(FBSTREAM *fbs);
-static void handle_server_cut_text(FBSTREAM *fbs);
+static int handle_framebuffer_update(FBSTREAM *fbs);
+static int handle_rectangle(FBSTREAM *fbs, int idx);
+
+static int handle_set_colormap_entries(FBSTREAM *fbs);
+static int handle_bell(FBSTREAM *fbs);
+static int handle_server_cut_text(FBSTREAM *fbs);
 
 static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
@@ -201,16 +203,24 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
       if ((msg_id = fbs_getc(fbs)) >= 0) {
         switch(msg_id) {
         case 0:
-          handle_framebuffer_update(fbs);
+          if (!handle_framebuffer_update(fbs)) {
+            return 0;
+          }
           break;
         case 1:
-          handle_set_colormap_entries(fbs);
+          if (!handle_set_colormap_entries(fbs)) {
+            return 0;
+          }
           break;
         case 2:
-          handle_bell(fbs);
+          if (!handle_bell(fbs)) {
+            return 0;
+          }
           break;
         case 3:
-          handle_server_cut_text(fbs);
+          if (!handle_server_cut_text(fbs)) {
+            return 0;
+          }
           break;
         default:
           fprintf(stderr, "Unknown server message type: %d\n", msg_id);
@@ -223,22 +233,69 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   return !fbs_error(fbs);
 }
 
-static void handle_framebuffer_update(FBSTREAM *fbs)
+static int handle_framebuffer_update(FBSTREAM *fbs)
 {
-  printf("update\n");
+  CARD16 num_rects;
+  int i;
+
+  fbs_read_U8(fbs);
+  num_rects = fbs_read_U16(fbs);
+
+  if (!fbs_eof(fbs) && !fbs_error(fbs)) {
+    printf("  update, num_rects=%d\n", (int)num_rects);
+    for (i = 0; i < (int)num_rects; i++) {
+      if (!handle_rectangle(fbs, i)) {
+        return 0;
+      }
+    }
+  }
+
+  return 1;
 }
 
-static void handle_set_colormap_entries(FBSTREAM *fbs)
+static int handle_rectangle(FBSTREAM *fbs, int idx)
 {
-  printf("colormap\n");
+  CARD16 x, y, w, h;
+  INT32 encoding;
+
+  x = fbs_read_U16(fbs);
+  y = fbs_read_U16(fbs);
+  w = fbs_read_U16(fbs);
+  h = fbs_read_U16(fbs);
+  encoding = fbs_read_U32(fbs);
+
+  if (!fbs_eof(fbs) && !fbs_error(fbs)) {
+    printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
+           idx, w, h, x, y, encoding);
+  }
+
+  switch (encoding) {
+  case 7:
+    break;
+  default:
+    fprintf(stderr, "Unknown encoding type\n");
+    return 0;
+  }
+
+  return 1;
 }
 
-static void handle_bell(FBSTREAM *fbs)
+static int handle_set_colormap_entries(FBSTREAM *fbs)
 {
-  printf("bell\n");
+  printf("  colormap\n");
+  fprintf(stderr, "SetColormapEntries message is not supported\n");
+  return 0;
 }
 
-static void handle_server_cut_text(FBSTREAM *fbs)
+static int handle_bell(FBSTREAM *fbs)
 {
-  printf("cuttext\n");
+  printf("  bell\n");
+  return 1;
+}
+
+static int handle_server_cut_text(FBSTREAM *fbs)
+{
+  printf("  cuttext not supported\n");
+  fprintf(stderr, "ServerCutText message is not supported\n");
+  return 0;
 }
