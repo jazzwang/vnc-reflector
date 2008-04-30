@@ -269,6 +269,8 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
 
       if (encoding == -224)     /* RFB_ENCODING_LASTRECT */
         break;
+      if (encoding == -223)     /* RFB_ENCODING_NEWFBSIZE */
+        break;
 
       switch (encoding) {
       case RFB_ENCODING_COPYRECT:
@@ -286,6 +288,8 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
         if (!handle_cursor(fbs, w, h, (int)encoding)) {
           return 0;
         }
+        break;
+      case -232:                /* RFB_ENCODING_POINTERPOS */
         break;
       default:
         fprintf(stderr, "Unknown encoding type\n");
@@ -306,16 +310,16 @@ static int handle_copyrect(FBSTREAM *fbs)
 
 static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
 {
-  int mask_size, data_size;
+  int mask_size = ((width + 7) / 8) * height;
+  int data_size;
 
-  mask_size = ((width + 7) / 8) * height;
   if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
-    data_size = width * height * 4;
+    data_size = mask_size + width * height * 4;
   } else {                      /* RFB_ENCODING_XCURSOR */
-    data_size = mask_size;
+    data_size = 6 + 2 * mask_size;
   }
 
-  return fbs_skip_ex(fbs, mask_size + data_size);
+  return fbs_skip_ex(fbs, data_size);
 }
 
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
