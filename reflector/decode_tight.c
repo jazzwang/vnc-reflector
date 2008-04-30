@@ -250,7 +250,7 @@ static void rf_host_tight_len3(void)
 {
   fbs_spool_byte(cur_slot->readbuf[0]);
 
-  s_compressed_size |= (cur_slot->readbuf[0] & 0x7F) << 14;
+  s_compressed_size |= (cur_slot->readbuf[0] & 0xFF) << 14;
   aio_setread(rf_host_tight_compressed, NULL, s_compressed_size);
 }
 
