@@ -183,6 +183,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 static int handle_framebuffer_update(FBSTREAM *fbs);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
+static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding);
 
 static int handle_set_colormap_entries(FBSTREAM *fbs);
 static int handle_bell(FBSTREAM *fbs);
@@ -258,18 +259,23 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
       printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
              i, w, h, x, y, encoding);
 
-      /* Special case: LastRect. */
-      if (encoding == -224)
+      if (encoding == -224)     /* RFB_ENCODING_LASTRECT */
         break;
 
       switch (encoding) {
-      case 1:
+      case RFB_ENCODING_COPYRECT:
         if (!handle_copyrect(fbs)) {
           return 0;
         }
         break;
-      case 7:
+      case RFB_ENCODING_TIGHT:
         if (!handle_tight_rect(fbs, w, h)) {
+          return 0;
+        }
+        break;
+      case -240:                /* RFB_ENCODING_XCURSOR */
+      case -239:                /* RFB_ENCODING_RICHCURSOR */
+        if (!handle_cursor(fbs, w, h, (int)encoding)) {
           return 0;
         }
         break;
@@ -287,6 +293,24 @@ static int handle_copyrect(FBSTREAM *fbs)
 {
   fbs_read_U16(fbs);
   fbs_read_U16(fbs);
+  return fbs_check_success(fbs);
+}
+
+static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
+{
+  int mask_size, data_size;
+  int i;
+
+  mask_size = ((width + 7) / 8) * height;
+  if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
+    data_size = width * height * 3;
+  } else {                      /* RFB_ENCODING_XCURSOR */
+    data_size = mask_size;
+  }
+
+  for (i = 0; i < mask_size + data_size; i++) {
+    fbs_getc(fbs);
+  }
   return fbs_check_success(fbs);
 }
 
