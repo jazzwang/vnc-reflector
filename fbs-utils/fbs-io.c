@@ -90,6 +90,21 @@ int fbs_read(FBSTREAM *fbs, char *buf, size_t len)
   return 1;
 }
 
+/* FIXME: Using fbs_getc() to skip data is really inefficient. */
+
+int fbs_skip(FBSTREAM *fbs, size_t len)
+{
+  int i;
+
+  for (i = 0; i < len; i++) {
+    if (fbs_getc(fbs) < 0) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 CARD8 fbs_read_U8(FBSTREAM *fbs)
 {
   return (CARD8)fbs_getc(fbs);

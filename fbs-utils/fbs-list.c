@@ -149,6 +149,14 @@ static int fbs_check_success(FBSTREAM *fbs)
   return 1;
 }
 
+/*
+ * Skip bytes and report error message if got over end of file.
+ */
+static int fbs_skip_ex(FBSTREAM *fbs, size_t len)
+{
+  fbs_skip(fbs, len);
+  return fbs_check_success(fbs);
+}
 
 /* FIXME: Code duplication, see rfblib.c */
 /* FIXME: Read directly from FBSTREAM. */
@@ -299,7 +307,6 @@ static int handle_copyrect(FBSTREAM *fbs)
 static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
 {
   int mask_size, data_size;
-  int i;
 
   mask_size = ((width + 7) / 8) * height;
   if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
@@ -308,10 +315,7 @@ static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
     data_size = mask_size;
   }
 
-  for (i = 0; i < mask_size + data_size; i++) {
-    fbs_getc(fbs);
-  }
-  return fbs_check_success(fbs);
+  return fbs_skip_ex(fbs, mask_size + data_size);
 }
 
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
@@ -323,9 +327,8 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
   size_t uncompressed_size;
   size_t compressed_size;
   int num_colors;
-  int i;
 
-/* Read the compression control byte. */
+  /* Read the compression control byte. */
   comp_ctl = fbs_read_U8(fbs);
   if (!fbs_check_success(fbs)) {
     return 0;
@@ -341,85 +344,65 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
 
   if (comp_ctl == RFB_TIGHT_FILL) {
     printf("      Tight/FILL\n");
-    for (i = 0; i < 3; i++) {
-      fbs_getc(fbs);
-    }
-    if (!fbs_check_success(fbs)) {
-      return 0;
-    }
-  } else if (comp_ctl == RFB_TIGHT_JPEG) {
+    return fbs_skip_ex(fbs, 3);
+  }
+
+  if (comp_ctl == RFB_TIGHT_JPEG) {
     compressed_size = fbs_read_tight_len(fbs);
     if (!fbs_check_success(fbs)) {
       return 0;
     }
     printf("      Tight/JPEG, bytes %u\n", (unsigned int)compressed_size);
-    for (i = 0; i < compressed_size; i++) {
-      fbs_getc(fbs);
-    }
-    if (!fbs_check_success(fbs)) {
-      return 0;
-    }
-  } else if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
+    return fbs_skip_ex(fbs, compressed_size);
+  }
+
+  if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
     fprintf(stderr, "Invalid sub-encoding in Tight-encoded data\n");
     return 0;
   }
-  else {                        /* "basic" compression */
-    stream_id = (comp_ctl >> 4) & 0x03;
-    if (comp_ctl & RFB_TIGHT_EXPLICIT_FILTER) {
-      filter_id = fbs_getc(fbs);
-      if (!fbs_check_success(fbs)) {
-        return 0;
-      }
-    } else {
-      filter_id = RFB_TIGHT_FILTER_COPY;
+
+  /* "Basic" compression. First, get zlib stream id and filter type. */
+  stream_id = (comp_ctl >> 4) & 0x03;
+  if (comp_ctl & RFB_TIGHT_EXPLICIT_FILTER) {
+    filter_id = fbs_getc(fbs);
+    if (!fbs_check_success(fbs)) {
+      return 0;
     }
-    if (filter_id == RFB_TIGHT_FILTER_COPY ||
-        filter_id == RFB_TIGHT_FILTER_GRADIENT) {
-      uncompressed_size = rect_width * rect_height * 3;
-    } else if (filter_id == RFB_TIGHT_FILTER_PALETTE) {
-      num_colors = fbs_getc(fbs) + 1;
-      if (!fbs_check_success(fbs)) {
-        return 0;
-      }
-      printf("      [palette, colors %d]\n", num_colors);
-      for (i = 0; i < num_colors * 3; i++) {
-        fbs_getc(fbs);
-      }
-      if (!fbs_check_success(fbs)) {
-        return 0;
-      }
-      if (num_colors <= 2) {
-        uncompressed_size = ((rect_width + 7) / 8) * rect_height;
-      } else {
-        uncompressed_size = rect_width * rect_height;
-      }
-    }
-    if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-      printf("      Tight/RAW, filter %d, bytes %u\n",
-             filter_id, (unsigned int)uncompressed_size);
-      for (i = 0; i < uncompressed_size; i++) {
-        fbs_getc(fbs);
-      }
-      if (!fbs_check_success(fbs)) {
-        return 0;
-      }
-    } else {
-      compressed_size = fbs_read_tight_len(fbs);
-      if (!fbs_check_success(fbs)) {
-        return 0;
-      }
-      printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
-             filter_id, stream_id, (unsigned int)compressed_size);
-      for (i = 0; i < compressed_size; i++) {
-        fbs_getc(fbs);
-      }
-      if (!fbs_check_success(fbs)) {
-        return 0;
-      }
-    }
+  } else {
+    filter_id = RFB_TIGHT_FILTER_COPY;
   }
 
-  return 1;
+  if (filter_id == RFB_TIGHT_FILTER_COPY ||
+      filter_id == RFB_TIGHT_FILTER_GRADIENT) {
+    uncompressed_size = rect_width * rect_height * 3;
+  } else if (filter_id == RFB_TIGHT_FILTER_PALETTE) {
+    num_colors = fbs_getc(fbs) + 1;
+    if (!fbs_check_success(fbs)) {
+      return 0;
+    }
+    printf("      [palette, colors %d]\n", num_colors);
+    if (!fbs_skip_ex(fbs, num_colors * 3)) {
+      return 0;
+    }
+    if (num_colors <= 2) {
+      uncompressed_size = ((rect_width + 7) / 8) * rect_height;
+    } else {
+      uncompressed_size = rect_width * rect_height;
+    }
+  }
+  if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
+    printf("      Tight/RAW, filter %d, bytes %u\n",
+           filter_id, (unsigned int)uncompressed_size);
+    return fbs_skip_ex(fbs, uncompressed_size);
+  } else {
+    compressed_size = fbs_read_tight_len(fbs);
+    if (!fbs_check_success(fbs)) {
+      return 0;
+    }
+    printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
+           filter_id, stream_id, (unsigned int)compressed_size);
+    return fbs_skip_ex(fbs, compressed_size);
+  }
 }
 
 static int handle_set_colormap_entries(FBSTREAM *fbs)

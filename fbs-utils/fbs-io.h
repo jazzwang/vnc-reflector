@@ -92,9 +92,23 @@ extern int fbs_getc(FBSTREAM *fbs);
  * considered undefined, as some unknown amount of data may have been
  * written to it.
  *
- * On error, fbs_getc() will print error message on stderr.
+ * On error, fbs_read() will print error message on stderr.
  */
 extern int fbs_read(FBSTREAM *fbs, char *buf, size_t len);
+
+/*
+ * Read and discard the specified number of bytes (len) from the data
+ * stream (referenced by fbs).
+ *
+ * The return value is 1 on success, and 0 if there was an error or
+ * end of stream has been reached. Note that fbs_skip() not just
+ * positions the file pointer, but may actually read some data. That's
+ * because .fbs files are block-based, and all previous block headers
+ * should be read to locate the beginning of the next block.
+ *
+ * On error, fbs_skip() will print error message on stderr.
+ */
+extern int fbs_skip(FBSTREAM *fbs, size_t len);
 
 /*
  * These functions read and return different types of integer values
