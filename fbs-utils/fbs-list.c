@@ -321,6 +321,10 @@ static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
   int mask_size = ((width + 7) / 8) * height;
   int data_size;
 
+  if (width * height == 0) {
+    return 1;                   /* null cursor */
+  }
+
   if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
     data_size = mask_size + width * height * 4;
   } else {                      /* RFB_ENCODING_XCURSOR */
