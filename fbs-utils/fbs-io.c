@@ -185,6 +185,7 @@ size_t fbs_read_tight_len(FBSTREAM *fbs)
 }
 
 int fbs_get_pos(FBSTREAM *fbs,
+                unsigned int *block_idx,
                 size_t *block_fpos,
                 size_t *block_size,
                 size_t *offset_in_block,
@@ -195,6 +196,9 @@ int fbs_get_pos(FBSTREAM *fbs,
     return 0;
   }
 
+  if (block_idx != NULL) {
+    *block_idx = fbs->block_idx - 1;
+  }
   if (block_fpos != NULL) {
     *block_fpos = fbs->block_fpos;
   }
@@ -284,6 +288,8 @@ static int fbs_read_block(FBSTREAM *fbs)
 
   fbs->block_fpos = fbs->next_block_fpos;
   fbs->next_block_fpos += (buf_size + 8);
+
+  fbs->block_idx++;
 
   return 1;
 }

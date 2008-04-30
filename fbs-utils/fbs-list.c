@@ -200,16 +200,24 @@ static int handle_server_cut_text(FBSTREAM *fbs);
 static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
   int msg_id;
+  unsigned int idx, prev_idx = -1;
   size_t filepos;
   size_t blksize;
   size_t offset;
   unsigned int timestamp;
 
   while (!fbs_eof(fbs) && !fbs_error(fbs)) {
-    if (fbs_get_pos(fbs, &filepos, &blksize, &offset, &timestamp)) {
-      printf("%u:\t%u/%u\t@%u\n",
-             (unsigned int)filepos, (unsigned int)offset,
-             (unsigned int)blksize, timestamp);
+    if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
+      if (idx != prev_idx) {
+        int not_listed = idx - prev_idx - 1;
+        if (not_listed != 0) {
+          printf("[blocks not listed: %d]\n", not_listed);
+        }
+        printf("block %u (fpos %u, size %u):\toffset %u\ttimestamp %ums\n",
+               idx, (unsigned int)filepos, (unsigned int)blksize,
+               (unsigned int)offset, timestamp);
+        prev_idx = idx;
+      }
       if ((msg_id = fbs_getc(fbs)) >= 0) {
         switch(msg_id) {
         case 0:

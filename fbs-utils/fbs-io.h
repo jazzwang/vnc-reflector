@@ -34,6 +34,7 @@
 typedef struct _FBSTREAM {
   FILE *fp;
   char *block_data;
+  unsigned int block_idx;
   size_t block_fpos;
   size_t next_block_fpos;
   size_t block_size;
@@ -151,6 +152,9 @@ extern size_t fbs_read_tight_len(FBSTREAM *fbs);
  * any pointer, and in that case the corresponding value will not be
  * stored. The arguments designate the following attributes:
  *
+ *   block_idx -  the number of data blocks before current one in the
+ *                .fbs file.
+ *
  *   block_fpos - position of the beginning of current data block in
  *                the .fbs file. This is an offset from the file
  *                beginning, so that it may be used with lseek(2) and
@@ -179,6 +183,7 @@ extern size_t fbs_read_tight_len(FBSTREAM *fbs);
  * On error, fbs_get_pos() will print error message on stderr.
  */
 extern int fbs_get_pos(FBSTREAM *fbs,
+                       unsigned int *block_idx,
                        size_t *block_fpos,
                        size_t *block_size,
                        size_t *offset_in_block,
