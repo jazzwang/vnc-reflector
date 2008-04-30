@@ -182,6 +182,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 static int handle_framebuffer_update(FBSTREAM *fbs);
 static int handle_rectangle(FBSTREAM *fbs, int idx);
+static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
 
 static int handle_set_colormap_entries(FBSTREAM *fbs);
 static int handle_bell(FBSTREAM *fbs);
@@ -264,17 +265,112 @@ static int handle_rectangle(FBSTREAM *fbs, int idx)
   h = fbs_read_U16(fbs);
   encoding = fbs_read_U32(fbs);
 
-  if (!fbs_eof(fbs) && !fbs_error(fbs)) {
-    printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
-           idx, w, h, x, y, encoding);
+  if (!fbs_check_success(fbs)) {
+    return 0;
   }
+
+  printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
+         idx, w, h, x, y, encoding);
 
   switch (encoding) {
   case 7:
-    break;
+    return handle_tight_rect(fbs, w, h);
   default:
     fprintf(stderr, "Unknown encoding type\n");
     return 0;
+  }
+
+  return 1;
+}
+
+static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
+{
+  CARD8 comp_ctl;
+  int stream_id;
+  char reset_str[5] = "----";
+  int filter_id;
+  size_t uncompressed_size;
+  size_t compressed_size;
+  int num_colors;
+  int i;
+
+/* Read the compression control byte. */
+  comp_ctl = fbs_read_U8(fbs);
+  if (!fbs_check_success(fbs)) {
+    return 0;
+  }
+
+  /* Flush zlib streams if requested. */
+  for (stream_id = 0; stream_id < 4; stream_id++) {
+    if (comp_ctl & (1 << stream_id)) {
+      reset_str[stream_id] = '0' + stream_id;
+    }
+  }
+  comp_ctl &= 0xF0;             /* clear bits 3..0 */
+
+  if (comp_ctl == RFB_TIGHT_FILL) {
+    printf("      Tight/FILL\n");
+    for (i = 0; i < 3; i++) {
+      fbs_getc(fbs);
+    }
+    if (!fbs_check_success(fbs)) {
+      return 0;
+    }
+  } else if (comp_ctl == RFB_TIGHT_JPEG) {
+    fprintf(stderr, "Tight/JPEG not supported\n");
+    return 0;
+  } else if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
+    fprintf(stderr, "Invalid sub-encoding in Tight-encoded data\n");
+    return 0;
+  }
+  else {                        /* "basic" compression */
+    stream_id = (comp_ctl >> 4) & 0x03;
+    if (comp_ctl & RFB_TIGHT_EXPLICIT_FILTER) {
+      filter_id = fbs_getc(fbs);
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
+    } else {
+      filter_id = RFB_TIGHT_FILTER_COPY;
+    }
+    if (filter_id == RFB_TIGHT_FILTER_COPY ||
+        filter_id == RFB_TIGHT_FILTER_GRADIENT) {
+      uncompressed_size = rect_width * rect_height * 3;
+    } else if (filter_id == RFB_TIGHT_FILTER_PALETTE) {
+      num_colors = fbs_getc(fbs) + 1;
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
+      printf("      [palette, colors %d]\n", num_colors);
+      for (i = 0; i < num_colors * 3; i++) {
+        fbs_getc(fbs);
+      }
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
+      if (num_colors <= 2) {
+        uncompressed_size = ((rect_width + 7) / 8) * rect_height;
+      } else {
+        uncompressed_size = rect_width * rect_height;
+      }
+    }
+    if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
+      fprintf(stderr, "Tight/RAW not supported\n");
+      return 0;
+    } else {
+      compressed_size = fbs_read_tight_len(fbs);
+      printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
+             filter_id, stream_id, (unsigned int)compressed_size);
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
+      for (i = 0; i < compressed_size; i++) {
+        fbs_getc(fbs);
+      }
+      if (!fbs_check_success(fbs)) {
+        return 0;
+      }
+    }
   }
 
   return 1;
