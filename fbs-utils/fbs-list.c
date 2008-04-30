@@ -158,6 +158,17 @@ static int fbs_skip_ex(FBSTREAM *fbs, size_t len)
   return fbs_check_success(fbs);
 }
 
+static size_t fbs_tight_len_bytes(size_t len)
+{
+  if (len < 128) {
+    return 1;
+  } else if (len < 16384) {
+    return 2;
+  } else {
+    return 3;
+  }
+}
+
 /* FIXME: Code duplication, see rfblib.c */
 /* FIXME: Read directly from FBSTREAM. */
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf)
@@ -188,7 +199,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static int handle_framebuffer_update(FBSTREAM *fbs);
+static int handle_framebuffer_update(FBSTREAM *fbs, int update_idx);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
 static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding);
@@ -205,6 +216,7 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   size_t blksize;
   size_t offset;
   unsigned int timestamp;
+  int num_updates = 0;
 
   while (!fbs_eof(fbs) && !fbs_error(fbs)) {
     if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
@@ -213,15 +225,16 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
         if (not_listed != 0) {
           printf("[blocks not listed: %d]\n", not_listed);
         }
-        printf("block %u (fpos %u, size %u):\toffset %u\ttimestamp %ums\n",
-               idx, (unsigned int)filepos, (unsigned int)blksize,
-               (unsigned int)offset, timestamp);
+        printf("block #%u (fpos %u, data size %u, timestamp %ums),"
+               " offset %u\n",
+               idx, (unsigned int)filepos, (unsigned int)blksize, timestamp,
+               (unsigned int)offset);
         prev_idx = idx;
       }
       if ((msg_id = fbs_getc(fbs)) >= 0) {
         switch(msg_id) {
         case 0:
-          if (!handle_framebuffer_update(fbs)) {
+          if (!handle_framebuffer_update(fbs, num_updates++)) {
             return 0;
           }
           break;
@@ -251,7 +264,7 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   return !fbs_error(fbs);
 }
 
-static int handle_framebuffer_update(FBSTREAM *fbs)
+static int handle_framebuffer_update(FBSTREAM *fbs, int update_idx)
 {
   CARD16 num_rects;
   int i;
@@ -262,7 +275,7 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
   num_rects = fbs_read_U16(fbs);
 
   if (!fbs_eof(fbs) && !fbs_error(fbs)) {
-    printf("  update, num_rects=%d\n", (int)num_rects);
+    printf("  update #%d, max rectangles %d\n", update_idx, (int)num_rects);
     for (i = 0; i < (int)num_rects; i++) {
       x = fbs_read_U16(fbs);
       y = fbs_read_U16(fbs);
@@ -272,13 +285,17 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
       if (!fbs_check_success(fbs)) {
         return 0;
       }
-      printf("    rect #%d\t%hux%hu\tat (%hu,%hu)\tencoding %d\n",
-             i, w, h, x, y, encoding);
+      printf("    rect #%2d, (%4hu,%4hu) %4hu x%4hu, enc %d ",
+             i, x, y, w, h, encoding);
 
-      if (encoding == -224)     /* RFB_ENCODING_LASTRECT */
+      if (encoding == -224) {   /* RFB_ENCODING_LASTRECT */
+        printf("(LastRect)\n");
         break;
-      if (encoding == -223)     /* RFB_ENCODING_NEWFBSIZE */
+      }
+      if (encoding == -223) {   /* RFB_ENCODING_NEWFBSIZE */
+        printf("(NewFBSize)\n");
         break;
+      }
 
       switch (encoding) {
       case RFB_ENCODING_COPYRECT:
@@ -298,8 +315,10 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
         }
         break;
       case -232:                /* RFB_ENCODING_POINTERPOS */
+        printf("(PointerPos)\n");
         break;
       default:
+        printf("(not supported)\n");
         fprintf(stderr, "Unknown encoding type\n");
         return 0;
       }
@@ -311,6 +330,7 @@ static int handle_framebuffer_update(FBSTREAM *fbs)
 
 static int handle_copyrect(FBSTREAM *fbs)
 {
+  printf("(CopyRect)\n");
   fbs_read_U16(fbs);
   fbs_read_U16(fbs);
   return fbs_check_success(fbs);
@@ -321,14 +341,12 @@ static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
   int mask_size = ((width + 7) / 8) * height;
   int data_size;
 
-  if (width * height == 0) {
-    return 1;                   /* null cursor */
-  }
-
   if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
+    printf("(RichCursor)\n");
     data_size = mask_size + width * height * 4;
   } else {                      /* RFB_ENCODING_XCURSOR */
-    data_size = 6 + 2 * mask_size;
+    printf("(XCursor)\n");
+    data_size = ((width * height != 0) ? 6 : 0) + 2 * mask_size;
   }
 
   return fbs_skip_ex(fbs, data_size);
@@ -336,6 +354,7 @@ static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
 
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
 {
+  size_t saved_pos, diff;
   CARD8 comp_ctl;
   int stream_id;
   char reset_str[5] = "----";
@@ -343,6 +362,9 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
   size_t uncompressed_size;
   size_t compressed_size;
   int num_colors;
+
+  printf("(Tight: ");
+  saved_pos = fbs_num_bytes_read(fbs);
 
   /* Read the compression control byte. */
   comp_ctl = fbs_read_U8(fbs);
@@ -356,10 +378,11 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
       reset_str[stream_id] = '0' + stream_id;
     }
   }
+  printf("%s ", reset_str);
   comp_ctl &= 0xF0;             /* clear bits 3..0 */
 
   if (comp_ctl == RFB_TIGHT_FILL) {
-    printf("      Tight/FILL\n");
+    printf("fill    4+0+0)\n");
     return fbs_skip_ex(fbs, 3);
   }
 
@@ -368,7 +391,9 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
     if (!fbs_check_success(fbs)) {
       return 0;
     }
-    printf("      Tight/JPEG, bytes %u\n", (unsigned int)compressed_size);
+    diff = fbs_num_bytes_read(fbs) - saved_pos;
+    printf("jpeg    1+%u+%u)\n", (unsigned int)(diff - 1),
+           (unsigned int)compressed_size);
     return fbs_skip_ex(fbs, compressed_size);
   }
 
@@ -388,35 +413,42 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
     filter_id = RFB_TIGHT_FILTER_COPY;
   }
 
-  if (filter_id == RFB_TIGHT_FILTER_COPY ||
-      filter_id == RFB_TIGHT_FILTER_GRADIENT) {
+  if (filter_id == RFB_TIGHT_FILTER_COPY) {
+    printf("pure");
+    uncompressed_size = rect_width * rect_height * 3;
+  } else if (filter_id == RFB_TIGHT_FILTER_GRADIENT) {
+    printf("grad");
     uncompressed_size = rect_width * rect_height * 3;
   } else if (filter_id == RFB_TIGHT_FILTER_PALETTE) {
     num_colors = fbs_getc(fbs) + 1;
     if (!fbs_check_success(fbs)) {
       return 0;
     }
-    printf("      [palette, colors %d]\n", num_colors);
     if (!fbs_skip_ex(fbs, num_colors * 3)) {
       return 0;
     }
     if (num_colors <= 2) {
+      printf("mono");
       uncompressed_size = ((rect_width + 7) / 8) * rect_height;
     } else {
+      printf("i%03d", num_colors);
       uncompressed_size = rect_width * rect_height;
     }
   }
   if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-    printf("      Tight/RAW, filter %d, bytes %u\n",
-           filter_id, (unsigned int)uncompressed_size);
+    diff = fbs_num_bytes_read(fbs) - saved_pos;
+    printf("    %u+0+0)\n", (unsigned int)(diff + uncompressed_size));
     return fbs_skip_ex(fbs, uncompressed_size);
   } else {
+    diff = fbs_num_bytes_read(fbs) - saved_pos;
     compressed_size = fbs_read_tight_len(fbs);
     if (!fbs_check_success(fbs)) {
       return 0;
     }
-    printf("      Tight/ZLIB, filter %d, stream %d, zlib bytes %u\n",
-           filter_id, stream_id, (unsigned int)compressed_size);
+    printf("+z%d %u+%u+%u)\n", stream_id,
+           (unsigned int)diff,
+           (unsigned int)fbs_tight_len_bytes(compressed_size),
+           (unsigned int)compressed_size);
     return fbs_skip_ex(fbs, compressed_size);
   }
 }
