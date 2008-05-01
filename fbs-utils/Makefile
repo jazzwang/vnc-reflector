@@ -20,27 +20,32 @@ CFLAGS =	-O2 $(IFLAGS)
 CONFFLAGS =
 
 # Link with zlib library
-LDFLAGS =	-L/usr/local/lib -lz
+LDFLAGS =	-L/usr/local/lib
 
-PROG = 	fbs-list
+PROG_FBS_LIST = fbs-list
+OBJS_FBS_LIST = fbs-list.o fbsinput.o
 
-OBJS = 	fbs-list.o fbsinput.o
+PROG_FBS_UNCHAIN = fbs-unchain
+OBJS_FBS_UNCHAIN = fbs-unchain.o fbsinput.o fbsoutput.o
 
-SRCS =	fbs-list.c fbsinput.c
+SRCS = fbs-list.c fbs-unchain.c fbsinput.c fbsoutput.c
 
 CC = gcc
 MAKEDEPEND = makedepend
 MAKEDEPFLAGS = -Y
 
-default: $(PROG)
+default: $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN)
 
-$(PROG): $(OBJS)
-	$(CC) $(CFLAGS) -o $(PROG) $(OBJS) $(LDFLAGS)
+$(PROG_FBS_LIST): $(OBJS_FBS_LIST)
+	$(CC) $(CFLAGS) -o $(PROG_FBS_LIST) $(OBJS_FBS_LIST) $(LDFLAGS)
+
+$(PROG_FBS_UNCHAIN): $(OBJS_FBS_UNCHAIN)
+	$(CC) $(CFLAGS) -o $(PROG_FBS_UNCHAIN) $(OBJS_FBS_UNCHAIN) $(LDFLAGS)
 
 clean: 
-	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
+	rm -f $(OBJS) *~ *.bak *.o $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN)
 
-depend: $(SRCS)
+depend:
 	$(MAKEDEPEND) $(MAKEDEPFLAGS) $(IFLAGS) $(SRCS) 2> /dev/null
 
 .c.o:
@@ -50,4 +55,6 @@ depend: $(SRCS)
 # DO NOT DELETE
 
 fbs-list.o: ../reflector/rfblib.h version.h fbsinput.h
+fbs-unchain.o: ../reflector/rfblib.h version.h fbsinput.h
 fbsinput.o: ../reflector/rfblib.h fbsinput.h
+fbsoutput.o: ../reflector/rfblib.h fbsoutput.h
