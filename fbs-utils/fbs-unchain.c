@@ -214,7 +214,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os);
 static int handle_copyrect(FBSTREAM *is, FBSOUT *os);
-static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h);
+static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset);
 static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding);
 
 static int handle_set_colormap_entries(FBSTREAM *is, FBSOUT *os);
@@ -274,6 +274,7 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
   int i;
   CARD16 x, y, w, h;
   INT32 encoding;
+  int reset_zlib = 1;
 
   padding = fbs_read_U8(is);
   num_rects = fbs_read_U16(is);
@@ -313,9 +314,10 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
         }
         break;
       case RFB_ENCODING_TIGHT:
-        if (!handle_tight_rect(is, os, w, h)) {
+        if (!handle_tight(is, os, w, h, reset_zlib)) {
           return 0;
         }
+        reset_zlib = 0;
         break;
       case -240:                /* RFB_ENCODING_XCURSOR */
       case -239:                /* RFB_ENCODING_RICHCURSOR */
@@ -371,7 +373,7 @@ static void zlib_reset_streams_out(void);
 static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
                         size_t raw_size);
 
-static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
+static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
 {
   CARD8 comp_ctl;
   int stream_id;
@@ -385,9 +387,8 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   if (!fbs_check_success(is)) {
     return 0;
   }
-  fbs_write_U8(os, comp_ctl | 0x0F);
 
-  /* Flush input zlib streams if requested. */
+  /* Reset input zlib streams if requested. */
   for (stream_id = 0; stream_id < 4; stream_id++) {
     if (comp_ctl & (1 << stream_id)) {
       zlib_reset_stream_in(stream_id);
@@ -395,8 +396,13 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   }
   comp_ctl &= 0xF0;             /* clear bits 3..0 */
 
-  /* DEBUG: Flush all output zlib streams each time. */
-  zlib_reset_streams_out();
+  /* Reset output zlib streams if needed. */
+  if (reset) {
+    fbs_write_U8(os, comp_ctl | 0x0F);
+    zlib_reset_streams_out();
+  } else {
+    fbs_write_U8(os, comp_ctl);
+  }
 
   if (comp_ctl == RFB_TIGHT_FILL) {
     return fbs_copy(is, os, 3);
