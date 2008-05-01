@@ -434,6 +434,9 @@ static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height)
       printf("i%03d", num_colors);
       uncompressed_size = rect_width * rect_height;
     }
+  } else {
+    fprintf(stderr, "Invalid filter id in Tight-encoded data\n");
+    return 0;
   }
   if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
     diff = fbs_num_bytes_read(fbs) - saved_pos;
