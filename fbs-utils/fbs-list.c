@@ -13,7 +13,7 @@
 
 #include "rfblib.h"
 #include "version.h"
-#include "fbs-io.h"
+#include "fbsinput.h"
 
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 

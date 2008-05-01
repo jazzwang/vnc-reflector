@@ -24,9 +24,9 @@ LDFLAGS =	-L/usr/local/lib -lz
 
 PROG = 	fbs-list
 
-OBJS = 	fbs-list.o fbs-io.o
+OBJS = 	fbs-list.o fbsinput.o
 
-SRCS =	fbs-list.c fbs-io.c
+SRCS =	fbs-list.c fbsinput.c
 
 CC = gcc
 MAKEDEPEND = makedepend
@@ -49,5 +49,5 @@ depend: $(SRCS)
 
 # DO NOT DELETE
 
-fbs-list.o: version.h fbs-io.h
-fbs-io.o: ../reflector/rfblib.h fbs-io.h
+fbs-list.o: ../reflector/rfblib.h version.h fbsinput.h
+fbsinput.o: ../reflector/rfblib.h fbsinput.h

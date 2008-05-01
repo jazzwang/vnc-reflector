@@ -12,7 +12,7 @@
 #include <string.h>
 
 #include "rfblib.h"
-#include "fbs-io.h"
+#include "fbsinput.h"
 
 static int fbs_read_block(FBSTREAM *fbs);
 static void fbs_free_block(FBSTREAM *fbs);
