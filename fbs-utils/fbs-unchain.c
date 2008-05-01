@@ -161,23 +161,23 @@ static int fbs_check_success(FBSTREAM *is)
 }
 
 /*
- * Skip bytes and report error message if got over end of file.
+ * Copy bytes from input to output, check errors, report error message
+ * if got over end of file.
  */
-static int fbs_skip_ex(FBSTREAM *is, size_t len)
+static int fbs_copy(FBSTREAM *is, FBSOUT *os, size_t len)
 {
-  fbs_skip(is, len);
-  return fbs_check_success(is);
-}
+  char *buf;
+  int success;
 
-static size_t fbs_tight_len_bytes(size_t len)
-{
-  if (len < 128) {
-    return 1;
-  } else if (len < 16384) {
-    return 2;
-  } else {
-    return 3;
+  buf = malloc(len);
+  fbs_read(is, buf, len);
+  success = fbs_check_success(is);
+  if (success) {
+    success = fbs_write(os, buf, len);
   }
+  free(buf);
+
+  return success;
 }
 
 /* FIXME: Code duplication, see rfblib.c */
@@ -232,6 +232,7 @@ static int read_normal_protocol(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
     if (fbs_get_pos(is, &idx, &filepos, &blksize, &offset, &timestamp)) {
       fbsout_set_timestamp(os, timestamp, 1);
       if ((msg_id = fbs_getc(is)) >= 0) {
+        fbs_putc(os, msg_id);
         switch(msg_id) {
         case 0:
           if (!handle_framebuffer_update(is, os)) {
@@ -266,15 +267,20 @@ static int read_normal_protocol(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
 
 static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
 {
+  CARD8 padding;
   CARD16 num_rects;
   int i;
   CARD16 x, y, w, h;
   INT32 encoding;
 
-  fbs_read_U8(is);
+  padding = fbs_read_U8(is);
   num_rects = fbs_read_U16(is);
 
   if (!fbs_eof(is) && !fbs_error(is)) {
+
+    fbs_write_U8(os, padding);
+    fbs_write_U16(os, num_rects);
+
     for (i = 0; i < (int)num_rects; i++) {
       x = fbs_read_U16(is);
       y = fbs_read_U16(is);
@@ -284,6 +290,12 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
       if (!fbs_check_success(is)) {
         return 0;
       }
+
+      fbs_write_U16(os, x);
+      fbs_write_U16(os, y);
+      fbs_write_U16(os, w);
+      fbs_write_U16(os, h);
+      fbs_write_U32(os, encoding);
 
       if (encoding == -224) {   /* RFB_ENCODING_LASTRECT */
         break;
@@ -323,9 +335,18 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
 
 static int handle_copyrect(FBSTREAM *is, FBSOUT *os)
 {
-  fbs_read_U16(is);
-  fbs_read_U16(is);
-  return fbs_check_success(is);
+  CARD16 src_x, src_y;
+
+  src_x = fbs_read_U16(is);
+  src_y = fbs_read_U16(is);
+  if (!fbs_check_success(is)) {
+    return 0;
+  }
+
+  fbs_write_U16(os, src_x);
+  fbs_write_U16(os, src_y);
+
+  return 1;
 }
 
 static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
@@ -339,12 +360,11 @@ static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
     data_size = ((w * h != 0) ? 6 : 0) + 2 * mask_size;
   }
 
-  return fbs_skip_ex(is, data_size);
+  return fbs_copy(is, os, data_size);
 }
 
 static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
 {
-  size_t saved_pos, diff;
   CARD8 comp_ctl;
   int stream_id;
   char reset_str[5] = "----";
@@ -353,13 +373,12 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   size_t compressed_size;
   int num_colors;
 
-  saved_pos = fbs_num_bytes_read(is);
-
   /* Read the compression control byte. */
   comp_ctl = fbs_read_U8(is);
   if (!fbs_check_success(is)) {
     return 0;
   }
+  fbs_write_U8(os, comp_ctl);
 
   /* Flush zlib streams if requested. */
   for (stream_id = 0; stream_id < 4; stream_id++) {
@@ -370,7 +389,7 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   comp_ctl &= 0xF0;             /* clear bits 3..0 */
 
   if (comp_ctl == RFB_TIGHT_FILL) {
-    return fbs_skip_ex(is, 3);
+    return fbs_copy(is, os, 3);
   }
 
   if (comp_ctl == RFB_TIGHT_JPEG) {
@@ -378,8 +397,8 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
     if (!fbs_check_success(is)) {
       return 0;
     }
-    diff = fbs_num_bytes_read(is) - saved_pos;
-    return fbs_skip_ex(is, compressed_size);
+    fbs_write_tight_len(os, compressed_size);
+    return fbs_copy(is, os, compressed_size);
   }
 
   if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
@@ -394,6 +413,7 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
     if (!fbs_check_success(is)) {
       return 0;
     }
+    fbs_write_U8(os, filter_id);
   } else {
     filter_id = RFB_TIGHT_FILTER_COPY;
   }
@@ -407,7 +427,8 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
     if (!fbs_check_success(is)) {
       return 0;
     }
-    if (!fbs_skip_ex(is, num_colors * 3)) {
+    fbs_write_U8(os, num_colors - 1);
+    if (!fbs_copy(is, os, num_colors * 3)) {
       return 0;
     }
     if (num_colors <= 2) {
@@ -415,17 +436,19 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
     } else {
       uncompressed_size = w * h;
     }
+  } else {
+    fprintf(stderr, "Invalid filter id in Tight-encoded data\n");
+    return 0;
   }
   if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-    diff = fbs_num_bytes_read(is) - saved_pos;
-    return fbs_skip_ex(is, uncompressed_size);
+    return fbs_copy(is, os, uncompressed_size);
   } else {
-    diff = fbs_num_bytes_read(is) - saved_pos;
     compressed_size = fbs_read_tight_len(is);
     if (!fbs_check_success(is)) {
       return 0;
     }
-    return fbs_skip_ex(is, compressed_size);
+    fbs_write_tight_len(os, compressed_size);
+    return fbs_copy(is, os, compressed_size);
   }
 }
 
