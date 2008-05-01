@@ -19,14 +19,13 @@ CFLAGS =	-O2 $(IFLAGS)
 
 CONFFLAGS =
 
-# Link with zlib library
-LDFLAGS =	-L/usr/local/lib
-
 PROG_FBS_LIST = fbs-list
 OBJS_FBS_LIST = fbs-list.o fbsinput.o
+LDFLAGS_FBS_LIST = -L/usr/local/lib
 
 PROG_FBS_UNCHAIN = fbs-unchain
 OBJS_FBS_UNCHAIN = fbs-unchain.o fbsinput.o fbsoutput.o
+LDFLAGS_FBS_UNCHAIN = -L/usr/local/lib -lz
 
 SRCS = fbs-list.c fbs-unchain.c fbsinput.c fbsoutput.c
 
@@ -37,10 +36,12 @@ MAKEDEPFLAGS = -Y
 default: $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN)
 
 $(PROG_FBS_LIST): $(OBJS_FBS_LIST)
-	$(CC) $(CFLAGS) -o $(PROG_FBS_LIST) $(OBJS_FBS_LIST) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(PROG_FBS_LIST) $(OBJS_FBS_LIST) \
+		$(LDFLAGS_FBS_LIST)
 
 $(PROG_FBS_UNCHAIN): $(OBJS_FBS_UNCHAIN)
-	$(CC) $(CFLAGS) -o $(PROG_FBS_UNCHAIN) $(OBJS_FBS_UNCHAIN) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(PROG_FBS_UNCHAIN) $(OBJS_FBS_UNCHAIN) \
+		$(LDFLAGS_FBS_UNCHAIN)
 
 clean: 
 	rm -f $(OBJS) *~ *.bak *.o $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN)

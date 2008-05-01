@@ -365,6 +365,10 @@ static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
   return fbs_copy(is, os, data_size);
 }
 
+static void zlib_reset_stream_in(int stream_id);
+/*
+static void zlib_reset_stream_out(int stream_id);
+*/
 static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
                         size_t raw_size);
 
@@ -372,7 +376,6 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
 {
   CARD8 comp_ctl;
   int stream_id;
-  char reset_str[5] = "----";
   int filter_id;
   size_t uncompressed_size;
   size_t compressed_size;
@@ -388,7 +391,7 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   /* Flush zlib streams if requested. */
   for (stream_id = 0; stream_id < 4; stream_id++) {
     if (comp_ctl & (1 << stream_id)) {
-      reset_str[stream_id] = '0' + stream_id;
+      zlib_reset_stream_in(stream_id);
     }
   }
   comp_ctl &= 0xF0;             /* clear bits 3..0 */
@@ -471,20 +474,167 @@ static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os)
 
 /************************* Zlib Conversion *************************/
 
+static z_stream s_zstream_in[4];
+static int s_zstream_in_active[4] = { 0, 0, 0, 0 };
+
+static z_stream s_zstream_out[4];
+static int s_zstream_out_active[4] = { 0, 0, 0, 0 };
+
+static void zlib_reset_stream_in(int stream_id)
+{
+  if (s_zstream_in_active[stream_id]) {
+    if (inflateEnd(&s_zstream_in[stream_id]) != Z_OK) {
+      if (s_zstream_in[stream_id].msg != NULL) {
+        fprintf(stderr, "inflateEnd() failed: %s",
+                s_zstream_in[stream_id].msg);
+      } else {
+        fprintf(stderr, "inflateEnd() failed");
+      }
+    }
+    s_zstream_in_active[stream_id] = 0;
+  }
+}
+
 /*
-static z_stream zs[4];
-static int zs_inited[4] = {0, 0, 0, 0};
+static void zlib_reset_stream_out(int stream_id)
+{
+  if (s_zstream_out_active[stream_id]) {
+    if (deflateEnd(&s_zstream_out[stream_id]) != Z_OK) {
+      if (s_zstream_out[stream_id].msg != NULL) {
+        fprintf(stderr, "deflateEnd() failed: %s",
+                s_zstream_out[stream_id].msg);
+      } else {
+        fprintf(stderr, "deflateEnd() failed");
+      }
+    }
+    s_zstream_out_active[stream_id] = 0;
+  }
+}
 */
 
-static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
+static int zlib_convert(FBSTREAM *is, FBSOUT *os, int stream_id,
                         size_t raw_size)
 {
-  size_t compressed_size;
+  z_streamp zs;
+  int err;
+  size_t zlib_in_size;
+  size_t zlib_out_size;
+  char *zlib_in_data;
+  char *zlib_out_data;
+  char *raw_data;
+  int success;
 
-  compressed_size = fbs_read_tight_len(is);
+  zlib_in_size = fbs_read_tight_len(is);
   if (!fbs_check_success(is)) {
     return 0;
   }
-  fbs_write_tight_len(os, compressed_size);
-  return fbs_copy(is, os, compressed_size);
+
+  /* Initialize decompression stream if needed */
+
+  zs = &s_zstream_in[stream_id];
+  if (!s_zstream_in_active[stream_id]) {
+    zs->zalloc = Z_NULL;
+    zs->zfree = Z_NULL;
+    zs->opaque = Z_NULL;
+    err = inflateInit(zs);
+    if (err != Z_OK) {
+      if (zs->msg != NULL) {
+        fprintf(stderr, "inflateInit() failed: %s\n", zs->msg);
+      } else {
+        fprintf(stderr, "inflateInit() failed\n");
+      }
+      return 0;
+    }
+    s_zstream_in_active[stream_id] = 1;
+  }
+
+  /* Allocate buffers to put zlib and raw data into */
+
+  zlib_in_data = malloc(zlib_in_size);
+  raw_data = malloc(raw_size);
+
+  /* Read the data. */
+
+  if (!fbs_read(is, zlib_in_data, zlib_in_size)) {
+    free(zlib_in_data);
+    free(raw_data);
+    return 0;
+  }
+
+  /* Decompress the data */
+
+  zs->next_in = (Bytef *)zlib_in_data;
+  zs->avail_in = zlib_in_size;
+  zs->next_out = (Bytef *)raw_data;
+  zs->avail_out = raw_size;
+
+  err = inflate(zs, Z_SYNC_FLUSH);
+  if (err != Z_OK && err != Z_STREAM_END) {
+    if (zs->msg != NULL) {
+      fprintf(stderr, "inflate() failed: %s\n", zs->msg);
+    } else {
+      fprintf(stderr, "inflate() failed: %d\n", err);
+    }
+    free(zlib_in_data);
+    free(raw_data);
+    return 0;
+  }
+
+  if (zs->avail_out > 0)
+    fprintf(stderr, "Decompressed data size is less than expected\n");
+
+  /* Initialize compression stream if needed. */
+
+  zs = &s_zstream_out[stream_id];
+  if (!s_zstream_out_active[stream_id]) {
+    zs->zalloc = Z_NULL;
+    zs->zfree = Z_NULL;
+    zs->opaque = Z_NULL;
+
+    err = deflateInit2(zs, Z_BEST_COMPRESSION, Z_DEFLATED, MAX_WBITS,
+                       MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY);
+    if (err != Z_OK) {
+      free(zlib_in_data);
+      free(raw_data);
+      return 0;
+    }
+
+    s_zstream_out_active[stream_id] = 1;
+  }
+
+  /* Allocate buffer for compressed data. */
+
+  zlib_out_size = deflateBound(zs, raw_size) + 1;
+  zlib_out_data = malloc(zlib_out_size);
+
+  /* Prepare buffer pointers. */
+
+  zs->next_in = (Bytef *)raw_data;
+  zs->avail_in = raw_size;
+  zs->next_out = (Bytef *)zlib_out_data;
+  zs->avail_out = zlib_out_size;
+
+  /* Actual compression. */
+
+  if (deflate(zs, Z_SYNC_FLUSH) != Z_OK ||
+      zs->avail_in != 0 || zs->avail_out == 0) {
+    free(zlib_in_data);
+    free(raw_data);
+    free(zlib_out_data);
+    return 0;
+  }
+
+  /* Write compressed data. */
+
+  zlib_out_size -= zs->avail_out;
+  fbs_write_tight_len(os, zlib_out_size);
+  success = fbs_write(os, zlib_out_data, zlib_out_size);
+
+  /* Free memory. */
+
+  free(zlib_in_data);
+  free(raw_data);
+  free(zlib_out_data);
+
+  return success;
 }
