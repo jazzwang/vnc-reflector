@@ -25,7 +25,8 @@ static int fbs_check_success(FBSTREAM *is);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
-static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr);
+static int read_normal_protocol(FBSTREAM *is, FBSOUT *os,
+                                RFB_SCREEN_INFO *scr);
 
 int main (int argc, char *argv[])
 {
@@ -78,7 +79,7 @@ static int convert_fbs(FILE *fp)
     return 0;
   }
 
-  success = read_normal_protocol(&is, &screen);
+  success = read_normal_protocol(&is, &os, &screen);
 
   free(screen.name);
   fbsout_cleanup(&os);
@@ -209,16 +210,16 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static int handle_framebuffer_update(FBSTREAM *is, int update_idx);
-static int handle_copyrect(FBSTREAM *is);
-static int handle_tight_rect(FBSTREAM *is, int rect_width, int rect_height);
-static int handle_cursor(FBSTREAM *is, int width, int height, int encoding);
+static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os);
+static int handle_copyrect(FBSTREAM *is, FBSOUT *os);
+static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h);
+static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding);
 
-static int handle_set_colormap_entries(FBSTREAM *is);
-static int handle_bell(FBSTREAM *is);
-static int handle_server_cut_text(FBSTREAM *is);
+static int handle_set_colormap_entries(FBSTREAM *is, FBSOUT *os);
+static int handle_bell(FBSTREAM *is, FBSOUT *os);
+static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os);
 
-static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr)
+static int read_normal_protocol(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
 {
   int msg_id;
   unsigned int idx;
@@ -226,29 +227,29 @@ static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr)
   size_t blksize;
   size_t offset;
   unsigned int timestamp;
-  int num_updates = 0;
 
   while (!fbs_eof(is) && !fbs_error(is)) {
     if (fbs_get_pos(is, &idx, &filepos, &blksize, &offset, &timestamp)) {
+      fbsout_set_timestamp(os, timestamp, 1);
       if ((msg_id = fbs_getc(is)) >= 0) {
         switch(msg_id) {
         case 0:
-          if (!handle_framebuffer_update(is, num_updates++)) {
+          if (!handle_framebuffer_update(is, os)) {
             return 0;
           }
           break;
         case 1:
-          if (!handle_set_colormap_entries(is)) {
+          if (!handle_set_colormap_entries(is, os)) {
             return 0;
           }
           break;
         case 2:
-          if (!handle_bell(is)) {
+          if (!handle_bell(is, os)) {
             return 0;
           }
           break;
         case 3:
-          if (!handle_server_cut_text(is)) {
+          if (!handle_server_cut_text(is, os)) {
             return 0;
           }
           break;
@@ -263,7 +264,7 @@ static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr)
   return !fbs_error(is);
 }
 
-static int handle_framebuffer_update(FBSTREAM *is, int update_idx)
+static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
 {
   CARD16 num_rects;
   int i;
@@ -293,18 +294,18 @@ static int handle_framebuffer_update(FBSTREAM *is, int update_idx)
 
       switch (encoding) {
       case RFB_ENCODING_COPYRECT:
-        if (!handle_copyrect(is)) {
+        if (!handle_copyrect(is, os)) {
           return 0;
         }
         break;
       case RFB_ENCODING_TIGHT:
-        if (!handle_tight_rect(is, w, h)) {
+        if (!handle_tight_rect(is, os, w, h)) {
           return 0;
         }
         break;
       case -240:                /* RFB_ENCODING_XCURSOR */
       case -239:                /* RFB_ENCODING_RICHCURSOR */
-        if (!handle_cursor(is, w, h, (int)encoding)) {
+        if (!handle_cursor(is, os, w, h, (int)encoding)) {
           return 0;
         }
         break;
@@ -320,28 +321,28 @@ static int handle_framebuffer_update(FBSTREAM *is, int update_idx)
   return 1;
 }
 
-static int handle_copyrect(FBSTREAM *is)
+static int handle_copyrect(FBSTREAM *is, FBSOUT *os)
 {
   fbs_read_U16(is);
   fbs_read_U16(is);
   return fbs_check_success(is);
 }
 
-static int handle_cursor(FBSTREAM *is, int width, int height, int encoding)
+static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
 {
-  int mask_size = ((width + 7) / 8) * height;
+  int mask_size = ((w + 7) / 8) * h;
   int data_size;
 
   if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
-    data_size = mask_size + width * height * 4;
+    data_size = mask_size + w * h * 4;
   } else {                      /* RFB_ENCODING_XCURSOR */
-    data_size = ((width * height != 0) ? 6 : 0) + 2 * mask_size;
+    data_size = ((w * h != 0) ? 6 : 0) + 2 * mask_size;
   }
 
   return fbs_skip_ex(is, data_size);
 }
 
-static int handle_tight_rect(FBSTREAM *is, int rect_width, int rect_height)
+static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
 {
   size_t saved_pos, diff;
   CARD8 comp_ctl;
@@ -398,9 +399,9 @@ static int handle_tight_rect(FBSTREAM *is, int rect_width, int rect_height)
   }
 
   if (filter_id == RFB_TIGHT_FILTER_COPY) {
-    uncompressed_size = rect_width * rect_height * 3;
+    uncompressed_size = w * h * 3;
   } else if (filter_id == RFB_TIGHT_FILTER_GRADIENT) {
-    uncompressed_size = rect_width * rect_height * 3;
+    uncompressed_size = w * h * 3;
   } else if (filter_id == RFB_TIGHT_FILTER_PALETTE) {
     num_colors = fbs_getc(is) + 1;
     if (!fbs_check_success(is)) {
@@ -410,9 +411,9 @@ static int handle_tight_rect(FBSTREAM *is, int rect_width, int rect_height)
       return 0;
     }
     if (num_colors <= 2) {
-      uncompressed_size = ((rect_width + 7) / 8) * rect_height;
+      uncompressed_size = ((w + 7) / 8) * h;
     } else {
-      uncompressed_size = rect_width * rect_height;
+      uncompressed_size = w * h;
     }
   }
   if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
@@ -428,18 +429,18 @@ static int handle_tight_rect(FBSTREAM *is, int rect_width, int rect_height)
   }
 }
 
-static int handle_set_colormap_entries(FBSTREAM *is)
+static int handle_set_colormap_entries(FBSTREAM *is, FBSOUT *os)
 {
   fprintf(stderr, "SetColormapEntries message is not supported\n");
   return 0;
 }
 
-static int handle_bell(FBSTREAM *is)
+static int handle_bell(FBSTREAM *is, FBSOUT *os)
 {
   return 1;
 }
 
-static int handle_server_cut_text(FBSTREAM *is)
+static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os)
 {
   fprintf(stderr, "ServerCutText message is not supported\n");
   return 0;
