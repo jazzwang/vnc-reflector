@@ -74,6 +74,7 @@ extern int fbs_write_U32(FBSOUT *fbs, CARD32 value);
 extern int fbs_write_S8(FBSOUT *fbs, INT8 value);
 extern int fbs_write_S16(FBSOUT *fbs, INT16 value);
 extern int fbs_write_S32(FBSOUT *fbs, INT32 value);
+extern int fbs_write_tight_len(FBSOUT *fbs, size_t value);
 
 extern int fbsout_set_timestamp(FBSOUT *fbs, unsigned int timestamp,
                                 int can_flush);

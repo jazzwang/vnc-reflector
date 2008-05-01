@@ -141,6 +141,24 @@ int fbs_write_S32(FBSOUT *fbs, INT32 value)
   return fbs_write_U32(fbs, (CARD32)value);
 }
 
+int fbs_write_tight_len(FBSOUT *fbs, size_t value)
+{
+  char buf[3];
+  size_t len_bytes = 0;
+
+  buf[len_bytes++] = (char)(value & 0x7F);
+  if (value > 0x7F) {
+    buf[len_bytes-1] |= 0x80;
+    buf[len_bytes++] = (char)(value >> 7 & 0x7F);
+    if (value > 0x3FFF) {
+      buf[len_bytes-1] |= 0x80;
+      buf[len_bytes++] = (char)(value >> 14 & 0xFF);
+    }
+  }
+
+  return fbs_write(fbs, buf, len_bytes);
+}
+
 int fbsout_set_timestamp(FBSOUT *fbs, unsigned int timestamp, int can_flush)
 {
   int success;
