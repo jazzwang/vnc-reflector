@@ -11,6 +11,8 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include <zlib.h>
+
 #include "rfblib.h"
 #include "version.h"
 #include "fbsinput.h"
@@ -363,6 +365,9 @@ static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
   return fbs_copy(is, os, data_size);
 }
 
+static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
+                        size_t raw_size);
+
 static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
 {
   CARD8 comp_ctl;
@@ -443,12 +448,7 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
     return fbs_copy(is, os, uncompressed_size);
   } else {
-    compressed_size = fbs_read_tight_len(is);
-    if (!fbs_check_success(is)) {
-      return 0;
-    }
-    fbs_write_tight_len(os, compressed_size);
-    return fbs_copy(is, os, compressed_size);
+    return zlib_convert(is, os, stream_id, uncompressed_size);
   }
 }
 
@@ -467,4 +467,24 @@ static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os)
 {
   fprintf(stderr, "ServerCutText message is not supported\n");
   return 0;
+}
+
+/************************* Zlib Conversion *************************/
+
+/*
+static z_stream zs[4];
+static int zs_inited[4] = {0, 0, 0, 0};
+*/
+
+static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
+                        size_t raw_size)
+{
+  size_t compressed_size;
+
+  compressed_size = fbs_read_tight_len(is);
+  if (!fbs_check_success(is)) {
+    return 0;
+  }
+  fbs_write_tight_len(os, compressed_size);
+  return fbs_copy(is, os, compressed_size);
 }
