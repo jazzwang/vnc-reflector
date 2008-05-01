@@ -51,7 +51,7 @@ int main (int argc, char *argv[])
     fclose(fp);
   }
 
-  return success;
+  return success ? 0 : 1;
 }
 
 static void report_usage(char *program_name)
