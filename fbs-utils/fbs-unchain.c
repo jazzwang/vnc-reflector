@@ -366,9 +366,8 @@ static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
 }
 
 static void zlib_reset_stream_in(int stream_id);
-/*
-static void zlib_reset_stream_out(int stream_id);
-*/
+static void zlib_reset_streams_out(void);
+
 static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
                         size_t raw_size);
 
@@ -386,15 +385,18 @@ static int handle_tight_rect(FBSTREAM *is, FBSOUT *os, int w, int h)
   if (!fbs_check_success(is)) {
     return 0;
   }
-  fbs_write_U8(os, comp_ctl);
+  fbs_write_U8(os, comp_ctl | 0x0F);
 
-  /* Flush zlib streams if requested. */
+  /* Flush input zlib streams if requested. */
   for (stream_id = 0; stream_id < 4; stream_id++) {
     if (comp_ctl & (1 << stream_id)) {
       zlib_reset_stream_in(stream_id);
     }
   }
   comp_ctl &= 0xF0;             /* clear bits 3..0 */
+
+  /* DEBUG: Flush all output zlib streams each time. */
+  zlib_reset_streams_out();
 
   if (comp_ctl == RFB_TIGHT_FILL) {
     return fbs_copy(is, os, 3);
@@ -485,32 +487,34 @@ static void zlib_reset_stream_in(int stream_id)
   if (s_zstream_in_active[stream_id]) {
     if (inflateEnd(&s_zstream_in[stream_id]) != Z_OK) {
       if (s_zstream_in[stream_id].msg != NULL) {
-        fprintf(stderr, "inflateEnd() failed: %s",
+        fprintf(stderr, "inflateEnd() failed: %s\n",
                 s_zstream_in[stream_id].msg);
       } else {
-        fprintf(stderr, "inflateEnd() failed");
+        fprintf(stderr, "inflateEnd() failed\n");
       }
     }
     s_zstream_in_active[stream_id] = 0;
   }
 }
 
-/*
-static void zlib_reset_stream_out(int stream_id)
+static void zlib_reset_streams_out(void)
 {
-  if (s_zstream_out_active[stream_id]) {
-    if (deflateEnd(&s_zstream_out[stream_id]) != Z_OK) {
-      if (s_zstream_out[stream_id].msg != NULL) {
-        fprintf(stderr, "deflateEnd() failed: %s",
-                s_zstream_out[stream_id].msg);
-      } else {
-        fprintf(stderr, "deflateEnd() failed");
+  int stream_id;
+
+  for (stream_id = 0; stream_id < 4; stream_id++) {
+    if (s_zstream_out_active[stream_id]) {
+      if (deflateReset(&s_zstream_out[stream_id]) != Z_OK) {
+        if (s_zstream_out[stream_id].msg != NULL) {
+          fprintf(stderr, "deflateEnd() failed: %s\n",
+                  s_zstream_out[stream_id].msg);
+        } else {
+          fprintf(stderr, "deflateEnd() failed\n");
+        }
       }
+      /* s_zstream_out_active[stream_id] = 0; */
     }
-    s_zstream_out_active[stream_id] = 0;
   }
 }
-*/
 
 static int zlib_convert(FBSTREAM *is, FBSOUT *os, int stream_id,
                         size_t raw_size)
