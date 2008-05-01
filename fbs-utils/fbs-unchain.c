@@ -133,6 +133,17 @@ static int copy_rfb_init(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
   }
   scr->name[scr->name_length] = '\0';
 
+  /* Copy the same data to the output stream. */
+  fbs_write(os, buf_version, 12);
+  fbs_write_U32(os, sec_type);
+  fbs_write_U16(os, scr->width);
+  fbs_write_U16(os, scr->height);
+  fbs_write(os, buf_pixformat, 16);
+  fbs_write_U32(os, scr->name_length);
+  fbs_write(os, (char *)scr->name, scr->name_length);
+
+  /* FIXME: Check write errors. */
+
   return 1;
 }
 

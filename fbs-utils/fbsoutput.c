@@ -16,7 +16,7 @@
 
 /* FIXME: Replace with reasonable values. */
 static const size_t INITIAL_BUFFER_SIZE = 4;
-static const size_t BUFFER_SIZE_INCREMENT = 1;
+static const size_t BUFFER_SIZE_INCREMENT = 8;
 
 /************************* Public Functions *************************/
 
@@ -54,7 +54,7 @@ void fbsout_cleanup(FBSOUT *fbs)
   }
 }
 
-int fbsout_putc(FBSOUT *fbs, int c)
+int fbs_putc(FBSOUT *fbs, int c)
 {
   if (fbs->error) {
     return -1;
@@ -82,20 +82,63 @@ int fbsout_putc(FBSOUT *fbs, int c)
   return c & 0xFF;
 }
 
-/* FIXME: Using fbsout_putc() to write each byte is inefficient. */
+/* FIXME: Using fbs_putc() to write each byte is inefficient. */
 
-int fbsout_write(FBSOUT *fbs, char *buf, size_t len)
+int fbs_write(FBSOUT *fbs, char *buf, size_t len)
 {
   int i, c;
 
   for (i = 0; i < len; i++) {
     c = buf[i] & 0xFF;
-    if (fbsout_putc(fbs, c) < 0) {
+    if (fbs_putc(fbs, c) < 0) {
       return 0;
     }
   }
 
   return 1;
+}
+
+int fbs_write_U8(FBSOUT *fbs, CARD8 value)
+{
+  if (fbs_putc(fbs, (int)value) < 0) {
+    return 0;
+  }
+  return 1;
+}
+
+int fbs_write_U16(FBSOUT *fbs, CARD16 value)
+{
+  if (fbs_putc(fbs, (int)value >> 8) < 0 ||
+      fbs_putc(fbs, (int)value) < 0) {
+    return 0;
+  }
+  return 1;
+}
+
+int fbs_write_U32(FBSOUT *fbs, CARD32 value)
+{
+  if (fbs_putc(fbs, (int)value >> 24) < 0 ||
+      fbs_putc(fbs, (int)value >> 16) < 0 ||
+      fbs_putc(fbs, (int)value >> 8) < 0 ||
+      fbs_putc(fbs, (int)value) < 0) {
+    return 0;
+  }
+  return 1;
+}
+
+int fbs_write_S8(FBSOUT *fbs, INT8 value)
+{
+  return fbs_write_U8(fbs, (CARD8)value);
+}
+
+int fbs_write_S16(FBSOUT *fbs, INT16 value)
+{
+  return fbs_write_U16(fbs, (CARD16)value);
+}
+
+int fbs_write_S32(FBSOUT *fbs, INT32 value)
+{
+  return fbs_write_U32(fbs, (CARD32)value);
 }
 
 int fbsout_set_timestamp(FBSOUT *fbs, unsigned int timestamp, int can_flush)

@@ -66,8 +66,15 @@ extern int fbsout_init(FBSOUT *fbs, FILE *fp);
  */
 extern void fbsout_cleanup(FBSOUT *fbs);
 
-extern int fbsout_putc(FBSOUT *fbs, int c);
-extern int fbsout_write(FBSOUT *fbs, char *buf, size_t len);
+extern int fbs_putc(FBSOUT *fbs, int c);
+extern int fbs_write(FBSOUT *fbs, char *buf, size_t len);
+extern int fbs_write_U8(FBSOUT *fbs, CARD8 value);
+extern int fbs_write_U16(FBSOUT *fbs, CARD16 value);
+extern int fbs_write_U32(FBSOUT *fbs, CARD32 value);
+extern int fbs_write_S8(FBSOUT *fbs, INT8 value);
+extern int fbs_write_S16(FBSOUT *fbs, INT16 value);
+extern int fbs_write_S32(FBSOUT *fbs, INT32 value);
+
 extern int fbsout_set_timestamp(FBSOUT *fbs, unsigned int timestamp,
                                 int can_flush);
 extern int fbsout_flush(FBSOUT *fbs);
