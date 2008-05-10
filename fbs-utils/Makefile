@@ -27,13 +27,17 @@ PROG_FBS_UNCHAIN = fbs-unchain
 OBJS_FBS_UNCHAIN = fbs-unchain.o fbsinput.o fbsoutput.o
 LDFLAGS_FBS_UNCHAIN = -L/usr/local/lib -lz
 
-SRCS = fbs-list.c fbs-unchain.c fbsinput.c fbsoutput.c
+PROG_FBS_MKINDEX = fbs-mkindex
+OBJS_FBS_MKINDEX = fbs-mkindex.o fbsinput.o fbsoutput.o
+LDFLAGS_FBS_MKINDEX = -L/usr/local/lib -lz
+
+SRCS = fbs-list.c fbs-unchain.c fbs-mkindex.c fbsinput.c fbsoutput.c
 
 CC = gcc
 MAKEDEPEND = makedepend
 MAKEDEPFLAGS = -Y
 
-default: $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN)
+default: $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN) $(PROG_FBS_MKINDEX)
 
 $(PROG_FBS_LIST): $(OBJS_FBS_LIST)
 	$(CC) $(CFLAGS) -o $(PROG_FBS_LIST) $(OBJS_FBS_LIST) \
@@ -43,8 +47,13 @@ $(PROG_FBS_UNCHAIN): $(OBJS_FBS_UNCHAIN)
 	$(CC) $(CFLAGS) -o $(PROG_FBS_UNCHAIN) $(OBJS_FBS_UNCHAIN) \
 		$(LDFLAGS_FBS_UNCHAIN)
 
+$(PROG_FBS_MKINDEX): $(OBJS_FBS_MKINDEX)
+	$(CC) $(CFLAGS) -o $(PROG_FBS_MKINDEX) $(OBJS_FBS_MKINDEX) \
+		$(LDFLAGS_FBS_MKINDEX)
+
 clean: 
-	rm -f $(OBJS) *~ *.bak *.o $(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN)
+	rm -f $(OBJS) *~ *.bak *.o \
+		$(PROG_FBS_LIST) $(PROG_FBS_UNCHAIN) $(PROG_FBS_MKINDEX)
 
 depend:
 	$(MAKEDEPEND) $(MAKEDEPFLAGS) $(IFLAGS) $(SRCS) 2> /dev/null
@@ -56,6 +65,7 @@ depend:
 # DO NOT DELETE
 
 fbs-list.o: ../reflector/rfblib.h version.h fbsinput.h
-fbs-unchain.o: ../reflector/rfblib.h version.h fbsinput.h
+fbs-unchain.o: ../reflector/rfblib.h version.h fbsinput.h fbsoutput.h
+fbs-mkindex.o: ../reflector/rfblib.h version.h fbsinput.h fbsoutput.h
 fbsinput.o: ../reflector/rfblib.h fbsinput.h
 fbsoutput.o: ../reflector/rfblib.h fbsoutput.h
