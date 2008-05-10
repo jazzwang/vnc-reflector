@@ -24,6 +24,7 @@ static void report_usage(char *program_name);
 static int convert_fbs(FILE *fp);
 static int copy_rfb_init(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *is);
+static int fbs_copy(FBSTREAM *is, FBSOUT *os, size_t len);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
