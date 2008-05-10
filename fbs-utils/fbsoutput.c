@@ -14,9 +14,8 @@
 #include "rfblib.h"
 #include "fbsoutput.h"
 
-/* FIXME: Replace with reasonable values. */
-static const size_t INITIAL_BUFFER_SIZE = 4;
-static const size_t BUFFER_SIZE_INCREMENT = 8;
+static const size_t INITIAL_BUFFER_SIZE = 65536;
+static const size_t BUFFER_SIZE_INCREMENT = 65536;
 
 /************************* Public Functions *************************/
 
