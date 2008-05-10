@@ -161,7 +161,7 @@ int fbs_write_tight_len(FBSOUT *fbs, size_t value)
 
 int fbsout_set_timestamp(FBSOUT *fbs, unsigned int timestamp, int can_flush)
 {
-  int success = 0;
+  int success = 1;
 
   if (can_flush && timestamp > fbs->timestamp) {
     success = fbsout_flush(fbs);
