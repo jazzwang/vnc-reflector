@@ -16,19 +16,17 @@
 #include "rfblib.h"
 #include "version.h"
 #include "fbsinput.h"
-#include "fbsoutput.h"
 
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 
 static void report_usage(char *program_name);
-static int convert_fbs(FILE *fp);
-static int copy_rfb_init(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr);
+static int process_fbs(FILE *fp);
+static int read_rfb_init(FBSTREAM *is, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *is);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
-static int read_normal_protocol(FBSTREAM *is, FBSOUT *os,
-                                RFB_SCREEN_INFO *scr);
+static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr);
 
 int main (int argc, char *argv[])
 {
@@ -47,7 +45,7 @@ int main (int argc, char *argv[])
     return 1;
   }
 
-  if (convert_fbs(fp)) {
+  if (process_fbs(fp)) {
     success = 1;
   }
 
@@ -60,37 +58,35 @@ int main (int argc, char *argv[])
 
 static void report_usage(char *program_name)
 {
-  fprintf(stderr, "fbs-unchain version %s.\n%s\n\n", VERSION, COPYRIGHT);
+  fprintf(stderr, "fbs-mkindex version %s.\n%s\n\n", VERSION, COPYRIGHT);
 
   fprintf(stderr, "Usage: %s [FBS_FILE] [> CONVERTED_FILE]\n\n",
           program_name);
 }
 
-static int convert_fbs(FILE *fp)
+static int process_fbs(FILE *fp)
 {
   FBSTREAM is;                  /* input stream */
-  FBSOUT os;                    /* output stream */
   RFB_SCREEN_INFO screen;
   int success;
 
-  if (!fbs_init(&is, fp) || !fbsout_init(&os, stdout)) {
+  if (!fbs_init(&is, fp)) {
     return 0;
   }
 
-  if (!copy_rfb_init(&is, &os, &screen)) {
+  if (!read_rfb_init(&is, &screen)) {
     return 0;
   }
 
-  success = read_normal_protocol(&is, &os, &screen);
+  success = read_normal_protocol(&is, &screen);
 
   free(screen.name);
-  fbsout_cleanup(&os);
   fbs_cleanup(&is);
 
   return success;
 }
 
-static int copy_rfb_init(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
+static int read_rfb_init(FBSTREAM *is, RFB_SCREEN_INFO *scr)
 {
   char buf_version[12];
   CARD32 sec_type;
@@ -136,17 +132,6 @@ static int copy_rfb_init(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
   }
   scr->name[scr->name_length] = '\0';
 
-  /* Copy the same data to the output stream. */
-  fbs_write(os, buf_version, 12);
-  fbs_write_U32(os, sec_type);
-  fbs_write_U16(os, scr->width);
-  fbs_write_U16(os, scr->height);
-  fbs_write(os, buf_pixformat, 16);
-  fbs_write_U32(os, scr->name_length);
-  fbs_write(os, (char *)scr->name, scr->name_length);
-
-  /* FIXME: Check write errors. */
-
   return 1;
 }
 
@@ -160,26 +145,6 @@ static int fbs_check_success(FBSTREAM *is)
     return 0;
   }
   return 1;
-}
-
-/*
- * Copy bytes from input to output, check errors, report error message
- * if got over end of file.
- */
-static int fbs_copy(FBSTREAM *is, FBSOUT *os, size_t len)
-{
-  char *buf;
-  int success;
-
-  buf = malloc(len);
-  fbs_read(is, buf, len);
-  success = fbs_check_success(is);
-  if (success) {
-    success = fbs_write(os, buf, len);
-  }
-  free(buf);
-
-  return success;
 }
 
 /* FIXME: Code duplication, see rfblib.c */
@@ -212,16 +177,16 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os);
-static int handle_copyrect(FBSTREAM *is, FBSOUT *os);
-static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset);
-static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding);
+static int handle_framebuffer_update(FBSTREAM *is);
+static int handle_copyrect(FBSTREAM *is);
+static int handle_tight(FBSTREAM *is, int w, int h);
+static int handle_cursor(FBSTREAM *is, int w, int h, int encoding);
 
-static int handle_set_colormap_entries(FBSTREAM *is, FBSOUT *os);
-static int handle_bell(FBSTREAM *is, FBSOUT *os);
-static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os);
+static int handle_set_colormap_entries(FBSTREAM *is);
+static int handle_bell(FBSTREAM *is);
+static int handle_server_cut_text(FBSTREAM *is);
 
-static int read_normal_protocol(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
+static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr)
 {
   int msg_id;
   unsigned int idx;
@@ -232,27 +197,25 @@ static int read_normal_protocol(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
 
   while (!fbs_eof(is) && !fbs_error(is)) {
     if (fbs_get_pos(is, &idx, &filepos, &blksize, &offset, &timestamp)) {
-      fbsout_set_timestamp(os, timestamp, 1);
       if ((msg_id = fbs_getc(is)) >= 0) {
-        fbs_putc(os, msg_id);
         switch(msg_id) {
         case 0:
-          if (!handle_framebuffer_update(is, os)) {
+          if (!handle_framebuffer_update(is)) {
             return 0;
           }
           break;
         case 1:
-          if (!handle_set_colormap_entries(is, os)) {
+          if (!handle_set_colormap_entries(is)) {
             return 0;
           }
           break;
         case 2:
-          if (!handle_bell(is, os)) {
+          if (!handle_bell(is)) {
             return 0;
           }
           break;
         case 3:
-          if (!handle_server_cut_text(is, os)) {
+          if (!handle_server_cut_text(is)) {
             return 0;
           }
           break;
@@ -267,22 +230,18 @@ static int read_normal_protocol(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
   return !fbs_error(is);
 }
 
-static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
+static int handle_framebuffer_update(FBSTREAM *is)
 {
   CARD8 padding;
   CARD16 num_rects;
   int i;
   CARD16 x, y, w, h;
   INT32 encoding;
-  int reset_zlib = 1;
 
   padding = fbs_read_U8(is);
   num_rects = fbs_read_U16(is);
 
   if (!fbs_eof(is) && !fbs_error(is)) {
-
-    fbs_write_U8(os, padding);
-    fbs_write_U16(os, num_rects);
 
     for (i = 0; i < (int)num_rects; i++) {
       x = fbs_read_U16(is);
@@ -294,12 +253,6 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
         return 0;
       }
 
-      fbs_write_U16(os, x);
-      fbs_write_U16(os, y);
-      fbs_write_U16(os, w);
-      fbs_write_U16(os, h);
-      fbs_write_U32(os, encoding);
-
       if (encoding == -224) {   /* RFB_ENCODING_LASTRECT */
         break;
       }
@@ -309,19 +262,18 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
 
       switch (encoding) {
       case RFB_ENCODING_COPYRECT:
-        if (!handle_copyrect(is, os)) {
+        if (!handle_copyrect(is)) {
           return 0;
         }
         break;
       case RFB_ENCODING_TIGHT:
-        if (!handle_tight(is, os, w, h, reset_zlib)) {
+        if (!handle_tight(is, w, h)) {
           return 0;
         }
-        reset_zlib = 0;
         break;
       case -240:                /* RFB_ENCODING_XCURSOR */
       case -239:                /* RFB_ENCODING_RICHCURSOR */
-        if (!handle_cursor(is, os, w, h, (int)encoding)) {
+        if (!handle_cursor(is, w, h, (int)encoding)) {
           return 0;
         }
         break;
@@ -337,7 +289,7 @@ static int handle_framebuffer_update(FBSTREAM *is, FBSOUT *os)
   return 1;
 }
 
-static int handle_copyrect(FBSTREAM *is, FBSOUT *os)
+static int handle_copyrect(FBSTREAM *is)
 {
   CARD16 src_x, src_y;
 
@@ -347,13 +299,10 @@ static int handle_copyrect(FBSTREAM *is, FBSOUT *os)
     return 0;
   }
 
-  fbs_write_U16(os, src_x);
-  fbs_write_U16(os, src_y);
-
   return 1;
 }
 
-static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
+static int handle_cursor(FBSTREAM *is, int w, int h, int encoding)
 {
   int mask_size = ((w + 7) / 8) * h;
   int data_size;
@@ -364,16 +313,16 @@ static int handle_cursor(FBSTREAM *is, FBSOUT *os, int w, int h, int encoding)
     data_size = ((w * h != 0) ? 6 : 0) + 2 * mask_size;
   }
 
-  return fbs_copy(is, os, data_size);
+  /*** return fbs_copy(is, data_size); ***/
+  return 1;
 }
 
 static void zlib_reset_stream_in(int stream_id);
-static void zlib_reset_streams_out(void);
 
-static int zlib_convert(FBSTREAM *is, FBSOUT *os, int zlib_stream_id,
+static int zlib_convert(FBSTREAM *is, int zlib_stream_id,
                         size_t raw_size);
 
-static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
+static int handle_tight(FBSTREAM *is, int w, int h)
 {
   CARD8 comp_ctl;
   int stream_id;
@@ -396,16 +345,9 @@ static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
   }
   comp_ctl &= 0xF0;             /* clear bits 3..0 */
 
-  /* Reset output zlib streams if needed. */
-  if (reset) {
-    fbs_write_U8(os, comp_ctl | 0x0F);
-    zlib_reset_streams_out();
-  } else {
-    fbs_write_U8(os, comp_ctl);
-  }
-
   if (comp_ctl == RFB_TIGHT_FILL) {
-    return fbs_copy(is, os, 3);
+    /*** return fbs_copy(is, 3); ***/
+    return 1;
   }
 
   if (comp_ctl == RFB_TIGHT_JPEG) {
@@ -413,8 +355,8 @@ static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
     if (!fbs_check_success(is)) {
       return 0;
     }
-    fbs_write_tight_len(os, compressed_size);
-    return fbs_copy(is, os, compressed_size);
+    /*** return fbs_copy(is, compressed_size); ***/
+    return 1;
   }
 
   if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
@@ -429,7 +371,6 @@ static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
     if (!fbs_check_success(is)) {
       return 0;
     }
-    fbs_write_U8(os, filter_id);
   } else {
     filter_id = RFB_TIGHT_FILTER_COPY;
   }
@@ -443,10 +384,11 @@ static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
     if (!fbs_check_success(is)) {
       return 0;
     }
-    fbs_write_U8(os, num_colors - 1);
-    if (!fbs_copy(is, os, num_colors * 3)) {
+    /*** Read palette:
+    if (!fbs_copy(is, num_colors * 3)) {
       return 0;
     }
+    ***/
     if (num_colors <= 2) {
       uncompressed_size = ((w + 7) / 8) * h;
     } else {
@@ -457,24 +399,25 @@ static int handle_tight(FBSTREAM *is, FBSOUT *os, int w, int h, int reset)
     return 0;
   }
   if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-    return fbs_copy(is, os, uncompressed_size);
+    /*** return fbs_copy(is, uncompressed_size); ***/
+    return 1;
   } else {
-    return zlib_convert(is, os, stream_id, uncompressed_size);
+    return zlib_convert(is, stream_id, uncompressed_size);
   }
 }
 
-static int handle_set_colormap_entries(FBSTREAM *is, FBSOUT *os)
+static int handle_set_colormap_entries(FBSTREAM *is)
 {
   fprintf(stderr, "SetColormapEntries message is not supported\n");
   return 0;
 }
 
-static int handle_bell(FBSTREAM *is, FBSOUT *os)
+static int handle_bell(FBSTREAM *is)
 {
   return 1;
 }
 
-static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os)
+static int handle_server_cut_text(FBSTREAM *is)
 {
   fprintf(stderr, "ServerCutText message is not supported\n");
   return 0;
@@ -484,9 +427,6 @@ static int handle_server_cut_text(FBSTREAM *is, FBSOUT *os)
 
 static z_stream s_zstream_in[4];
 static int s_zstream_in_active[4] = { 0, 0, 0, 0 };
-
-static z_stream s_zstream_out[4];
-static int s_zstream_out_active[4] = { 0, 0, 0, 0 };
 
 static void zlib_reset_stream_in(int stream_id)
 {
@@ -503,34 +443,13 @@ static void zlib_reset_stream_in(int stream_id)
   }
 }
 
-static void zlib_reset_streams_out(void)
-{
-  int stream_id;
-
-  for (stream_id = 0; stream_id < 4; stream_id++) {
-    if (s_zstream_out_active[stream_id]) {
-      if (deflateReset(&s_zstream_out[stream_id]) != Z_OK) {
-        if (s_zstream_out[stream_id].msg != NULL) {
-          fprintf(stderr, "deflateEnd() failed: %s\n",
-                  s_zstream_out[stream_id].msg);
-        } else {
-          fprintf(stderr, "deflateEnd() failed\n");
-        }
-      }
-      /* s_zstream_out_active[stream_id] = 0; */
-    }
-  }
-}
-
-static int zlib_convert(FBSTREAM *is, FBSOUT *os, int stream_id,
+static int zlib_convert(FBSTREAM *is, int stream_id,
                         size_t raw_size)
 {
   z_streamp zs;
   int err;
   size_t zlib_in_size;
-  size_t zlib_out_size;
   char *zlib_in_data;
-  char *zlib_out_data;
   char *raw_data;
   int success;
 
@@ -593,58 +512,10 @@ static int zlib_convert(FBSTREAM *is, FBSOUT *os, int stream_id,
   if (zs->avail_out > 0)
     fprintf(stderr, "Decompressed data size is less than expected\n");
 
-  /* Initialize compression stream if needed. */
-
-  zs = &s_zstream_out[stream_id];
-  if (!s_zstream_out_active[stream_id]) {
-    zs->zalloc = Z_NULL;
-    zs->zfree = Z_NULL;
-    zs->opaque = Z_NULL;
-
-    err = deflateInit2(zs, Z_BEST_COMPRESSION, Z_DEFLATED, MAX_WBITS,
-                       MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY);
-    if (err != Z_OK) {
-      free(zlib_in_data);
-      free(raw_data);
-      return 0;
-    }
-
-    s_zstream_out_active[stream_id] = 1;
-  }
-
-  /* Allocate buffer for compressed data. */
-
-  zlib_out_size = deflateBound(zs, raw_size) + 1;
-  zlib_out_data = malloc(zlib_out_size);
-
-  /* Prepare buffer pointers. */
-
-  zs->next_in = (Bytef *)raw_data;
-  zs->avail_in = raw_size;
-  zs->next_out = (Bytef *)zlib_out_data;
-  zs->avail_out = zlib_out_size;
-
-  /* Actual compression. */
-
-  if (deflate(zs, Z_SYNC_FLUSH) != Z_OK ||
-      zs->avail_in != 0 || zs->avail_out == 0) {
-    free(zlib_in_data);
-    free(raw_data);
-    free(zlib_out_data);
-    return 0;
-  }
-
-  /* Write compressed data. */
-
-  zlib_out_size -= zs->avail_out;
-  fbs_write_tight_len(os, zlib_out_size);
-  success = fbs_write(os, zlib_out_data, zlib_out_size);
-
   /* Free memory. */
 
   free(zlib_in_data);
   free(raw_data);
-  free(zlib_out_data);
 
   return success;
 }
