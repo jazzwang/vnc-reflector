@@ -6,7 +6,7 @@
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
-IFLAGS =	-I../reflector
+IFLAGS =	-I../lib
 
 # Production
 CFLAGS =	-O2 $(IFLAGS)
@@ -64,8 +64,8 @@ depend:
 
 # DO NOT DELETE
 
-fbs-list.o: ../reflector/rfblib.h version.h fbsinput.h
-fbs-unchain.o: ../reflector/rfblib.h version.h fbsinput.h fbsoutput.h
-fbs-mkindex.o: ../reflector/rfblib.h version.h fbsinput.h fbsoutput.h
-fbsinput.o: ../reflector/rfblib.h fbsinput.h
-fbsoutput.o: ../reflector/rfblib.h fbsoutput.h
+fbs-list.o: ../lib/rfblib.h version.h fbsinput.h
+fbs-unchain.o: ../lib/rfblib.h version.h fbsinput.h fbsoutput.h
+fbs-mkindex.o: ../lib/rfblib.h version.h fbsinput.h
+fbsinput.o: ../lib/rfblib.h fbsinput.h
+fbsoutput.o: ../lib/rfblib.h fbsoutput.h

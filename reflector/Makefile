@@ -14,7 +14,7 @@
 #
 # Variables you might want to edit: CFLAGS, CONFFLAGS
 
-IFLAGS =	-I.
+IFLAGS =	-I../lib
 
 # Production
 CFLAGS =	-O2 $(IFLAGS)
@@ -28,17 +28,17 @@ CFLAGS =	-O2 $(IFLAGS)
 # Use poll(2) syscall in async I/O instead of select(2)
 CONFFLAGS =	-DUSE_POLL
 
-# Link with zlib and JPEG libraries
-LDFLAGS =	-L/usr/local/lib -lz -ljpeg
+# Link with ../lib/libvref.a, zlib and JPEG libraries
+LDFLAGS =	../lib/libvref.a -L/usr/local/lib -lz -ljpeg
 
 PROG = 	vncreflector
 
-OBJS = 	main.o logging.o active.o actions.o host_connect.o d3des.o rfblib.o \
+OBJS = 	main.o logging.o active.o actions.o host_connect.o \
 	async_io.o host_io.o client_io.o encode.o region.o translate.o \
 	control.o encode_tight.o decode_hextile.o decode_tight.o \
 	decode_cursor.o fbs_files.o region_more.o
 
-SRCS =	main.c logging.c active.c actions.c host_connect.c d3des.c rfblib.c \
+SRCS =	main.c logging.c active.c actions.c host_connect.c \
 	async_io.c host_io.c client_io.c encode.c region.c translate.c \
 	control.c encode_tight.c decode_hextile.c decode_tight.c \
 	decode_cursor.c fbs_files.c region_more.c
@@ -56,7 +56,7 @@ clean:
 	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
 
 depend: $(SRCS)
-	$(MAKEDEPEND) $(MAKEDEPFLAGS) -I. $(SRCS) 2> /dev/null
+	$(MAKEDEPEND) $(MAKEDEPFLAGS) $(IFLAGS) $(SRCS) 2> /dev/null
 
 .c.o:
 	$(CC) $(CFLAGS) $(CONFFLAGS) -c $<
@@ -64,31 +64,30 @@ depend: $(SRCS)
 
 # DO NOT DELETE
 
-main.o: rfblib.h async_io.h logging.h reflector.h host_connect.h translate.h
-main.o: host_io.h client_io.h region.h encode.h
+main.o: ../lib/rfblib.h async_io.h logging.h reflector.h host_connect.h
+main.o: translate.h host_io.h client_io.h region.h encode.h
 logging.o: logging.h
-active.o: rfblib.h reflector.h logging.h
-actions.o: rfblib.h reflector.h logging.h
-host_connect.o: rfblib.h reflector.h logging.h async_io.h host_io.h
+active.o: ../lib/rfblib.h reflector.h logging.h
+actions.o: ../lib/rfblib.h reflector.h logging.h
+host_connect.o: ../lib/rfblib.h reflector.h logging.h async_io.h host_io.h
 host_connect.o: translate.h client_io.h region.h encode.h host_connect.h
-d3des.o: d3des.h
-rfblib.o: rfblib.h d3des.h
 async_io.o: async_io.h
-host_io.o: rfblib.h reflector.h async_io.h logging.h translate.h client_io.h
-host_io.o: region.h host_connect.h host_io.h encode.h
-client_io.o: rfblib.h logging.h async_io.h reflector.h host_io.h translate.h
-client_io.o: client_io.h region.h encode.h
-encode.o: rfblib.h reflector.h async_io.h translate.h client_io.h region.h
-encode.o: encode.h
-region.o: rfblib.h region.h
-translate.o: rfblib.h reflector.h async_io.h translate.h client_io.h region.h
-control.o: rfblib.h async_io.h logging.h reflector.h host_connect.h host_io.h
-control.o: translate.h client_io.h region.h
-encode_tight.o: rfblib.h reflector.h async_io.h translate.h client_io.h
-encode_tight.o: region.h encode.h
-decode_hextile.o: rfblib.h reflector.h async_io.h logging.h host_io.h
-decode_tight.o: rfblib.h reflector.h async_io.h logging.h host_io.h
-decode_cursor.o: rfblib.h logging.h async_io.h translate.h client_io.h
+host_io.o: ../lib/rfblib.h reflector.h async_io.h logging.h translate.h
+host_io.o: client_io.h region.h host_connect.h host_io.h encode.h
+client_io.o: ../lib/rfblib.h logging.h async_io.h reflector.h host_io.h
+client_io.o: translate.h client_io.h region.h encode.h
+encode.o: ../lib/rfblib.h reflector.h async_io.h translate.h client_io.h
+encode.o: region.h encode.h
+region.o: ../lib/rfblib.h region.h
+translate.o: ../lib/rfblib.h reflector.h async_io.h translate.h client_io.h
+translate.o: region.h
+control.o: ../lib/rfblib.h async_io.h logging.h reflector.h host_connect.h
+control.o: host_io.h translate.h client_io.h region.h
+encode_tight.o: ../lib/rfblib.h reflector.h async_io.h translate.h
+encode_tight.o: client_io.h region.h encode.h
+decode_hextile.o: ../lib/rfblib.h reflector.h async_io.h logging.h host_io.h
+decode_tight.o: ../lib/rfblib.h reflector.h async_io.h logging.h host_io.h
+decode_cursor.o: ../lib/rfblib.h logging.h async_io.h translate.h client_io.h
 decode_cursor.o: region.h host_io.h reflector.h
-fbs_files.o: rfblib.h reflector.h logging.h
-region_more.o: rfblib.h region.h logging.h
+fbs_files.o: ../lib/rfblib.h reflector.h logging.h
+region_more.o: ../lib/rfblib.h region.h logging.h
