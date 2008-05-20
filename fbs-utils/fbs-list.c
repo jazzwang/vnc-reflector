@@ -199,7 +199,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static int handle_framebuffer_update(FBSTREAM *fbs, int update_idx);
+static int handle_framebuffer_update(FBSTREAM *fbs);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
 static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding);
@@ -216,7 +216,6 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   size_t blksize;
   size_t offset;
   unsigned int timestamp;
-  int num_updates = 0;
 
   while (!fbs_eof(fbs) && !fbs_error(fbs)) {
     if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
@@ -234,7 +233,7 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
       if ((msg_id = fbs_getc(fbs)) >= 0) {
         switch(msg_id) {
         case 0:
-          if (!handle_framebuffer_update(fbs, num_updates++)) {
+          if (!handle_framebuffer_update(fbs)) {
             return 0;
           }
           break;
@@ -264,8 +263,9 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   return !fbs_error(fbs);
 }
 
-static int handle_framebuffer_update(FBSTREAM *fbs, int update_idx)
+static int handle_framebuffer_update(FBSTREAM *fbs)
 {
+  static int update_idx = 0;
   CARD16 num_rects;
   int i;
   CARD16 x, y, w, h;
@@ -275,7 +275,7 @@ static int handle_framebuffer_update(FBSTREAM *fbs, int update_idx)
   num_rects = fbs_read_U16(fbs);
 
   if (!fbs_eof(fbs) && !fbs_error(fbs)) {
-    printf("  update #%d, max rectangles %d\n", update_idx, (int)num_rects);
+    printf("  update #%d, max rectangles %d\n", update_idx++, (int)num_rects);
     for (i = 0; i < (int)num_rects; i++) {
       x = fbs_read_U16(fbs);
       y = fbs_read_U16(fbs);
