@@ -272,7 +272,7 @@ static int read_message(FBSTREAM *fbs)
     }
   }
 
-  return 1;
+  return !fbs_error(fbs);
 }
 
 static int handle_framebuffer_update(FBSTREAM *fbs)
