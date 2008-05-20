@@ -199,6 +199,8 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
+static int read_message(FBSTREAM *fbs);
+
 static int handle_framebuffer_update(FBSTREAM *fbs);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, int rect_width, int rect_height);
@@ -210,7 +212,6 @@ static int handle_server_cut_text(FBSTREAM *fbs);
 
 static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
-  int msg_id;
   unsigned int idx, prev_idx = -1;
   size_t filepos;
   size_t blksize;
@@ -230,37 +231,48 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
                (unsigned int)offset);
         prev_idx = idx;
       }
-      if ((msg_id = fbs_getc(fbs)) >= 0) {
-        switch(msg_id) {
-        case 0:
-          if (!handle_framebuffer_update(fbs)) {
-            return 0;
-          }
-          break;
-        case 1:
-          if (!handle_set_colormap_entries(fbs)) {
-            return 0;
-          }
-          break;
-        case 2:
-          if (!handle_bell(fbs)) {
-            return 0;
-          }
-          break;
-        case 3:
-          if (!handle_server_cut_text(fbs)) {
-            return 0;
-          }
-          break;
-        default:
-          fprintf(stderr, "Unknown server message type: %d\n", msg_id);
-          return 0;
-        }
+      if (!read_message(fbs)) {
+        return 0;
       }
     }
   }
 
   return !fbs_error(fbs);
+}
+
+static int read_message(FBSTREAM *fbs)
+{
+  int msg_id;
+
+  if ((msg_id = fbs_getc(fbs)) >= 0) {
+    switch(msg_id) {
+    case 0:
+      if (!handle_framebuffer_update(fbs)) {
+        return 0;
+      }
+      break;
+    case 1:
+      if (!handle_set_colormap_entries(fbs)) {
+        return 0;
+      }
+      break;
+    case 2:
+      if (!handle_bell(fbs)) {
+        return 0;
+      }
+      break;
+    case 3:
+      if (!handle_server_cut_text(fbs)) {
+        return 0;
+      }
+      break;
+    default:
+      fprintf(stderr, "Unknown server message type: %d\n", msg_id);
+      return 0;
+    }
+  }
+
+  return 1;
 }
 
 static int handle_framebuffer_update(FBSTREAM *fbs)
