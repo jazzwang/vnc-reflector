@@ -21,7 +21,7 @@ CONFFLAGS =
 
 PROG_FBS_LIST = fbs-list
 OBJS_FBS_LIST = fbs-list.o fbsinput.o
-LDFLAGS_FBS_LIST = -L/usr/local/lib
+LDFLAGS_FBS_LIST = -L/usr/local/lib -L../lib -lvref -lz
 
 PROG_FBS_UNCHAIN = fbs-unchain
 OBJS_FBS_UNCHAIN = fbs-unchain.o fbsinput.o fbsoutput.o
@@ -64,7 +64,7 @@ depend:
 
 # DO NOT DELETE
 
-fbs-list.o: ../lib/rfblib.h version.h fbsinput.h
+fbs-list.o: ../lib/rfblib.h ../lib/tight-decoder.h version.h fbsinput.h
 fbs-unchain.o: ../lib/rfblib.h version.h fbsinput.h fbsoutput.h
 fbs-mkindex.o: ../lib/rfblib.h version.h fbsinput.h
 fbsinput.o: ../lib/rfblib.h fbsinput.h
