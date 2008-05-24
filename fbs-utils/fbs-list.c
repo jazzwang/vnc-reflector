@@ -401,23 +401,34 @@ static int handle_tight_rect(FBSTREAM *fbs, TIGHT_DECODER *decoder,
                              int x, int y, int w, int h)
 {
   int num_bytes;
-  char *buf = NULL;
+  static char static_buf[1024];
+  char *buf;
+  int buf_allocated;
 
   num_bytes = tight_decode_start(decoder, x, y, w, h);
   while (num_bytes > 0) {
-    /* FIXME: Don't allocate memory each time. */
-    buf = malloc(num_bytes);
-    if (buf == NULL) {
-      fprintf(stderr, "Error allocating %d bytes\n", num_bytes);
-      return 0;
+    if (num_bytes > sizeof(static_buf)) {
+      buf = malloc(num_bytes);
+      if (buf == NULL) {
+        fprintf(stderr, "Error allocating %d bytes\n", num_bytes);
+        return 0;
+      }
+      buf_allocated = 1;
+    } else {
+      buf = static_buf;
+      buf_allocated = 0;
     }
     fbs_read(fbs, buf, num_bytes);
     if (!fbs_check_success(fbs)) {
-      free(buf);
+      if (buf_allocated) {
+        free(buf);
+      }
       return 0;
     }
     num_bytes = tight_decode_continue(decoder, buf);
-    free(buf);
+    if (buf_allocated) {
+      free(buf);
+    }
   }
   if (num_bytes < 0) {
     printf("(Tight)\n");
