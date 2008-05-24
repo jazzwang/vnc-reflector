@@ -27,9 +27,9 @@ CFLAGS =	-O2 $(IFLAGS)
 
 LIBRARY = libvref.a
 
-OBJS = rfblib.o d3des.o
+OBJS = rfblib.o d3des.o tight-decoder.o
 
-SRCS = rfblib.c d3des.c
+SRCS = rfblib.c d3des.c tight-decoder.c
 
 CC = gcc
 AR = ar cq
@@ -58,3 +58,4 @@ depend: $(SRCS)
 
 rfblib.o: rfblib.h d3des.h
 d3des.o: d3des.h
+tight-decoder.o: tight-decoder.h
