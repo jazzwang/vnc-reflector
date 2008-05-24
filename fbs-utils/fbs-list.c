@@ -217,6 +217,7 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder);
 
 static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder);
+static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, TIGHT_DECODER *decoder,
                              int x, int y, int w, int h);
@@ -322,7 +323,9 @@ static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
         break;
       }
       if (encoding == -223) {   /* RFB_ENCODING_NEWFBSIZE */
-        printf("(NewFBSize)\n");
+        if (!handle_newfbsize(decoder, w, h)) {
+          return 0;
+        }
         break;
       }
 
@@ -352,6 +355,19 @@ static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
         return 0;
       }
     }
+  }
+
+  return 1;
+}
+
+static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h)
+{
+  printf("(NewFBSize)\n");
+
+  if (!tight_decode_set_framebuffer(decoder, NULL, w, h, 0)) {
+    fprintf(stderr, "Tight decoder: %s\n",
+            tight_decode_get_error(decoder));
+    return 0;
   }
 
   return 1;
