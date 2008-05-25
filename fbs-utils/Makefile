@@ -29,7 +29,7 @@ LDFLAGS_FBS_UNCHAIN = -L/usr/local/lib -lz
 
 PROG_FBS_MKINDEX = fbs-mkindex
 OBJS_FBS_MKINDEX = fbs-mkindex.o fbsinput.o fbsoutput.o
-LDFLAGS_FBS_MKINDEX = -L/usr/local/lib -lz
+LDFLAGS_FBS_MKINDEX = -L/usr/local/lib -L../lib -lvref -lz
 
 SRCS = fbs-list.c fbs-unchain.c fbs-mkindex.c fbsinput.c fbsoutput.c
 
@@ -66,6 +66,6 @@ depend:
 
 fbs-list.o: ../lib/rfblib.h ../lib/tight-decoder.h version.h fbsinput.h
 fbs-unchain.o: ../lib/rfblib.h version.h fbsinput.h fbsoutput.h
-fbs-mkindex.o: ../lib/rfblib.h version.h fbsinput.h
+fbs-mkindex.o: ../lib/rfblib.h ../lib/tight-decoder.h version.h fbsinput.h
 fbsinput.o: ../lib/rfblib.h fbsinput.h
 fbsoutput.o: ../lib/rfblib.h fbsoutput.h
