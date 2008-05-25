@@ -25,7 +25,7 @@ typedef struct _FRAME_BUFFER {
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 
 static void report_usage(char *program_name);
-static int list_fbs(FILE *fp);
+static int process_file(FILE *fp);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
@@ -50,7 +50,7 @@ int main (int argc, char *argv[])
     return 1;
   }
 
-  if (list_fbs(fp)) {
+  if (process_file(fp)) {
     success = 1;
   }
 
@@ -69,7 +69,7 @@ static void report_usage(char *program_name)
           program_name);
 }
 
-static int list_fbs(FILE *fp)
+static int process_file(FILE *fp)
 {
   FBSTREAM fbs;
   FRAME_BUFFER fb;
