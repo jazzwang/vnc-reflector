@@ -224,3 +224,7 @@ int fbsout_flush(FBSOUT *fbs)
   return 1;
 }
 
+CARD32 fbsout_get_filepos(FBSOUT *fbs)
+{
+  return (CARD32)ftell(fbs->fp);
+}

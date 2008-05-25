@@ -318,6 +318,7 @@ static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk);
 static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
                                 FBSOUT *fbk, FILE *fp_index)
 {
+  char buf[20];
   unsigned int idx;
   size_t filepos;
   size_t blksize;
@@ -325,6 +326,17 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
   unsigned int prev_timestamp = 0;
   unsigned int timestamp;
   int interval = 10;            /* interval between keyframes, in seconds */
+  CARD32 key_fpos, key_size;
+
+  buf_put_CARD32(buf, 0xFFFFFFFF);
+  if (fwrite("FBI 001.000\n", 1, 12, fp_index) != 12 ||
+      fwrite(buf, 1, 4, fp_index) != 4) {
+    fprintf(stderr, "Error writing .fbi file header\n");
+    return 0;
+  }
+  printf("-------------------------------------------------------\n");
+  printf(" timestamp | key_fpos | key_size | fbs_fpos | fbs_skip\n");
+  printf("-----------+----------+----------+----------+----------\n");
 
   while (!fbs_eof(fbs) && !fbs_error(fbs)) {
     if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
@@ -332,18 +344,46 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
         return 0;
       }
       if (timestamp > prev_timestamp + interval * 1000) {
+        /* Set new timestamp, flush .fbk output */
         if (!fbsout_set_timestamp(fbk, timestamp, 1)) {
           return 0;
         }
-        prev_timestamp = timestamp;
-        if (!write_keyframe(fb, fbk)) {
+        /* Write keyframe, track file pointer position */
+        key_fpos = fbsout_get_filepos(fbk);
+        if (!write_keyframe(fb, fbk) || !fbsout_flush(fbk)) {
           return 0;
         }
+        key_size = fbsout_get_filepos(fbk) - key_fpos;
+        /* Write a record into the .fbi index file */
+        buf_put_CARD32(buf, timestamp);
+        buf_put_CARD32(buf + 4, key_fpos);
+        buf_put_CARD32(buf + 8, key_size);
+        buf_put_CARD32(buf + 12, filepos - 4);
+        buf_put_CARD32(buf + 16, offset);
+        if (fwrite(buf, 1, 20, fp_index) != 20) {
+          fprintf(stderr, "Error writing to .fbi file\n");
+          return 0;
+        }
+        /* Log to stdout */
+        printf("%10u |%9u |%9u |%9u |%9u\n",
+               timestamp,
+               (unsigned int)key_fpos,
+               (unsigned int)key_size,
+               (unsigned int)(filepos - 4),
+               (unsigned int)offset);
+        /* Remember at which time point we wrote previous keyframe */
+        prev_timestamp = timestamp;
       }
     }
   }
 
-  return !fbs_error(fbs);
+  if (fbs_error(fbs)) {
+    return 0;
+  }
+
+  printf("-------------------------------------------------------\n");
+
+  return 1;
 }
 
 static int read_message(FBSTREAM *fbs, FRAME_BUFFER *fb)
