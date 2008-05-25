@@ -73,6 +73,7 @@ static int list_fbs(FILE *fp)
 {
   FBSTREAM fbs;
   FRAME_BUFFER fb;
+  int w, h;
   int success;
 
   if (!fbs_init(&fbs, fp)) {
@@ -80,23 +81,43 @@ static int list_fbs(FILE *fp)
   }
 
   if (!read_rfb_init(&fbs, &fb.info)) {
+    fbs_cleanup(&fbs);
+    return 0;
+  }
+
+  w = fb.info.width;
+  h = fb.info.height;
+
+  fb.data = (u_int32_t *)malloc(w * h * 4);
+  if (fb.data == NULL) {
+    fprintf(stderr, "Error allocating memory (%d bytes)\n", w * h * 4);
+    free(fb.info.name);
+    fbs_cleanup(&fbs);
     return 0;
   }
 
   if (!tight_decode_init(&fb.decoder)) {
     fprintf(stderr, "Error initializing Tight decoder\n");
+    free(fb.data);
+    free(fb.info.name);
+    fbs_cleanup(&fbs);
     return 0;
   }
-  if (!tight_decode_set_framebuffer(&fb.decoder, NULL,
-                                    fb.info.width, fb.info.height, 0)) {
+
+  if (!tight_decode_set_framebuffer(&fb.decoder, fb.data, w, h, w)) {
     fprintf(stderr, "Tight decoder: %s\n",
             tight_decode_get_error(&fb.decoder));
+    tight_decode_cleanup(&fb.decoder);
+    free(fb.data);
+    free(fb.info.name);
+    fbs_cleanup(&fbs);
     return 0;
   }
 
   success = read_normal_protocol(&fbs, &fb);
 
   tight_decode_cleanup(&fb.decoder);
+  free(fb.data);
   free(fb.info.name);
   fbs_cleanup(&fbs);
 
@@ -345,8 +366,13 @@ static int handle_newfbsize(FRAME_BUFFER *fb, int w, int h)
 {
   fb->info.width = w;
   fb->info.height = h;
+  fb->data = realloc(fb->data, w * h * 4);
+  if (fb->data == NULL) {
+    fprintf(stderr, "Error reallocating memory (%d bytes)\n", w * h * 4);
+    return 0;
+  }
 
-  if (!tight_decode_set_framebuffer(&fb->decoder, NULL, w, h, 0)) {
+  if (!tight_decode_set_framebuffer(&fb->decoder, fb->data, w, h, w)) {
     fprintf(stderr, "Tight decoder: %s\n",
             tight_decode_get_error(&fb->decoder));
     return 0;
