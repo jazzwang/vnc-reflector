@@ -33,7 +33,8 @@ static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
-static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb);
+static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
+                                FBSOUT *fbk, FILE *fp_index);
 
 int main (int argc, char *argv[])
 {
@@ -147,7 +148,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
     return 0;
   }
 
-  success = read_normal_protocol(&fbs, &fb);
+  success = read_normal_protocol(&fbs, &fb, &fbk, fp_index);
 
   tight_decode_cleanup(&fb.decoder);
   free(fb.data);
@@ -312,18 +313,32 @@ static int handle_set_colormap_entries(FBSTREAM *fbs);
 static int handle_bell(FBSTREAM *fbs);
 static int handle_server_cut_text(FBSTREAM *fbs);
 
-static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb)
+static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk);
+
+static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
+                                FBSOUT *fbk, FILE *fp_index)
 {
   unsigned int idx;
   size_t filepos;
   size_t blksize;
   size_t offset;
+  unsigned int prev_timestamp = 0;
   unsigned int timestamp;
+  int interval = 10;            /* interval between keyframes, in seconds */
 
   while (!fbs_eof(fbs) && !fbs_error(fbs)) {
     if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
       if (!read_message(fbs, fb)) {
         return 0;
+      }
+      if (timestamp > prev_timestamp + interval * 1000) {
+        if (!fbsout_set_timestamp(fbk, timestamp, 1)) {
+          return 0;
+        }
+        prev_timestamp = timestamp;
+        if (!write_keyframe(fb, fbk)) {
+          return 0;
+        }
       }
     }
   }
@@ -523,3 +538,22 @@ static int handle_server_cut_text(FBSTREAM *fbs)
   fprintf(stderr, "ServerCutText message is not supported\n");
   return 0;
 }
+
+static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk)
+{
+  fbs_write_U8(fbk, 0);         /* message-type = FramebufferUpdate */
+  fbs_write_U8(fbk, 0);         /* padding */
+  fbs_write_U16(fbk, 1);        /* number-of-rectangles */
+
+  fbs_write_U16(fbk, 0);        /* x-position */
+  fbs_write_U16(fbk, 0);        /* y-position */
+  fbs_write_U16(fbk, fb->info.width);
+  fbs_write_U16(fbk, fb->info.height);
+  fbs_write_U32(fbk, 0);        /* encoding-type = Raw */
+
+  fbs_write(fbk, (char *)fb->data, fb->info.width * fb->info.height * 4);
+
+  /* FIXME: Check write errors. */
+  return 1;
+}
+
