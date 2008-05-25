@@ -432,7 +432,7 @@ static int handle_framebuffer_update(FBSTREAM *fbs, FRAME_BUFFER *fb)
       case -232:                /* RFB_ENCODING_POINTERPOS */
         break;
       default:
-        fprintf(stderr, "Unknown encoding type\n");
+        fprintf(stderr, "Unknown encoding type: %d\n", (int)encoding);
         return 0;
       }
     }
