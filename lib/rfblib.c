@@ -23,6 +23,18 @@
 #include "rfblib.h"
 #include "d3des.h"
 
+int is_big_endian(void)
+{
+  union _LITTLE_ENDIAN {
+    CARD32 value32;
+    CARD8 test;
+  } little_endian;
+
+  little_endian.value32 = 1;
+
+  return !(little_endian.test);
+}
+
 void buf_get_pixfmt(void *buf, RFB_PIXEL_FORMAT *format)
 {
   CARD8 *bbuf = buf;

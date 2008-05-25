@@ -225,6 +225,8 @@ typedef struct _rfbXCursorColors {
  * Functions
  */
 
+int is_big_endian(void);
+
 void buf_get_pixfmt(void *buf, RFB_PIXEL_FORMAT *format);
 void buf_put_pixfmt(void *buf, RFB_PIXEL_FORMAT *format);
 
