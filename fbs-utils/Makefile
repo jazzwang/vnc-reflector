@@ -67,5 +67,6 @@ depend:
 fbs-list.o: ../lib/rfblib.h ../lib/tight-decoder.h version.h fbsinput.h
 fbs-unchain.o: ../lib/rfblib.h version.h fbsinput.h fbsoutput.h
 fbs-mkindex.o: ../lib/rfblib.h ../lib/tight-decoder.h version.h fbsinput.h
+fbs-mkindex.o: fbsoutput.h
 fbsinput.o: ../lib/rfblib.h fbsinput.h
 fbsoutput.o: ../lib/rfblib.h fbsoutput.h
