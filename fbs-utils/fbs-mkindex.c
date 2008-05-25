@@ -16,6 +16,12 @@
 #include "version.h"
 #include "fbsinput.h"
 
+typedef struct _FRAME_BUFFER {
+  RFB_SCREEN_INFO info;
+  TIGHT_DECODER decoder;
+  u_int32_t *data;
+} FRAME_BUFFER;
+
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 
 static void report_usage(char *program_name);
@@ -25,8 +31,7 @@ static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
-static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr,
-                                TIGHT_DECODER *decoder);
+static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb);
 
 int main (int argc, char *argv[])
 {
@@ -67,33 +72,32 @@ static void report_usage(char *program_name)
 static int list_fbs(FILE *fp)
 {
   FBSTREAM fbs;
-  RFB_SCREEN_INFO screen;
-  TIGHT_DECODER decoder;
+  FRAME_BUFFER fb;
   int success;
 
   if (!fbs_init(&fbs, fp)) {
     return 0;
   }
 
-  if (!read_rfb_init(&fbs, &screen)) {
+  if (!read_rfb_init(&fbs, &fb.info)) {
     return 0;
   }
 
-  if (!tight_decode_init(&decoder)) {
+  if (!tight_decode_init(&fb.decoder)) {
     fprintf(stderr, "Error initializing Tight decoder\n");
     return 0;
   }
-  if (!tight_decode_set_framebuffer(&decoder, NULL,
-                                    screen.width, screen.height, 0)) {
+  if (!tight_decode_set_framebuffer(&fb.decoder, NULL,
+                                    fb.info.width, fb.info.height, 0)) {
     fprintf(stderr, "Tight decoder: %s\n",
-            tight_decode_get_error(&decoder));
+            tight_decode_get_error(&fb.decoder));
     return 0;
   }
 
-  success = read_normal_protocol(&fbs, &screen, &decoder);
+  success = read_normal_protocol(&fbs, &fb);
 
-  tight_decode_cleanup(&decoder);
-  free(screen.name);
+  tight_decode_cleanup(&fb.decoder);
+  free(fb.info.name);
   fbs_cleanup(&fbs);
 
   return success;
@@ -210,10 +214,10 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder);
+static int read_message(FBSTREAM *fbs, FRAME_BUFFER *fb);
 
-static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder);
-static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h);
+static int handle_framebuffer_update(FBSTREAM *fbs, FRAME_BUFFER *fb);
+static int handle_newfbsize(FRAME_BUFFER *fb, int w, int h);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, TIGHT_DECODER *decoder,
                              int x, int y, int w, int h);
@@ -223,8 +227,7 @@ static int handle_set_colormap_entries(FBSTREAM *fbs);
 static int handle_bell(FBSTREAM *fbs);
 static int handle_server_cut_text(FBSTREAM *fbs);
 
-static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr,
-                                TIGHT_DECODER *decoder)
+static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb)
 {
   unsigned int idx;
   size_t filepos;
@@ -234,7 +237,7 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr,
 
   while (!fbs_eof(fbs) && !fbs_error(fbs)) {
     if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
-      if (!read_message(fbs, decoder)) {
+      if (!read_message(fbs, fb)) {
         return 0;
       }
     }
@@ -243,14 +246,14 @@ static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr,
   return !fbs_error(fbs);
 }
 
-static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder)
+static int read_message(FBSTREAM *fbs, FRAME_BUFFER *fb)
 {
   int msg_id;
 
   if ((msg_id = fbs_getc(fbs)) >= 0) {
     switch(msg_id) {
     case 0:
-      if (!handle_framebuffer_update(fbs, decoder)) {
+      if (!handle_framebuffer_update(fbs, fb)) {
         return 0;
       }
       break;
@@ -278,7 +281,7 @@ static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder)
   return !fbs_error(fbs);
 }
 
-static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
+static int handle_framebuffer_update(FBSTREAM *fbs, FRAME_BUFFER *fb)
 {
   CARD16 num_rects;
   int i;
@@ -303,7 +306,7 @@ static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
         break;
       }
       if (encoding == -223) {   /* RFB_ENCODING_NEWFBSIZE */
-        if (!handle_newfbsize(decoder, w, h)) {
+        if (!handle_newfbsize(fb, w, h)) {
           return 0;
         }
         break;
@@ -316,7 +319,7 @@ static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
         }
         break;
       case RFB_ENCODING_TIGHT:
-        if (!handle_tight_rect(fbs, decoder, x, y, w, h)) {
+        if (!handle_tight_rect(fbs, &fb->decoder, x, y, w, h)) {
           return 0;
         }
         break;
@@ -338,11 +341,14 @@ static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
   return 1;
 }
 
-static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h)
+static int handle_newfbsize(FRAME_BUFFER *fb, int w, int h)
 {
-  if (!tight_decode_set_framebuffer(decoder, NULL, w, h, 0)) {
+  fb->info.width = w;
+  fb->info.height = h;
+
+  if (!tight_decode_set_framebuffer(&fb->decoder, NULL, w, h, 0)) {
     fprintf(stderr, "Tight decoder: %s\n",
-            tight_decode_get_error(decoder));
+            tight_decode_get_error(&fb->decoder));
     return 0;
   }
 
