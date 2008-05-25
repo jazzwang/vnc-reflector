@@ -218,6 +218,7 @@ static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder);
 
 static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder);
 static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h);
+static int handle_raw_rect(FBSTREAM *fbs, int x, int y, int w, int h);
 static int handle_copyrect(FBSTREAM *fbs);
 static int handle_tight_rect(FBSTREAM *fbs, TIGHT_DECODER *decoder,
                              int x, int y, int w, int h);
@@ -330,6 +331,11 @@ static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
       }
 
       switch (encoding) {
+      case RFB_ENCODING_RAW:
+        if (!handle_raw_rect(fbs, x, y, w, h)) {
+          return 0;
+        }
+        break;
       case RFB_ENCODING_COPYRECT:
         if (!handle_copyrect(fbs)) {
           return 0;
@@ -371,6 +377,13 @@ static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h)
   }
 
   return 1;
+}
+
+static int handle_raw_rect(FBSTREAM *fbs, int x, int y, int w, int h)
+{
+  printf("(Raw)\n");
+
+  return fbs_skip_ex(fbs, w * h * 4);
 }
 
 static int handle_copyrect(FBSTREAM *fbs)
