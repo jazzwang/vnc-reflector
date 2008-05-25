@@ -11,22 +11,22 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <zlib.h>
-
 #include "rfblib.h"
+#include "tight-decoder.h"
 #include "version.h"
 #include "fbsinput.h"
 
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 
 static void report_usage(char *program_name);
-static int process_fbs(FILE *fp);
-static int read_rfb_init(FBSTREAM *is, RFB_SCREEN_INFO *scr);
-static int fbs_check_success(FBSTREAM *is);
+static int list_fbs(FILE *fp);
+static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
+static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
-static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr);
+static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr,
+                                TIGHT_DECODER *decoder);
 
 int main (int argc, char *argv[])
 {
@@ -45,7 +45,7 @@ int main (int argc, char *argv[])
     return 1;
   }
 
-  if (process_fbs(fp)) {
+  if (list_fbs(fp)) {
     success = 1;
   }
 
@@ -58,50 +58,63 @@ int main (int argc, char *argv[])
 
 static void report_usage(char *program_name)
 {
-  fprintf(stderr, "fbs-mkindex version %s.\n%s\n\n", VERSION, COPYRIGHT);
+  fprintf(stderr, "fbs-list version %s.\n%s\n\n", VERSION, COPYRIGHT);
 
-  fprintf(stderr, "Usage: %s [FBS_FILE] [> CONVERTED_FILE]\n\n",
+  fprintf(stderr, "Usage: %s [FBS_FILE]\n\n",
           program_name);
 }
 
-static int process_fbs(FILE *fp)
+static int list_fbs(FILE *fp)
 {
-  FBSTREAM is;                  /* input stream */
+  FBSTREAM fbs;
   RFB_SCREEN_INFO screen;
+  TIGHT_DECODER decoder;
   int success;
 
-  if (!fbs_init(&is, fp)) {
+  if (!fbs_init(&fbs, fp)) {
     return 0;
   }
 
-  if (!read_rfb_init(&is, &screen)) {
+  if (!read_rfb_init(&fbs, &screen)) {
     return 0;
   }
 
-  success = read_normal_protocol(&is, &screen);
+  if (!tight_decode_init(&decoder)) {
+    fprintf(stderr, "Error initializing Tight decoder\n");
+    return 0;
+  }
+  if (!tight_decode_set_framebuffer(&decoder, NULL,
+                                    screen.width, screen.height, 0)) {
+    fprintf(stderr, "Tight decoder: %s\n",
+            tight_decode_get_error(&decoder));
+    return 0;
+  }
 
+  success = read_normal_protocol(&fbs, &screen, &decoder);
+
+  tight_decode_cleanup(&decoder);
   free(screen.name);
-  fbs_cleanup(&is);
+  fbs_cleanup(&fbs);
 
   return success;
 }
 
-static int read_rfb_init(FBSTREAM *is, RFB_SCREEN_INFO *scr)
+static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
 {
   char buf_version[12];
   CARD32 sec_type;
   char buf_pixformat[16];
 
   /* Read as much as possible, not checking for errors. */
-  fbs_read(is, buf_version, 12);
-  sec_type = fbs_read_U32(is);
-  scr->width = fbs_read_U16(is);
-  scr->height = fbs_read_U16(is);
-  fbs_read(is, buf_pixformat, 16);
-  scr->name_length = fbs_read_U32(is);
+  fbs_read(fbs, buf_version, 12);
+  sec_type = fbs_read_U32(fbs);
+  scr->width = fbs_read_U16(fbs);
+  scr->height = fbs_read_U16(fbs);
+  fbs_read(fbs, buf_pixformat, 16);
+  scr->name_length = fbs_read_U32(fbs);
 
   /* Could we read everything? */
-  if (!fbs_check_success(is)) {
+  if (!fbs_check_success(fbs)) {
     return 0;
   }
 
@@ -126,25 +139,49 @@ static int read_rfb_init(FBSTREAM *is, RFB_SCREEN_INFO *scr)
 
   /* Finally, read the desktop name. */
   scr->name = (CARD8 *)malloc(scr->name_length + 1);
-  fbs_read(is, (char *)scr->name, scr->name_length);
-  if (!fbs_check_success(is)) {
+  fbs_read(fbs, (char *)scr->name, scr->name_length);
+  if (!fbs_check_success(fbs)) {
     return 0;
   }
   scr->name[scr->name_length] = '\0';
 
+  printf("# Protocol version: %.11s\n", buf_version);
+  printf("# Desktop size: %dx%d\n", scr->width, scr->height);
+  printf("# Desktop name: %s\n", scr->name);
+
   return 1;
 }
 
-static int fbs_check_success(FBSTREAM *is)
+static int fbs_check_success(FBSTREAM *fbs)
 {
-  if (fbs_error(is)) {
+  if (fbs_error(fbs)) {
     /* No need to report errors -- already reported. */
     return 0;
-  } else if (fbs_eof(is)) {
+  } else if (fbs_eof(fbs)) {
     fprintf(stderr, "Preliminary end of file\n");
     return 0;
   }
   return 1;
+}
+
+/*
+ * Skip bytes and report error message if got over end of file.
+ */
+static int fbs_skip_ex(FBSTREAM *fbs, size_t len)
+{
+  fbs_skip(fbs, len);
+  return fbs_check_success(fbs);
+}
+
+static size_t fbs_tight_len_bytes(size_t len)
+{
+  if (len < 128) {
+    return 1;
+  } else if (len < 16384) {
+    return 2;
+  } else {
+    return 3;
+  }
 }
 
 /* FIXME: Code duplication, see rfblib.c */
@@ -177,109 +214,143 @@ static int check_24bits_format(RFB_SCREEN_INFO *scr)
 
 /************************* Normal Protocol *************************/
 
-static int handle_framebuffer_update(FBSTREAM *is);
-static int handle_copyrect(FBSTREAM *is);
-static int handle_tight(FBSTREAM *is, int w, int h);
-static int handle_cursor(FBSTREAM *is, int w, int h, int encoding);
+static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder);
 
-static int handle_set_colormap_entries(FBSTREAM *is);
-static int handle_bell(FBSTREAM *is);
-static int handle_server_cut_text(FBSTREAM *is);
+static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder);
+static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h);
+static int handle_copyrect(FBSTREAM *fbs);
+static int handle_tight_rect(FBSTREAM *fbs, TIGHT_DECODER *decoder,
+                             int x, int y, int w, int h);
+static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding);
 
-static int read_normal_protocol(FBSTREAM *is, RFB_SCREEN_INFO *scr)
+static int handle_set_colormap_entries(FBSTREAM *fbs);
+static int handle_bell(FBSTREAM *fbs);
+static int handle_server_cut_text(FBSTREAM *fbs);
+
+static int read_normal_protocol(FBSTREAM *fbs, RFB_SCREEN_INFO *scr,
+                                TIGHT_DECODER *decoder)
 {
-  int msg_id;
-  unsigned int idx;
+  unsigned int idx, prev_idx = -1;
   size_t filepos;
   size_t blksize;
   size_t offset;
   unsigned int timestamp;
 
-  while (!fbs_eof(is) && !fbs_error(is)) {
-    if (fbs_get_pos(is, &idx, &filepos, &blksize, &offset, &timestamp)) {
-      if ((msg_id = fbs_getc(is)) >= 0) {
-        switch(msg_id) {
-        case 0:
-          if (!handle_framebuffer_update(is)) {
-            return 0;
-          }
-          break;
-        case 1:
-          if (!handle_set_colormap_entries(is)) {
-            return 0;
-          }
-          break;
-        case 2:
-          if (!handle_bell(is)) {
-            return 0;
-          }
-          break;
-        case 3:
-          if (!handle_server_cut_text(is)) {
-            return 0;
-          }
-          break;
-        default:
-          fprintf(stderr, "Unknown server message type: %d\n", msg_id);
-          return 0;
+  while (!fbs_eof(fbs) && !fbs_error(fbs)) {
+    if (fbs_get_pos(fbs, &idx, &filepos, &blksize, &offset, &timestamp)) {
+      if (idx != prev_idx) {
+        int not_listed = idx - prev_idx - 1;
+        if (not_listed != 0) {
+          printf("[blocks not listed: %d]\n", not_listed);
         }
+        printf("block #%u (fpos %u, data size %u, timestamp %ums),"
+               " offset %u\n",
+               idx, (unsigned int)filepos, (unsigned int)blksize, timestamp,
+               (unsigned int)offset);
+        prev_idx = idx;
+      }
+      if (!read_message(fbs, decoder)) {
+        return 0;
       }
     }
   }
 
-  return !fbs_error(is);
+  return !fbs_error(fbs);
 }
 
-static int handle_framebuffer_update(FBSTREAM *is)
+static int read_message(FBSTREAM *fbs, TIGHT_DECODER *decoder)
 {
-  CARD8 padding;
+  int msg_id;
+
+  if ((msg_id = fbs_getc(fbs)) >= 0) {
+    switch(msg_id) {
+    case 0:
+      if (!handle_framebuffer_update(fbs, decoder)) {
+        return 0;
+      }
+      break;
+    case 1:
+      if (!handle_set_colormap_entries(fbs)) {
+        return 0;
+      }
+      break;
+    case 2:
+      if (!handle_bell(fbs)) {
+        return 0;
+      }
+      break;
+    case 3:
+      if (!handle_server_cut_text(fbs)) {
+        return 0;
+      }
+      break;
+    default:
+      fprintf(stderr, "Unknown server message type: %d\n", msg_id);
+      return 0;
+    }
+  }
+
+  return !fbs_error(fbs);
+}
+
+static int handle_framebuffer_update(FBSTREAM *fbs, TIGHT_DECODER *decoder)
+{
+  static int update_idx = 0;
   CARD16 num_rects;
   int i;
   CARD16 x, y, w, h;
   INT32 encoding;
 
-  padding = fbs_read_U8(is);
-  num_rects = fbs_read_U16(is);
+  fbs_read_U8(fbs);
+  num_rects = fbs_read_U16(fbs);
 
-  if (!fbs_eof(is) && !fbs_error(is)) {
-
+  if (!fbs_eof(fbs) && !fbs_error(fbs)) {
+    printf("  update #%d, max rectangles %d\n", update_idx++, (int)num_rects);
     for (i = 0; i < (int)num_rects; i++) {
-      x = fbs_read_U16(is);
-      y = fbs_read_U16(is);
-      w = fbs_read_U16(is);
-      h = fbs_read_U16(is);
-      encoding = fbs_read_U32(is);
-      if (!fbs_check_success(is)) {
+      x = fbs_read_U16(fbs);
+      y = fbs_read_U16(fbs);
+      w = fbs_read_U16(fbs);
+      h = fbs_read_U16(fbs);
+      encoding = fbs_read_U32(fbs);
+      if (!fbs_check_success(fbs)) {
         return 0;
       }
+      printf("    rect #%2d, (%4hu,%4hu) %4hu x%4hu, enc %d ",
+             i, x, y, w, h, encoding);
 
       if (encoding == -224) {   /* RFB_ENCODING_LASTRECT */
+        printf("(LastRect)\n");
         break;
       }
       if (encoding == -223) {   /* RFB_ENCODING_NEWFBSIZE */
+        if (!handle_newfbsize(decoder, w, h)) {
+          return 0;
+        }
         break;
       }
 
       switch (encoding) {
       case RFB_ENCODING_COPYRECT:
-        if (!handle_copyrect(is)) {
+        if (!handle_copyrect(fbs)) {
           return 0;
         }
         break;
       case RFB_ENCODING_TIGHT:
-        if (!handle_tight(is, w, h)) {
+        if (!handle_tight_rect(fbs, decoder, x, y, w, h)) {
           return 0;
         }
         break;
       case -240:                /* RFB_ENCODING_XCURSOR */
       case -239:                /* RFB_ENCODING_RICHCURSOR */
-        if (!handle_cursor(is, w, h, (int)encoding)) {
+        if (!handle_cursor(fbs, w, h, (int)encoding)) {
           return 0;
         }
         break;
       case -232:                /* RFB_ENCODING_POINTERPOS */
+        printf("(PointerPos)\n");
         break;
       default:
+        printf("(not supported)\n");
         fprintf(stderr, "Unknown encoding type\n");
         return 0;
       }
@@ -289,233 +360,146 @@ static int handle_framebuffer_update(FBSTREAM *is)
   return 1;
 }
 
-static int handle_copyrect(FBSTREAM *is)
+static int handle_newfbsize(TIGHT_DECODER *decoder, int w, int h)
 {
-  CARD16 src_x, src_y;
+  printf("(NewFBSize)\n");
 
-  src_x = fbs_read_U16(is);
-  src_y = fbs_read_U16(is);
-  if (!fbs_check_success(is)) {
+  if (!tight_decode_set_framebuffer(decoder, NULL, w, h, 0)) {
+    fprintf(stderr, "Tight decoder: %s\n",
+            tight_decode_get_error(decoder));
     return 0;
   }
 
   return 1;
 }
 
-static int handle_cursor(FBSTREAM *is, int w, int h, int encoding)
+static int handle_copyrect(FBSTREAM *fbs)
 {
-  int mask_size = ((w + 7) / 8) * h;
+  printf("(CopyRect)\n");
+  fbs_read_U16(fbs);
+  fbs_read_U16(fbs);
+  return fbs_check_success(fbs);
+}
+
+static int handle_cursor(FBSTREAM *fbs, int width, int height, int encoding)
+{
+  int mask_size = ((width + 7) / 8) * height;
   int data_size;
 
   if (encoding == -239) {       /* RFB_ENCODING_RICHCURSOR */
-    data_size = mask_size + w * h * 4;
+    printf("(RichCursor)\n");
+    data_size = mask_size + width * height * 4;
   } else {                      /* RFB_ENCODING_XCURSOR */
-    data_size = ((w * h != 0) ? 6 : 0) + 2 * mask_size;
+    printf("(XCursor)\n");
+    data_size = ((width * height != 0) ? 6 : 0) + 2 * mask_size;
   }
 
-  /*** return fbs_copy(is, data_size); ***/
+  return fbs_skip_ex(fbs, data_size);
+}
+
+static int handle_tight_rect(FBSTREAM *fbs, TIGHT_DECODER *decoder,
+                             int x, int y, int w, int h)
+{
+  int num_bytes;
+  static char static_buf[1024];
+  char *buf;
+  int buf_allocated;
+
+  num_bytes = tight_decode_start(decoder, x, y, w, h);
+  while (num_bytes > 0) {
+    if (num_bytes > sizeof(static_buf)) {
+      buf = malloc(num_bytes);
+      if (buf == NULL) {
+        fprintf(stderr, "Error allocating %d bytes\n", num_bytes);
+        return 0;
+      }
+      buf_allocated = 1;
+    } else {
+      buf = static_buf;
+      buf_allocated = 0;
+    }
+    fbs_read(fbs, buf, num_bytes);
+    if (!fbs_check_success(fbs)) {
+      if (buf_allocated) {
+        free(buf);
+      }
+      return 0;
+    }
+    num_bytes = tight_decode_continue(decoder, buf);
+    if (buf_allocated) {
+      free(buf);
+    }
+  }
+  if (num_bytes < 0) {
+    printf("(Tight)\n");
+    fprintf(stderr, "Tight decoder: %s\n", tight_decode_get_error(decoder));
+    return 0;
+  }
+
+  /* Print details on Tight-encoded rectangle */
+  {
+    int reset_mask, zlib_stream_id, num_colors;
+    char reset_str[5] = "----";
+    char type_str[5] = "????";
+    char z_str[4] = "+z?";
+    int bytes1, bytes2, bytes3;
+
+    reset_mask = tdstat_get_zlib_reset_mask(decoder);
+    for (zlib_stream_id = 0; zlib_stream_id < 4; zlib_stream_id++) {
+      if (reset_mask & (1 << zlib_stream_id)) {
+        reset_str[zlib_stream_id] = '0' + zlib_stream_id;
+      }
+    }
+
+    num_colors = tdstat_get_num_colors(decoder);
+    if (num_colors == -2) {
+      memcpy(type_str, "jpeg", 4);
+    } else if (num_colors == -1) {
+      memcpy(type_str, "grad", 4);
+    } else if (num_colors == 0) {
+      memcpy(type_str, "pure", 4);
+    } else if (num_colors == 1) {
+      memcpy(type_str, "fill", 4);
+    } else if (num_colors == 2) {
+      memcpy(type_str, "mono", 4);
+    } else if (num_colors <= 256) {
+      snprintf(type_str, 5, "i%03d", num_colors);
+    }
+
+    bytes3 = tdstat_get_num_compressed_bytes(decoder);
+    bytes2 = (bytes3 > 0) ? fbs_tight_len_bytes(bytes3) : 0;
+    bytes1 = tdstat_get_num_encoded_bytes(decoder) - bytes2 - bytes3;
+
+    zlib_stream_id = tdstat_get_zlib_stream_id(decoder);
+    if (zlib_stream_id < 0 || bytes3 == 0) {
+      memcpy(z_str, "   ", 3);
+    } else if (zlib_stream_id < 4) {
+      z_str[2] = '0' + zlib_stream_id;
+    }
+
+    printf("(Tight: %s %s%s %d+%d+%d)\n",
+           reset_str, type_str, z_str, bytes1, bytes2, bytes3);
+  }
+
   return 1;
 }
 
-static void zlib_reset_stream_in(int stream_id);
-
-static int zlib_convert(FBSTREAM *is, int zlib_stream_id,
-                        size_t raw_size);
-
-static int handle_tight(FBSTREAM *is, int w, int h)
+static int handle_set_colormap_entries(FBSTREAM *fbs)
 {
-  CARD8 comp_ctl;
-  int stream_id;
-  int filter_id;
-  size_t uncompressed_size;
-  size_t compressed_size;
-  int num_colors;
-
-  /* Read the compression control byte. */
-  comp_ctl = fbs_read_U8(is);
-  if (!fbs_check_success(is)) {
-    return 0;
-  }
-
-  /* Reset input zlib streams if requested. */
-  for (stream_id = 0; stream_id < 4; stream_id++) {
-    if (comp_ctl & (1 << stream_id)) {
-      zlib_reset_stream_in(stream_id);
-    }
-  }
-  comp_ctl &= 0xF0;             /* clear bits 3..0 */
-
-  if (comp_ctl == RFB_TIGHT_FILL) {
-    /*** return fbs_copy(is, 3); ***/
-    return 1;
-  }
-
-  if (comp_ctl == RFB_TIGHT_JPEG) {
-    compressed_size = fbs_read_tight_len(is);
-    if (!fbs_check_success(is)) {
-      return 0;
-    }
-    /*** return fbs_copy(is, compressed_size); ***/
-    return 1;
-  }
-
-  if (comp_ctl > RFB_TIGHT_MAX_SUBENCODING) {
-    fprintf(stderr, "Invalid sub-encoding in Tight-encoded data\n");
-    return 0;
-  }
-
-  /* "Basic" compression. First, get zlib stream id and filter type. */
-  stream_id = (comp_ctl >> 4) & 0x03;
-  if (comp_ctl & RFB_TIGHT_EXPLICIT_FILTER) {
-    filter_id = fbs_getc(is);
-    if (!fbs_check_success(is)) {
-      return 0;
-    }
-  } else {
-    filter_id = RFB_TIGHT_FILTER_COPY;
-  }
-
-  if (filter_id == RFB_TIGHT_FILTER_COPY) {
-    uncompressed_size = w * h * 3;
-  } else if (filter_id == RFB_TIGHT_FILTER_GRADIENT) {
-    uncompressed_size = w * h * 3;
-  } else if (filter_id == RFB_TIGHT_FILTER_PALETTE) {
-    num_colors = fbs_getc(is) + 1;
-    if (!fbs_check_success(is)) {
-      return 0;
-    }
-    /*** Read palette:
-    if (!fbs_copy(is, num_colors * 3)) {
-      return 0;
-    }
-    ***/
-    if (num_colors <= 2) {
-      uncompressed_size = ((w + 7) / 8) * h;
-    } else {
-      uncompressed_size = w * h;
-    }
-  } else {
-    fprintf(stderr, "Invalid filter id in Tight-encoded data\n");
-    return 0;
-  }
-  if (uncompressed_size < RFB_TIGHT_MIN_TO_COMPRESS) {
-    /*** return fbs_copy(is, uncompressed_size); ***/
-    return 1;
-  } else {
-    return zlib_convert(is, stream_id, uncompressed_size);
-  }
-}
-
-static int handle_set_colormap_entries(FBSTREAM *is)
-{
+  printf("  colormap\n");
   fprintf(stderr, "SetColormapEntries message is not supported\n");
   return 0;
 }
 
-static int handle_bell(FBSTREAM *is)
+static int handle_bell(FBSTREAM *fbs)
 {
+  printf("  bell\n");
   return 1;
 }
 
-static int handle_server_cut_text(FBSTREAM *is)
+static int handle_server_cut_text(FBSTREAM *fbs)
 {
+  printf("  cuttext not supported\n");
   fprintf(stderr, "ServerCutText message is not supported\n");
   return 0;
-}
-
-/************************* Zlib Conversion *************************/
-
-static z_stream s_zstream_in[4];
-static int s_zstream_in_active[4] = { 0, 0, 0, 0 };
-
-static void zlib_reset_stream_in(int stream_id)
-{
-  if (s_zstream_in_active[stream_id]) {
-    if (inflateEnd(&s_zstream_in[stream_id]) != Z_OK) {
-      if (s_zstream_in[stream_id].msg != NULL) {
-        fprintf(stderr, "inflateEnd() failed: %s\n",
-                s_zstream_in[stream_id].msg);
-      } else {
-        fprintf(stderr, "inflateEnd() failed\n");
-      }
-    }
-    s_zstream_in_active[stream_id] = 0;
-  }
-}
-
-static int zlib_convert(FBSTREAM *is, int stream_id,
-                        size_t raw_size)
-{
-  z_streamp zs;
-  int err;
-  size_t zlib_in_size;
-  char *zlib_in_data;
-  char *raw_data;
-  int success;
-
-  zlib_in_size = fbs_read_tight_len(is);
-  if (!fbs_check_success(is)) {
-    return 0;
-  }
-
-  /* Initialize decompression stream if needed */
-
-  zs = &s_zstream_in[stream_id];
-  if (!s_zstream_in_active[stream_id]) {
-    zs->zalloc = Z_NULL;
-    zs->zfree = Z_NULL;
-    zs->opaque = Z_NULL;
-    err = inflateInit(zs);
-    if (err != Z_OK) {
-      if (zs->msg != NULL) {
-        fprintf(stderr, "inflateInit() failed: %s\n", zs->msg);
-      } else {
-        fprintf(stderr, "inflateInit() failed\n");
-      }
-      return 0;
-    }
-    s_zstream_in_active[stream_id] = 1;
-  }
-
-  /* Allocate buffers to put zlib and raw data into */
-
-  zlib_in_data = malloc(zlib_in_size);
-  raw_data = malloc(raw_size);
-
-  /* Read the data. */
-
-  if (!fbs_read(is, zlib_in_data, zlib_in_size)) {
-    free(zlib_in_data);
-    free(raw_data);
-    return 0;
-  }
-
-  /* Decompress the data */
-
-  zs->next_in = (Bytef *)zlib_in_data;
-  zs->avail_in = zlib_in_size;
-  zs->next_out = (Bytef *)raw_data;
-  zs->avail_out = raw_size;
-
-  err = inflate(zs, Z_SYNC_FLUSH);
-  if (err != Z_OK && err != Z_STREAM_END) {
-    if (zs->msg != NULL) {
-      fprintf(stderr, "inflate() failed: %s\n", zs->msg);
-    } else {
-      fprintf(stderr, "inflate() failed: %d\n", err);
-    }
-    free(zlib_in_data);
-    free(raw_data);
-    return 0;
-  }
-
-  if (zs->avail_out > 0)
-    fprintf(stderr, "Decompressed data size is less than expected\n");
-
-  /* Free memory. */
-
-  free(zlib_in_data);
-  free(raw_data);
-
-  return success;
 }
