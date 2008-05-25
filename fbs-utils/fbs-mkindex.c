@@ -25,7 +25,7 @@ typedef struct _FRAME_BUFFER {
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 
 static void report_usage(char *program_name);
-static int process_file(FILE *fp);
+static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
@@ -35,13 +35,15 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb);
 
 int main (int argc, char *argv[])
 {
-  FILE *fp = stdin;
-  int needClose = 0;
-  int success = 0;
+  FILE *fp_input = stdin;
+  int need_close_input = 0;
+  FILE *fp_index = NULL;
+  FILE *fp_keyframes = NULL;
+  int success;
 
   if (argc == 2 && argv[1][0] != '-') {
-    fp = fopen(argv[1], "rb");
-    if (fp == NULL) {
+    fp_input = fopen(argv[1], "rb");
+    if (fp_input == NULL) {
       fprintf(stderr, "Error opening file: %s\n", argv[1]);
       return 1;
     }
@@ -50,13 +52,25 @@ int main (int argc, char *argv[])
     return 1;
   }
 
-  if (process_file(fp)) {
-    success = 1;
+  if ((fp_index = fopen("out.fbi", "wb")) == NULL ||
+      (fp_keyframes = fopen("out.fbk", "wb")) == NULL) {
+    fprintf(stderr, "Error creating output files\n");
+    if (fp_index != NULL) {
+      fclose(fp_index);
+    }
+    if (need_close_input) {
+      fclose(fp_input);
+    }
+    return 1;
   }
 
-  if (needClose) {
-    fclose(fp);
+  success = process_file(fp_input, fp_index, fp_keyframes);
+
+  if (need_close_input) {
+    fclose(fp_input);
   }
+  fclose(fp_index);
+  fclose(fp_keyframes);
 
   return success ? 0 : 1;
 }
@@ -69,14 +83,14 @@ static void report_usage(char *program_name)
           program_name);
 }
 
-static int process_file(FILE *fp)
+static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
 {
   FBSTREAM fbs;
   FRAME_BUFFER fb;
   int w, h;
   int success;
 
-  if (!fbs_init(&fbs, fp)) {
+  if (!fbs_init(&fbs, fp_input)) {
     return 0;
   }
 
