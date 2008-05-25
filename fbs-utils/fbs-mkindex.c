@@ -326,6 +326,7 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
   unsigned int prev_timestamp = 0;
   unsigned int timestamp;
   int interval = 10;            /* interval between keyframes, in seconds */
+  static int num_keyframes = 0;
   CARD32 key_fpos, key_size;
 
   buf_put_CARD32(buf, 0xFFFFFFFF);
@@ -373,7 +374,17 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
                (unsigned int)offset);
         /* Remember at which time point we wrote previous keyframe */
         prev_timestamp = timestamp;
+        num_keyframes++;
       }
+    }
+  }
+
+  /* Put correct number of records into the .fbi file */
+  if (fseek(fp_index, 12, SEEK_SET) == 0) {
+    buf_put_CARD32(buf, num_keyframes);
+    if (fwrite(buf, 1, 4, fp_index) != 4) {
+      fprintf(stderr, "Error rewriting .fbi file header\n");
+      return 0;
     }
   }
 
