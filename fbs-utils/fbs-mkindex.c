@@ -15,6 +15,7 @@
 #include "tight-decoder.h"
 #include "version.h"
 #include "fbsinput.h"
+#include "fbsoutput.h"
 
 typedef struct _FRAME_BUFFER {
   RFB_SCREEN_INFO info;
@@ -27,6 +28,7 @@ static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 static void report_usage(char *program_name);
 static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
+static int write_rfb_init(FBSOUT *os, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
@@ -86,6 +88,7 @@ static void report_usage(char *program_name)
 static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
 {
   FBSTREAM fbs;
+  FBSOUT fbk;
   FRAME_BUFFER fb;
   int w, h;
   int success;
@@ -94,7 +97,20 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
     return 0;
   }
 
+  if (!fbsout_init(&fbk, fp_keyframes)) {
+    fbs_cleanup(&fbs);
+    return 0;
+  }
+
   if (!read_rfb_init(&fbs, &fb.info)) {
+    fbsout_cleanup(&fbk);
+    fbs_cleanup(&fbs);
+    return 0;
+  }
+
+  if (!write_rfb_init(&fbk, &fb.info)) {
+    free(fb.info.name);
+    fbsout_cleanup(&fbk);
     fbs_cleanup(&fbs);
     return 0;
   }
@@ -106,6 +122,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
   if (fb.data == NULL) {
     fprintf(stderr, "Error allocating memory (%d bytes)\n", w * h * 4);
     free(fb.info.name);
+    fbsout_cleanup(&fbk);
     fbs_cleanup(&fbs);
     return 0;
   }
@@ -114,6 +131,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
     fprintf(stderr, "Error initializing Tight decoder\n");
     free(fb.data);
     free(fb.info.name);
+    fbsout_cleanup(&fbk);
     fbs_cleanup(&fbs);
     return 0;
   }
@@ -124,6 +142,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
     tight_decode_cleanup(&fb.decoder);
     free(fb.data);
     free(fb.info.name);
+    fbsout_cleanup(&fbk);
     fbs_cleanup(&fbs);
     return 0;
   }
@@ -133,6 +152,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
   tight_decode_cleanup(&fb.decoder);
   free(fb.data);
   free(fb.info.name);
+  fbsout_cleanup(&fbk);
   fbs_cleanup(&fbs);
 
   return success;
@@ -184,6 +204,36 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   }
   scr->name[scr->name_length] = '\0';
 
+  return 1;
+}
+
+static int write_rfb_init(FBSOUT *os, RFB_SCREEN_INFO *scr)
+{
+  int sec_type = 1;
+
+  fbs_write(os, "RFB 003.003\n", 12);
+  fbs_write_U32(os, sec_type);
+  fbs_write_U16(os, scr->width);
+  fbs_write_U16(os, scr->height);
+
+  fbs_write_U8(os, 32);         /* bits-per-pixel */
+  fbs_write_U8(os, 24);         /* depth */
+  fbs_write_U8(os, is_big_endian());
+  fbs_write_U8(os, 1);          /* true-colour */
+  fbs_write_U16(os, 255);       /* red-max */
+  fbs_write_U16(os, 255);       /* green-max */
+  fbs_write_U16(os, 255);       /* blue-max */
+  fbs_write_U8(os, 16);         /* red-shift */
+  fbs_write_U8(os, 8);          /* green-shift */
+  fbs_write_U8(os, 0);          /* blue-shift */
+  fbs_write_U8(os, 0);          /* padding1 */
+  fbs_write_U8(os, 0);          /* padding2 */
+  fbs_write_U8(os, 0);          /* padding3 */
+
+  fbs_write_U32(os, scr->name_length);
+  fbs_write(os, (char *)scr->name, scr->name_length);
+
+  /* FIXME: Check write errors. */
   return 1;
 }
 
