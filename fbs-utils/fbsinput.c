@@ -232,7 +232,7 @@ int fbs_error(FBSTREAM *fbs)
 
 /************************* Private Code *************************/
 
-static const size_t MAX_BLOCK_SIZE = 1024 * 1024;
+static const size_t MAX_BLOCK_SIZE = 16 * 1024 * 1024;
 
 static int fbs_read_block(FBSTREAM *fbs)
 {
