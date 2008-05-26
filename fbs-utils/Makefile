@@ -28,10 +28,11 @@ OBJS_FBS_UNCHAIN = fbs-unchain.o fbsinput.o fbsoutput.o
 LDFLAGS_FBS_UNCHAIN = -L/usr/local/lib -lz
 
 PROG_FBS_MKINDEX = fbs-mkindex
-OBJS_FBS_MKINDEX = fbs-mkindex.o fbsinput.o fbsoutput.o
+OBJS_FBS_MKINDEX = fbs-mkindex.o fbsinput.o fbsoutput.o encode_tight.o
 LDFLAGS_FBS_MKINDEX = -L/usr/local/lib -L../lib -lvref -lz
 
-SRCS = fbs-list.c fbs-unchain.c fbs-mkindex.c fbsinput.c fbsoutput.c
+SRCS = fbs-list.c fbs-unchain.c fbs-mkindex.c fbsinput.c fbsoutput.c \
+	encode_tight.c
 
 CC = gcc
 MAKEDEPEND = makedepend
@@ -70,3 +71,4 @@ fbs-mkindex.o: ../lib/rfblib.h ../lib/tight-decoder.h version.h fbsinput.h
 fbs-mkindex.o: fbsoutput.h
 fbsinput.o: ../lib/rfblib.h fbsinput.h
 fbsoutput.o: ../lib/rfblib.h fbsoutput.h
+encode_tight.o: ../lib/rfblib.h fbsoutput.h encode_tight.h

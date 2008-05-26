@@ -592,17 +592,47 @@ static int handle_server_cut_text(FBSTREAM *fbs)
 
 static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk)
 {
+  int num_rects;
+  FB_RECT r;
+
+  /* First, put an update with a single NewFBSize */
+
   fbs_write_U8(fbk, 0);         /* message-type = FramebufferUpdate */
   fbs_write_U8(fbk, 0);         /* padding */
   fbs_write_U16(fbk, 1);        /* number-of-rectangles */
 
-  fbs_write_U16(fbk, 0);        /* x-position */
-  fbs_write_U16(fbk, 0);        /* y-position */
+  fbs_write_U16(fbk, 0);
+  fbs_write_U16(fbk, 0);
   fbs_write_U16(fbk, fb->info.width);
   fbs_write_U16(fbk, fb->info.height);
-  fbs_write_U32(fbk, 0);        /* encoding-type = Raw */
+  fbs_write_U32(fbk, RFB_ENCODING_NEWFBSIZE);
 
-  fbs_write(fbk, (char *)fb->data, fb->info.width * fb->info.height * 4);
+  /* Now, encode and write the whole framebuffer */
+
+  configure_tight_encoder(fb->data, fb->info.width, fb->info.height, fbk);
+
+  SET_RECT(&r, 0, 0, fb->info.width, fb->info.height);
+  num_rects = num_rects_tight(&r);
+  if (num_rects == 0) {
+    num_rects = 0xFFFF;
+  }
+
+  fbs_write_U8(fbk, 0);         /* message-type = FramebufferUpdate */
+  fbs_write_U8(fbk, 0);         /* padding */
+  fbs_write_U16(fbk, num_rects);
+
+  if (!rfb_encode_tight(&r)) {
+    fprintf(stderr, "Tight encoder failed\n");
+    return 0;
+  }
+
+  if (num_rects == 0xFFFF) {
+    fbs_write_U16(fbk, 0);
+    fbs_write_U16(fbk, 0);
+    fbs_write_U16(fbk, 0);
+    fbs_write_U16(fbk, 0);
+    fbs_write_U32(fbk, RFB_ENCODING_LASTRECT);
+  }
 
   /* FIXME: Check write errors. */
   return 1;
