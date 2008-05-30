@@ -260,17 +260,6 @@ static int fbs_skip_ex(FBSTREAM *fbs, size_t len)
   return fbs_check_success(fbs);
 }
 
-static size_t fbs_tight_len_bytes(size_t len)
-{
-  if (len < 128) {
-    return 1;
-  } else if (len < 16384) {
-    return 2;
-  } else {
-    return 3;
-  }
-}
-
 /* FIXME: Code duplication, see rfblib.c */
 /* FIXME: Read directly from FBSTREAM. */
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf)

@@ -123,8 +123,6 @@ static int  CompressData(int streamId, int dataLen,
                          int zlibLevel, int zlibStrategy);
 static void SendCompressedData(int compressedLen);
 
-static void FillPalette8(int count);
-static void FillPalette16(int count);
 static void FillPalette32(int count);
 
 static void PaletteReset(void);
@@ -132,11 +130,8 @@ static int  PaletteInsert(CARD32 rgb, int numPixels, int bpp);
 
 static void Pack24(CARD8 *buf, int count);
 
-static void EncodeIndexedRect16(CARD8 *buf, int count);
 static void EncodeIndexedRect32(CARD8 *buf, int count);
 
-static void EncodeMonoRect8(CARD8 *buf, int w, int h);
-static void EncodeMonoRect16(CARD8 *buf, int w, int h);
 static void EncodeMonoRect32(CARD8 *buf, int w, int h);
 
 void transfunc_null(void *dst_buf, FB_RECT *r, void *table)
@@ -731,52 +726,6 @@ static void SendCompressedData(int compressedLen)
   fbs_write(s_fbs, (char *)tightAfterBuf, compressedLen);
 }
 
-/*
- * Code to determine how many different colors are used in a rectangle.
- */
-
-static void
-FillPalette8(int count)
-{
-    CARD8 *data = (CARD8 *)tightBeforeBuf;
-    CARD8 c0, c1;
-    int i, n0, n1;
-
-    paletteNumColors = 0;
-
-    c0 = data[0];
-    for (i = 1; i < count && data[i] == c0; i++);
-    if (i == count) {
-        paletteNumColors = 1;
-        return;                 /* Solid rectangle */
-    }
-
-    if (paletteMaxColors < 2)
-        return;
-
-    n0 = i;
-    c1 = data[i];
-    n1 = 0;
-    for (i++; i < count; i++) {
-        if (data[i] == c0) {
-            n0++;
-        } else if (data[i] == c1) {
-            n1++;
-        } else
-            break;
-    }
-    if (i == count) {
-        if (n0 > n1) {
-            monoBackground = (CARD32)c0;
-            monoForeground = (CARD32)c1;
-        } else {
-            monoBackground = (CARD32)c1;
-            monoForeground = (CARD32)c0;
-        }
-        paletteNumColors = 2;   /* Two colors */
-    }
-}
-
 #define DEFINE_FILL_PALETTE_FUNCTION(bpp)                               \
                                                                         \
 static void                                                             \
@@ -840,7 +789,6 @@ FillPalette##bpp(int count)                                             \
     PaletteInsert (ci, (CARD32)ni, bpp);                                \
 }
 
-DEFINE_FILL_PALETTE_FUNCTION(16)
 DEFINE_FILL_PALETTE_FUNCTION(32)
 
 
@@ -979,7 +927,6 @@ EncodeIndexedRect##bpp(CARD8 *buf, int count)                           \
     }                                                                   \
 }
 
-DEFINE_IDX_ENCODE_FUNCTION(16)
 DEFINE_IDX_ENCODE_FUNCTION(32)
 
 #define DEFINE_MONO_ENCODE_FUNCTION(bpp)                                \
@@ -1033,7 +980,5 @@ EncodeMonoRect##bpp(CARD8 *buf, int w, int h)                           \
     }                                                                   \
 }
 
-DEFINE_MONO_ENCODE_FUNCTION(8)
-DEFINE_MONO_ENCODE_FUNCTION(16)
 DEFINE_MONO_ENCODE_FUNCTION(32)
 
