@@ -16,6 +16,7 @@
 #include "version.h"
 #include "fbsinput.h"
 #include "fbsoutput.h"
+#include "encode_tight.h"
 
 typedef struct _FRAME_BUFFER {
   RFB_SCREEN_INFO info;

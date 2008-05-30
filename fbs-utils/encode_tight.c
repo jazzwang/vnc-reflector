@@ -169,7 +169,7 @@ static void reset_zlib_streams(void)
  * Tiny function to fill in rectangle header in an RFB update
  */
 
-int put_rect_header(CARD8 *buf, FB_RECT *r)
+int put_rect_header(char *buf, FB_RECT *r)
 {
 
   buf_put_CARD16(buf, r->x);
@@ -562,7 +562,7 @@ static int SendSubrect(FB_RECT *r)
 static void
 SendTightHeader(FB_RECT *r)
 {
-  CARD8 rect_hdr[12];
+  char rect_hdr[12];
 
   r->enc = RFB_ENCODING_TIGHT;
   put_rect_header(rect_hdr, r);
@@ -576,7 +576,7 @@ SendTightHeader(FB_RECT *r)
 static void
 SendSolidRect(void)
 {
-  CARD8 buf[5];
+  char buf[5];
   int len;
 
   Pack24(tightBeforeBuf, 1);
@@ -591,7 +591,7 @@ SendSolidRect(void)
 static int
 SendMonoRect(int w, int h)
 {
-  CARD8 buf[11];
+  char buf[11];
   int streamId = 1;
   int paletteLen, dataLen;
 
@@ -653,7 +653,7 @@ SendIndexedRect(int w, int h)
 static int
 SendFullColorRect(int w, int h)
 {
-  CARD8 buf[1];
+  char buf[1];
   int streamId = 0;
   int len;
 
@@ -677,7 +677,7 @@ CompressData(int streamId, int dataLen,
   int err;
 
   if (dataLen < RFB_TIGHT_MIN_TO_COMPRESS) {
-    fbs_write(s_fbs, tightBeforeBuf, dataLen);
+    fbs_write(s_fbs, (char *)tightBeforeBuf, dataLen);
     return 1;
   }
 
@@ -715,7 +715,7 @@ CompressData(int streamId, int dataLen,
 
 static void SendCompressedData(int compressedLen)
 {
-  CARD8 buf[3];
+  char buf[3];
   int len_bytes = 0;
 
   buf[len_bytes++] = compressedLen & 0x7F;
@@ -728,7 +728,7 @@ static void SendCompressedData(int compressedLen)
     }
   }
   fbs_write(s_fbs, buf, len_bytes);
-  fbs_write(s_fbs, tightAfterBuf, compressedLen);
+  fbs_write(s_fbs, (char *)tightAfterBuf, compressedLen);
 }
 
 /*
