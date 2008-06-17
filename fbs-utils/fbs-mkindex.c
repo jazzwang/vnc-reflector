@@ -28,7 +28,8 @@ typedef struct _FRAME_BUFFER {
 static const CARD32 MAX_DESKTOP_NAME_SIZE = 1024;
 
 static void report_usage(char *program_name);
-static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes);
+static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes,
+                        int interval);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
 static int write_rfb_init(FBSOUT *os, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *fbs);
@@ -36,12 +37,13 @@ static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
 static int check_24bits_format(RFB_SCREEN_INFO *scr);
 
 static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
-                                FBSOUT *fbk, FILE *fp_index);
+                                FBSOUT *fbk, FILE *fp_index, int interval);
 
 int main (int argc, char *argv[])
 {
   int err = 0;
   int c;
+  int opt_interval;
   int num_positional_args;
   char *output_fname_prefix = "out";
   int len;
@@ -55,10 +57,13 @@ int main (int argc, char *argv[])
 
   /* Parse the command line. */
   while (!err &&
-         (c = getopt(argc, argv, "h")) != -1) {
+         (c = getopt(argc, argv, "hi:")) != -1) {
     switch (c) {
     case 'h':
       err = 1;
+      break;
+    case 'i':
+      opt_interval = atoi(optarg);
       break;
     default:
       err = 1;
@@ -109,7 +114,7 @@ int main (int argc, char *argv[])
   }
 
   /* Do the work! */
-  success = process_file(fp_input, fp_index, fp_keyframes);
+  success = process_file(fp_input, fp_index, fp_keyframes, opt_interval);
 
   /* Cleanup */
   if (need_close_input) {
@@ -127,15 +132,20 @@ static void report_usage(char *program_name)
 {
   fprintf(stderr, "fbs-list version %s.\n%s\n\n", VERSION, COPYRIGHT);
 
-  fprintf(stderr, "Usage: %s [FBS_FILE [OUT_PREFIX]]\n\n",
+  fprintf(stderr, "Usage: %s [OPTIONS...] [FBS_FILE [OUT_PREFIX]]\n\n",
           program_name);
 
   fprintf(stderr,
           "Output file name prefix defaults to `out', so the default\n"
-          "file names are `out.fbi' (index) and `out.fbk' (key frames).\n");
+          "file names are `out.fbi' (index) and `out.fbk' (key frames).\n\n");
+
+  fprintf(stderr,
+          "Options:\n"
+          "  -i INTERVAL     - minimal time interval between keyframes\n\n");
 }
 
-static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
+static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes,
+                        int interval)
 {
   FBSTREAM fbs;
   FBSOUT fbk;
@@ -197,7 +207,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
     return 0;
   }
 
-  success = read_normal_protocol(&fbs, &fb, &fbk, fp_index);
+  success = read_normal_protocol(&fbs, &fb, &fbk, fp_index, interval);
 
   tight_decode_cleanup(&fb.decoder);
   free(fb.data);
@@ -354,7 +364,7 @@ static int handle_server_cut_text(FBSTREAM *fbs);
 static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk);
 
 static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
-                                FBSOUT *fbk, FILE *fp_index)
+                                FBSOUT *fbk, FILE *fp_index, int interval)
 {
   char buf[20];
   unsigned int idx;
@@ -363,7 +373,6 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
   size_t offset;
   unsigned int prev_timestamp = 0;
   unsigned int timestamp;
-  int interval = 10;            /* interval between keyframes, in seconds */
   static int num_keyframes = 0;
   CARD32 key_fpos, key_size;
 
