@@ -141,7 +141,8 @@ static void report_usage(char *program_name)
 
   fprintf(stderr,
           "Options:\n"
-          "  -i INTERVAL     - minimal time interval between keyframes\n\n");
+          "  -i INTERVAL     - minimal time interval between keyframes,"
+          " in seconds\n\n");
 }
 
 static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes,
