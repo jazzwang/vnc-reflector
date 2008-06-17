@@ -45,7 +45,7 @@ $(LIBRARY): $(OBJS)
 	$(RANLIB) $(LIBRARY)
 
 clean: 
-	rm -f $(OBJS) *core* ./*~ ./*.bak $(PROG)
+	rm -f $(LIBRARY) $(OBJS) *core* ./*~ ./*.bak $(PROG)
 
 depend: $(SRCS)
 	$(MAKEDEPEND) $(MAKEDEPFLAGS) -I. $(SRCS) 2> /dev/null
