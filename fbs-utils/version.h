@@ -9,7 +9,7 @@
 #ifndef _FBSUTIL_VERSION_H
 #define _FBSUTIL_VERSION_H
 
-#define VERSION  "0.0.1"
+#define VERSION  "1.0.0"
 #define COPYRIGHT "Copyright (C) 2008 Wimba, Inc."
 
 #endif
