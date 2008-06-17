@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 
 #include "rfblib.h"
@@ -39,25 +40,62 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
 
 int main (int argc, char *argv[])
 {
+  int err = 0;
+  int c;
+  int num_positional_args;
+  char *output_fname_prefix = "out";
+  int len;
+  char *fname_index;
+  char *fname_keyframes;
   FILE *fp_input = stdin;
   int need_close_input = 0;
   FILE *fp_index = NULL;
   FILE *fp_keyframes = NULL;
   int success;
 
-  if (argc == 2 && argv[1][0] != '-') {
-    fp_input = fopen(argv[1], "rb");
-    if (fp_input == NULL) {
-      fprintf(stderr, "Error opening file: %s\n", argv[1]);
-      return 1;
+  /* Parse the command line. */
+  while (!err &&
+         (c = getopt(argc, argv, "h")) != -1) {
+    switch (c) {
+    case 'h':
+      err = 1;
+      break;
+    default:
+      err = 1;
     }
-  } else if (argc >= 2) {
+  }
+
+  num_positional_args = argc - optind;
+
+  /* Print usage help on error */
+  if (err || num_positional_args < 0 || num_positional_args > 2) {
     report_usage(argv[0]);
     return 1;
   }
 
-  if ((fp_index = fopen("out.fbi", "wb")) == NULL ||
-      (fp_keyframes = fopen("out.fbk", "wb")) == NULL) {
+  /* Handle positional arguments, open input file if specified */
+  if (num_positional_args > 0) {
+    fp_input = fopen(argv[optind], "rb");
+    if (fp_input == NULL) {
+      fprintf(stderr, "Error opening file: %s\n", argv[optind]);
+      return 1;
+    }
+    need_close_input = 1;
+    if (num_positional_args > 1) {
+      output_fname_prefix = argv[optind + 1];
+    }
+  }
+
+  /* Form output file names */
+  len = strlen(output_fname_prefix) + 5;
+  fname_index = malloc(len);
+  fname_keyframes = malloc(len);
+  snprintf(fname_index, len, "%s.fbi", output_fname_prefix);
+  snprintf(fname_keyframes, len, "%s.fbk", output_fname_prefix);
+
+  /* Open output files */
+  if ((fp_index = fopen(fname_index, "wb")) == NULL ||
+      (fp_keyframes = fopen(fname_keyframes, "wb")) == NULL) {
     fprintf(stderr, "Error creating output files\n");
     if (fp_index != NULL) {
       fclose(fp_index);
@@ -65,16 +103,22 @@ int main (int argc, char *argv[])
     if (need_close_input) {
       fclose(fp_input);
     }
+    free(fname_index);
+    free(fname_keyframes);
     return 1;
   }
 
+  /* Do the work! */
   success = process_file(fp_input, fp_index, fp_keyframes);
 
+  /* Cleanup */
   if (need_close_input) {
     fclose(fp_input);
   }
   fclose(fp_index);
   fclose(fp_keyframes);
+  free(fname_index);
+  free(fname_keyframes);
 
   return success ? 0 : 1;
 }
@@ -83,8 +127,12 @@ static void report_usage(char *program_name)
 {
   fprintf(stderr, "fbs-list version %s.\n%s\n\n", VERSION, COPYRIGHT);
 
-  fprintf(stderr, "Usage: %s [FBS_FILE]\n\n",
+  fprintf(stderr, "Usage: %s [FBS_FILE [OUT_PREFIX]]\n\n",
           program_name);
+
+  fprintf(stderr,
+          "Output file name prefix defaults to `out', so the default\n"
+          "file names are `out.fbi' (index) and `out.fbk' (key frames).\n");
 }
 
 static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes)
