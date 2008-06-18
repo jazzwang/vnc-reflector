@@ -43,7 +43,7 @@ int main (int argc, char *argv[])
 {
   int err = 0;
   int c;
-  int opt_interval;
+  int opt_interval = 10;
   int num_positional_args;
   char *output_fname_prefix = "out";
   int len;
