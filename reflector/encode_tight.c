@@ -696,7 +696,7 @@ SendIndexedRect(CL_SLOT *cl, int w, int h)
 static int
 SendFullColorRect(CL_SLOT *cl, int w, int h)
 {
-  CARD8 *buf[1];
+  CARD8 buf[1];
   int streamId = 0;
   int len;
 
