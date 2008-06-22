@@ -31,6 +31,7 @@ static void report_usage(char *program_name);
 static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes,
                         int interval);
 static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr);
+static char* construct_rfb_init(RFB_SCREEN_INFO *scr, size_t *plen);
 static int write_rfb_init(FBSOUT *os, RFB_SCREEN_INFO *scr);
 static int fbs_check_success(FBSTREAM *fbs);
 static void read_pixel_format(RFB_SCREEN_INFO *scr, void *buf);
@@ -268,34 +269,58 @@ static int read_rfb_init(FBSTREAM *fbs, RFB_SCREEN_INFO *scr)
   return 1;
 }
 
-static int write_rfb_init(FBSOUT *os, RFB_SCREEN_INFO *scr)
+static char* construct_rfb_init(RFB_SCREEN_INFO *scr, size_t *plen)
 {
+  size_t rfb_init_length;
+  char *buf;
   int sec_type = 1;
 
-  fbs_write(os, "RFB 003.003\n", 12);
-  fbs_write_U32(os, sec_type);
-  fbs_write_U16(os, scr->width);
-  fbs_write_U16(os, scr->height);
+  rfb_init_length = (12 +       /* RFB protocol version. */
+                     4 +        /* security type */
+                     24 +       /* ServerInit message */
+                     scr->name_length);
 
-  fbs_write_U8(os, 32);         /* bits-per-pixel */
-  fbs_write_U8(os, 24);         /* depth */
-  fbs_write_U8(os, is_big_endian());
-  fbs_write_U8(os, 1);          /* true-colour */
-  fbs_write_U16(os, 255);       /* red-max */
-  fbs_write_U16(os, 255);       /* green-max */
-  fbs_write_U16(os, 255);       /* blue-max */
-  fbs_write_U8(os, 16);         /* red-shift */
-  fbs_write_U8(os, 8);          /* green-shift */
-  fbs_write_U8(os, 0);          /* blue-shift */
-  fbs_write_U8(os, 0);          /* padding1 */
-  fbs_write_U8(os, 0);          /* padding2 */
-  fbs_write_U8(os, 0);          /* padding3 */
+  *plen = rfb_init_length;
+  buf = malloc(rfb_init_length);
 
-  fbs_write_U32(os, scr->name_length);
-  fbs_write(os, (char *)scr->name, scr->name_length);
+  if (buf != NULL) {
+    memcpy(buf, "RFB 003.003\n", 12);
+    buf_put_CARD32(&buf[12], sec_type);
+    buf_put_CARD16(&buf[16], scr->width);
+    buf_put_CARD16(&buf[18], scr->height);
 
-  /* FIXME: Check write errors. */
-  return 1;
+    buf_put_CARD8(&buf[20], 32);    /* bits-per-pixel */
+    buf_put_CARD8(&buf[21], 24);    /* depth */
+    buf_put_CARD8(&buf[22], is_big_endian());
+    buf_put_CARD8(&buf[23], 1);     /* true-colour */
+    buf_put_CARD16(&buf[24], 255);  /* red-max */
+    buf_put_CARD16(&buf[26], 255);  /* green-max */
+    buf_put_CARD16(&buf[28], 255);  /* blue-max */
+    buf_put_CARD8(&buf[30], 16);    /* red-shift */
+    buf_put_CARD8(&buf[31], 8);     /* green-shift */
+    buf_put_CARD8(&buf[32], 0);     /* blue-shift */
+    buf_put_CARD8(&buf[33], 0);     /* padding1 */
+    buf_put_CARD8(&buf[34], 0);     /* padding2 */
+    buf_put_CARD8(&buf[35], 0);     /* padding3 */
+
+    buf_put_CARD32(&buf[36], scr->name_length);
+    memcpy(&buf[40], scr->name, scr->name_length);
+  }
+
+  return buf;
+}
+
+static int write_rfb_init(FBSOUT *os, RFB_SCREEN_INFO *scr)
+{
+  char* init_data;
+  size_t init_data_len;
+  int result;
+
+  init_data = construct_rfb_init(scr, &init_data_len);
+  result = fbs_write(os, init_data, init_data_len);
+  free(init_data);
+
+  return result;
 }
 
 static int fbs_check_success(FBSTREAM *fbs)
