@@ -146,7 +146,7 @@ static int copy_rfb_init(FBSTREAM *is, FBSOUT *os, RFB_SCREEN_INFO *scr)
   fbs_write_U32(os, scr->name_length);
   fbs_write(os, (char *)scr->name, scr->name_length);
 
-  return !fbs_error(os);
+  return !fbsout_error(os);
 }
 
 static int fbs_check_success(FBSTREAM *is)
