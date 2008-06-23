@@ -69,6 +69,7 @@ int fbs_putc(FBSOUT *fbs, int c)
     new_data = realloc(fbs->block_data, new_size);
     if (new_data == NULL) {
       fprintf(stderr, "Error allocating memory\n");
+      fbs->error = 1;
       return -1;
     } else {
       fbs->block_size = new_size;
@@ -211,11 +212,6 @@ int fbsout_flush(FBSOUT *fbs)
       return 0;
     }
 
-    /* DEBUG: */
-    if (fbs->block_size < len + 8) {
-      fprintf(stderr, "DEBUG: Buffer overflow\n");
-    }
-
     /* Reset position in the buffer. */
     fbs->offset_in_block = 4;
 
@@ -227,4 +223,9 @@ int fbsout_flush(FBSOUT *fbs)
 CARD32 fbsout_get_filepos(FBSOUT *fbs)
 {
   return (CARD32)ftell(fbs->fp);
+}
+
+int fbsout_error(FBSOUT *fbs)
+{
+  return fbs->error;
 }

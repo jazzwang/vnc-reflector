@@ -82,4 +82,6 @@ extern int fbsout_flush(FBSOUT *fbs);
 
 extern CARD32 fbsout_get_filepos(FBSOUT *fbs);
 
+extern int fbsout_error(FBSOUT *fbs);
+
 #endif /* defined(_FBSOUTPUT_H) */

@@ -705,6 +705,10 @@ static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk)
   fbs_write_U8(fbk, 0);         /* padding */
   fbs_write_U16(fbk, num_rects);
 
+  if (fbsout_error(fbk)) {
+    return 0;
+  }
+
   if (!rfb_encode_tight(&r)) {
     fprintf(stderr, "Tight encoder failed\n");
     return 0;
@@ -718,7 +722,6 @@ static int write_keyframe(FRAME_BUFFER *fb, FBSOUT *fbk)
     fbs_write_U32(fbk, RFB_ENCODING_LASTRECT);
   }
 
-  /* FIXME: Check write errors. */
-  return 1;
+  return !fbsout_error(fbk);
 }
 
