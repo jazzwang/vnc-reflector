@@ -170,7 +170,7 @@ static int process_file(FILE *fp_input, FILE *fp_index, FILE *fp_keyframes,
     return 0;
   }
 
-  if (!write_rfb_init(&fbk, &fb.info)) {
+  if (!write_rfb_init(&fbk, &fb.info) || !fbsout_flush(&fbk)) {
     free(fb.info.name);
     fbsout_cleanup(&fbk);
     fbs_cleanup(&fbs);
@@ -420,8 +420,8 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
         return 0;
       }
       if (timestamp > prev_timestamp + interval * 1000) {
-        /* Set new timestamp, flush .fbk output */
-        if (!fbsout_set_timestamp(fbk, timestamp, 1)) {
+        /* Set new timestamp */
+        if (!fbsout_set_timestamp(fbk, timestamp, 0)) {
           return 0;
         }
         /* Write keyframe, track file pointer position */
