@@ -401,10 +401,12 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
   unsigned int timestamp;
   static int num_keyframes = 0;
   CARD32 key_fpos, key_size;
+  char* init_data;
+  size_t init_data_len;
 
   buf_put_CARD32(buf, 0xFFFFFFFF);
   if (fwrite("FBI 001.000\n", 1, 12, fp_index) != 12 ||
-      fwrite(buf, 1, 4, fp_index) != 4) {
+      fwrite(buf, 1, 8, fp_index) != 8) {
     fprintf(stderr, "Error writing .fbi file header\n");
     return 0;
   }
@@ -435,7 +437,7 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
         buf_put_CARD32(buf + 12, filepos - 4);
         buf_put_CARD32(buf + 16, offset);
         if (fwrite(buf, 1, 20, fp_index) != 20) {
-          fprintf(stderr, "Error writing to .fbi file\n");
+          fprintf(stderr, "Error writing entry point data to .fbi file\n");
           return 0;
         }
         /* Log to stdout */
@@ -452,10 +454,19 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
     }
   }
 
-  /* Put correct number of records into the .fbi file */
+  /* Write RFB initialization sequence into the .fbi file */
+  init_data = construct_rfb_init(&fb->info, &init_data_len);
+  if (fwrite(init_data, 1, init_data_len, fp_index) != init_data_len) {
+    fprintf(stderr, "Error writing RFB init sequence to .fbi file\n");
+    return 0;
+  }
+  free(init_data);
+
+  /* Put correct numbers to the header of the .fbi file */
   if (fseek(fp_index, 12, SEEK_SET) == 0) {
     buf_put_CARD32(buf, num_keyframes);
-    if (fwrite(buf, 1, 4, fp_index) != 4) {
+    buf_put_CARD32(&buf[4], (CARD32)init_data_len);
+    if (fwrite(buf, 1, 8, fp_index) != 8) {
       fprintf(stderr, "Error rewriting .fbi file header\n");
       return 0;
     }
