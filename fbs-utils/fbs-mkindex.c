@@ -424,12 +424,17 @@ static int read_normal_protocol(FBSTREAM *fbs, FRAME_BUFFER *fb,
         if (!fbsout_set_timestamp(fbk, timestamp, 0)) {
           return 0;
         }
-        /* Write keyframe, track file pointer position */
-        key_fpos = fbsout_get_filepos(fbk);
-        if (!write_keyframe(fb, fbk) || !fbsout_flush(fbk)) {
+        /* Encode keyframe */
+        if (!write_keyframe(fb, fbk)) {
           return 0;
         }
-        key_size = fbsout_get_filepos(fbk) - key_fpos;
+        /* Determine position/size of the keyframe in the .fbk file */
+        key_fpos = fbsout_get_block_fpos(fbk);
+        key_size = fbsout_get_block_size(fbk);
+        /* Actually write keyframe to the file */
+        if (!fbsout_flush(fbk)) {
+          return 0;
+        }
         /* Write a record into the .fbi index file */
         buf_put_CARD32(buf, timestamp);
         buf_put_CARD32(buf + 4, key_fpos);

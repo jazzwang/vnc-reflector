@@ -220,9 +220,14 @@ int fbsout_flush(FBSOUT *fbs)
   return 1;
 }
 
-CARD32 fbsout_get_filepos(FBSOUT *fbs)
+size_t fbsout_get_block_fpos(FBSOUT *fbs)
 {
-  return (CARD32)ftell(fbs->fp);
+  return (size_t)ftell(fbs->fp) + 4;
+}
+
+size_t fbsout_get_block_size(FBSOUT *fbs)
+{
+  return (size_t)fbs->offset_in_block - 4;
 }
 
 int fbsout_error(FBSOUT *fbs)

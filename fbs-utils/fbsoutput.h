@@ -80,7 +80,8 @@ extern int fbsout_set_timestamp(FBSOUT *fbs, unsigned int timestamp,
                                 int can_flush);
 extern int fbsout_flush(FBSOUT *fbs);
 
-extern CARD32 fbsout_get_filepos(FBSOUT *fbs);
+extern size_t fbsout_get_block_fpos(FBSOUT *fbs);
+extern size_t fbsout_get_block_size(FBSOUT *fbs);
 
 extern int fbsout_error(FBSOUT *fbs);
 
